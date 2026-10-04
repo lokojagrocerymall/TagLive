@@ -7,7 +7,7 @@ export default function Home(){
  <p>✅ Bible App Integration</p>
  <p>✅ Works on Phone</p>
  <p>✅ Facebook/YouTube with Tags</p>
- <p>✅ For Churches in Nigeria</p>
+ <p>✅ For Mobile Livestreams</p>
  </div>
  <Link href='/live' style={{display:'block',marginTop:18,background:'#6d28d9',color:'#fff',padding:16,textAlign:'center',borderRadius:12,fontWeight:800,textDecoration:'none'}}>Go to Live Studio →</Link>
  </div>
