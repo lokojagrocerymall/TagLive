@@ -21,15 +21,17 @@ export default function Live(){
   const streamRef = useRef<MediaStream|null>(null)
   const trackRef = useRef<MediaStreamTrack|null>(null)
 
-  // Load SDKs
   useEffect(()=>{
-    // Facebook SDK
+    // Load FB SDK with your App ID
+    const fbAppId = process.env.NEXT_PUBLIC_FB_APP_ID || '1080213163542449'
     if(!document.getElementById('fb-sdk')){
       const s = document.createElement('script'); s.id='fb-sdk'; s.src='https://connect.facebook.net/en_US/sdk.js';
-      s.onload=()=>{ window.FB.init({appId: process.env.NEXT_PUBLIC_FB_APP_ID || 'YOUR_FB_APP_ID', cookie:true, xfbml:false, version:'v19.0'}) }
+      s.onload=()=>{
+        window.FB.init({appId: fbAppId, cookie:true, xfbml:false, version:'v19.0'})
+        console.log('FB SDK ready with App ID', fbAppId)
+      }
       document.body.appendChild(s)
     }
-    // Google Identity
     if(!document.getElementById('g-sdk')){
       const g = document.createElement('script'); g.id='g-sdk'; g.src='https://accounts.google.com/gsi/client'; document.body.appendChild(g)
     }
@@ -37,6 +39,7 @@ export default function Live(){
     const y = localStorage.getItem('taglive_ytKey'); if(y) setYtKey(y)
     const t = localStorage.getItem('taglive_ttKey'); if(t) setTtKey(t)
   },[])
+
   useEffect(()=>{ if(fbKey) localStorage.setItem('taglive_fbKey', fbKey)},[fbKey])
   useEffect(()=>{ if(ytKey) localStorage.setItem('taglive_ytKey', ytKey)},[ytKey])
   useEffect(()=>{ if(ttKey) localStorage.setItem('taglive_ttKey', ttKey)},[ttKey])
@@ -61,68 +64,56 @@ export default function Live(){
     }catch(e:any){ alert('Torch: '+e.message) }
   }
 
-  // AUTO LOGIN - FACEBOOK
   const loginFacebook = ()=>{
+    if(!window.FB){
+      alert('Facebook SDK still loading... wait 3 seconds and tap again. Make sure NEXT_PUBLIC_FB_APP_ID is set in Vercel!');
+      return;
+    }
+    console.log('FB Login clicked');
     window.FB.login((resp:any)=>{
+      console.log('FB response', resp);
       if(resp.authResponse){
         window.FB.api('/me?fields=name,picture', (user:any)=>{
           setFbUser(user)
-          // Create a live video to get RTMP - requires your page token
+          alert(`Facebook connected as ${user.name}! Now fetching Page key...`)
           window.FB.api('/me/accounts', (pages:any)=>{
             if(pages?.data?.[0]){
               const page = pages.data[0]
-              // Now create live video on that page - this returns stream_url with key built-in
               window.FB.api(`/${page.id}/live_videos`, 'POST', {status:'UNPUBLISHED', title:verse}, (live:any)=>{
                 if(live?.stream_url){
-                  const parts = live.stream_url.split('/')
-                  const key = parts[parts.length-1]
-                  const base = live.stream_url.replace(key,'')
+                  const key = live.stream_url.split('/').pop()
                   setFbKey(key)
                   setPlatform('facebook')
-                  alert(`Facebook auto-connected as ${user.name}!\nPage: ${page.name}\nKey auto-filled.`)
-                }else{
-                  alert('Facebook connected as '+user.name+'. Now go to facebook.com/live/producer to copy key - your App needs live_video approval. For now key auto-save still works.')
-                  setFbUser(user)
+                  alert(`Auto-connected! Page: ${page.name}`)
+                } else {
+                  alert(`Connected as ${user.name}. Go to facebook.com/live/producer to copy key (App needs approval for auto-key).`)
                 }
               })
-            }else{
-              alert(`Logged in as ${user.name} - No pages found. Use personal profile key from facebook.com/live/producer`)
-              setFbUser(user)
+            } else {
+              alert(`Logged in as ${user.name} - No FB Pages found. Create a Page or use personal key from facebook.com/live/producer`)
             }
           })
         })
+      } else {
+        alert('Facebook login cancelled or not approved. Check FB App is Live in developers.facebook.com');
       }
     },{scope:'public_profile,email,pages_show_list,pages_read_engagement,pages_manage_posts,publish_video'})
   }
 
-  // AUTO LOGIN - YOUTUBE
   const loginYouTube = ()=>{
+    if(!window.google){
+      alert('Google SDK still loading... wait 3 seconds and tap again');
+      return;
+    }
     const client = window.google?.accounts?.oauth2?.initTokenClient({
       client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
       scope: 'https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/youtube.force-ssl https://www.googleapis.com/auth/userinfo.profile',
       callback: async(tokenResp:any)=>{
         const accessToken = tokenResp.access_token
-        // Get channel info
         const ch = await fetch('https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true',{headers:{Authorization:`Bearer ${accessToken}`}}).then(r=>r.json())
         const channel = ch.items?.[0]?.snippet
         setYtUser({name: channel?.title, pic: channel?.thumbnails?.default?.url})
-
-        // Create broadcast to get key
-        const live = await fetch('https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet,contentDetails,status',{method:'POST', headers:{Authorization:`Bearer ${accessToken}`, 'Content-Type':'application/json'}, body: JSON.stringify({snippet:{title:verse, scheduledStartTime: new Date().toISOString()}, status:{privacyStatus:'public'}, contentDetails:{enableAutoStart:true}})}).then(r=>r.json())
-        // Get stream
-        const streams = await fetch('https://www.googleapis.com/youtube/v3/liveStreams?part=cdn,snippet&mine=true',{headers:{Authorization:`Bearer ${accessToken}`}}).then(r=>r.json())
-        let streamKey = streams.items?.[0]?.cdn?.ingestionInfo?.streamName
-        if(!streamKey){
-          // Create new stream if none
-          const newStream = await fetch('https://www.googleapis.com/youtube/v3/liveStreams?part=snippet,cdn,contentDetails',{method:'POST', headers:{Authorization:`Bearer ${accessToken}`, 'Content-Type':'application/json'}, body: JSON.stringify({snippet:{title:'TagLive'}, cdn:{ingestionType:'rtmp', resolution:'720p', frameRate:'30fps'}})}).then(r=>r.json())
-          streamKey = newStream.cdn?.ingestionInfo?.streamName
-          // Bind broadcast to stream
-          if(live.id && newStream.id){
-            await fetch(`https://www.googleapis.com/youtube/v3/liveBroadcasts/bind?part=id,contentDetails&id=${live.id}&streamId=${newStream.id}`,{method:'POST', headers:{Authorization:`Bearer ${accessToken}`}})
-          }
-        }
-        if(streamKey){ setYtKey(streamKey); setPlatform('youtube'); alert(`YouTube auto-connected as ${channel?.title}! Key auto-filled.`) }
-        else{ alert(`YouTube logged in as ${channel?.title}. Get key from studio.youtube.com -> Go Live`) }
+        alert(`YouTube connected as ${channel?.title}!`);
       }
     })
     client.requestAccessToken()
@@ -162,7 +153,6 @@ export default function Live(){
   return (
     <div style={{padding:16, maxWidth:500, margin:'0 auto', paddingBottom:80}}>
       <h2 style={{fontWeight:900, fontSize:24}}>Live Studio Pro <span style={{fontSize:12, background:'#6d28d9', color:'#fff', padding:'4px 8px', borderRadius:8}}>AUTO</span></h2>
-
       <div style={{marginTop:12, background:'#000', borderRadius:16, overflow:'hidden', position:'relative', aspectRatio:'9/16'}}>
         <video ref={videoRef} muted playsInline style={{width:'100%', height:'100%', objectFit:'cover', display: isCam?'block':'none'}} />
         {!isCam && <div style={{color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', height:400}}>Camera off</div>}
@@ -173,18 +163,14 @@ export default function Live(){
           <button onClick={toggleTorch} style={{background:torch?'#fbbf24':'rgba(0,0,0,0.6)', color:torch?'#000':'#fff', border:'none', borderRadius:20, padding:'8px 12px', fontWeight:800}}>{torch?'🔦 On':'🔦'}</button>
         </div>}
       </div>
-
       <div style={{display:'flex', gap:8, marginTop:12}}>
         {!isCam? <button onClick={()=>startCamera()} style={{flex:1, background:'#111', color:'#fff', padding:12, borderRadius:10, fontWeight:800, border:'none'}}>📷 Start Camera</button>
         : <><button onClick={toggleCamera} style={{flex:1, background:'#6d28d9', color:'#fff', padding:12, borderRadius:10, fontWeight:800, border:'none'}}>🔄 Switch Front/Back</button>
            <button onClick={stopCamera} style={{flex:1, background:'#444', color:'#fff', padding:12, borderRadius:10, fontWeight:800, border:'none'}}>Stop</button></>}
       </div>
-
       <textarea value={verse} onChange={e=>setVerse(e.target.value)} style={{width:'100%', height:80, marginTop:12, padding:12, borderRadius:12, border:'1px solid #ddd'}} />
-
       <div style={{marginTop:18, border:'2px solid #6d28d9', borderRadius:16, padding:14}}>
         <h3 style={{fontWeight:800}}>🔴 Auto Connect</h3>
-
         <div style={{display:'flex', gap:8, marginTop:10}}>
           <button onClick={loginFacebook} style={{flex:1, background: fbUser?'#16a34a':'#1877F2', color:'#fff', padding:12, borderRadius:10, fontWeight:900, border:'none', fontSize:12}}>
             {fbUser? `✓ ${fbUser.name.slice(0,12)}` : 'f Login with Facebook'}
@@ -193,13 +179,11 @@ export default function Live(){
             {ytUser? `✓ ${ytUser.name.slice(0,12)}` : '▶ Login YouTube'}
           </button>
         </div>
-
         <div style={{display:'flex', gap:6, marginTop:14}}>
           {(['facebook','youtube','tiktok'] as const).map(p=>(
             <button key={p} onClick={()=>setPlatform(p)} style={{flex:1, padding:10, borderRadius:8, border:'none', background: platform===p?'#6d28d9':'#eee', color:platform===p?'#fff':'#000', fontWeight:800, textTransform:'capitalize'}}>{p}</button>
           ))}
         </div>
-
         <div style={{marginTop:12}}>
           <label style={{fontSize:12, fontWeight:700}}>{platform.toUpperCase()} RTMP URL (auto)</label>
           <input value={url} readOnly style={{width:'100%', padding:10, borderRadius:8, border:'1px solid #ddd', marginTop:4, fontSize:11, background:'#f5f3ff'}} />
@@ -208,13 +192,11 @@ export default function Live(){
           {platform==='youtube' && <input value={ytKey} onChange={e=>setYtKey(e.target.value)} placeholder="Auto after YouTube Login or paste" style={{width:'100%', padding:10, borderRadius:8, border:'1px solid #ddd', marginTop:4, background:ytUser?'#dcfce7':''}} />}
           {platform==='tiktok' && <input value={ttKey} onChange={e=>setTtKey(e.target.value)} placeholder="TikTok manual - no auto API" style={{width:'100%', padding:10, borderRadius:8, border:'1px solid #ddd', marginTop:4}} />}
         </div>
-
         {!isLive? (
           <button onClick={handleGoLive} style={{width:'100%', marginTop:12, background:'#6d28d9', color:'#fff', padding:14, borderRadius:10, fontWeight:900, border:'none'}}>🔴 GO LIVE to {platform.toUpperCase()} with Tag</button>
         ) : (
           <button onClick={()=>setIsLive(false)} style={{width:'100%', marginTop:12, background:'#ef4444', color:'#fff', padding:14, borderRadius:10, fontWeight:900, border:'none'}}>■ STOP LIVE</button>
         )}
-        <p style={{fontSize:10, color:'#666', marginTop:8}}>TikTok cannot auto-sync - TikTok rules. FB/YT auto-sync needs your App IDs below.</p>
       </div>
     </div>
   )
