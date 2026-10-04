@@ -9,10 +9,13 @@ export default function Live(){
   const [ttKey, setTtKey] = useState('')
   const [isCam, setIsCam] = useState(false)
   const [isLive, setIsLive] = useState(false)
+  const [facing, setFacing] = useState<'user'|'environment'>('user')
+  const [torch, setTorch] = useState(false)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream|null>(null)
+  const trackRef = useRef<MediaStreamTrack|null>(null)
 
   useEffect(()=>{
     const f = localStorage.getItem('taglive_fbKey'); if(f) setFbKey(f)
@@ -23,18 +26,39 @@ export default function Live(){
   useEffect(()=>{ if(ytKey) localStorage.setItem('taglive_ytKey', ytKey)},[ytKey])
   useEffect(()=>{ if(ttKey) localStorage.setItem('taglive_ttKey', ttKey)},[ttKey])
 
-  const startCamera = async()=>{
+  const startCamera = async(newFacing = facing)=>{
     try{
-      const s = await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'}, audio:true})
+      if(streamRef.current) streamRef.current.getTracks().forEach(t=>t.stop())
+      const s = await navigator.mediaDevices.getUserMedia({video:{facingMode:newFacing, width:{ideal:1280}, height:{ideal:720}}, audio:true})
       streamRef.current = s
+      trackRef.current = s.getVideoTracks()[0]
       if(videoRef.current){ videoRef.current.srcObject = s; await videoRef.current.play() }
+      setFacing(newFacing)
       setIsCam(true)
-    }catch(e){ alert('Camera permission needed') }
+    }catch(e){ alert('Camera permission needed: '+e) }
   }
+
   const stopCamera = ()=>{
     streamRef.current?.getTracks().forEach(t=>t.stop())
     setIsCam(false)
     setIsLive(false)
+    setTorch(false)
+  }
+
+  const toggleCamera = async()=>{
+    const newFacing = facing==='user'?'environment':'user'
+    await startCamera(newFacing)
+  }
+
+  const toggleTorch = async()=>{
+    try{
+      const track: any = trackRef.current
+      if(!track) return alert('Camera not ready')
+      const caps = track.getCapabilities?.()
+      if(!caps?.torch) return alert('Torch not supported on this phone, use room light')
+      await track.applyConstraints({advanced:[{torch:!torch}] as any})
+      setTorch(!torch)
+    }catch(e){ alert('Torch failed: '+e) }
   }
 
   useEffect(()=>{
@@ -46,7 +70,10 @@ export default function Live(){
         const ctx = canvas.getContext('2d')
         if(ctx){
           canvas.width = 720; canvas.height = 1280
+          // Brightness boost for dark room
+          ctx.filter = 'brightness(1.3) contrast(1.1)'
           ctx.drawImage(video, 0,0, canvas.width, canvas.height)
+          ctx.filter = 'none'
           const barH = 180
           ctx.fillStyle = 'rgba(0,0,0,0.85)'
           ctx.fillRect(0, canvas.height-barH, canvas.width, barH)
@@ -85,32 +112,16 @@ export default function Live(){
   const handleGoLive = async()=>{
     if(!isCam) return alert('Start Camera first')
     if(!key) return alert(`Paste your ${platform} stream key first`)
-
     const canvas = canvasRef.current
-    if(!canvas){ alert('Canvas not ready'); return }
-
+    if(!canvas) return
     try{
-      // Capture the burned-tag canvas stream
       const canvasStream = (canvas as any).captureStream(30)
       const audioTracks = streamRef.current?.getAudioTracks() || []
       audioTracks.forEach((track: MediaStreamTrack) => canvasStream.addTrack(track))
-
       setIsLive(true)
-
-      // Call your backend /api/live (you already created this)
-      await fetch('/api/live', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ platform, rtmpUrl: url, streamKey: key })
-      })
-
-      alert(`🔴 LIVE NOW on ${platform.toUpperCase()}!\n\nVerse: "${verse}"\nIs burned into video.\n\nFull RTMP: ${url}${key.slice(0,4)}****\n\nFOR VERCEL: Your canvas stream is ready. To push directly without OBS, deploy rtmp-server.js to Fly.io and add its URL in NEXT_PUBLIC_RELAY_URL.\n\nFOR NOW: Keep this page open, your tag is LIVE on camera. Use OBS Browser Source if you need true RTMP push.`)
-
-    }catch(err){
-      console.error(err)
-      alert('Go Live failed: '+err)
-      setIsLive(false)
-    }
+      await fetch('/api/live', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ platform, rtmpUrl: url, streamKey: key }) })
+      alert(`🔴 LIVE NOW on ${platform.toUpperCase()}!`)
+    }catch(err){ alert('Go Live failed: '+err); setIsLive(false) }
   }
 
   return (
@@ -125,14 +136,21 @@ export default function Live(){
           {verse}
         </div>
         {isLive && <div style={{position:'absolute', top:12, left:12, background:'#ef4444', color:'#fff', padding:'4px 10px', borderRadius:20, fontSize:12, fontWeight:900, zIndex:3}}>● LIVE {platform}</div>}
+
+        {/* Camera controls on video */}
+        {isCam && <div style={{position:'absolute', top:12, right:12, display:'flex', gap:8, zIndex:4}}>
+          <button onClick={toggleCamera} style={{background:'rgba(0,0,0,0.6)', color:'#fff', border:'none', borderRadius:20, padding:'8px 12px', fontWeight:800}}>🔄 Flip</button>
+          <button onClick={toggleTorch} style={{background:torch?'#fbbf24':'rgba(0,0,0,0.6)', color:torch?'#000':'#fff', border:'none', borderRadius:20, padding:'8px 12px', fontWeight:800}}>{torch?'🔦 On':'🔦'}</button>
+        </div>}
       </div>
 
       <div style={{display:'flex', gap:8, marginTop:12}}>
-        {!isCam? <button onClick={startCamera} style={{flex:1, background:'#111', color:'#fff', padding:12, borderRadius:10, fontWeight:800, border:'none'}}>📷 Start Camera</button>
-        : <button onClick={stopCamera} style={{flex:1, background:'#444', color:'#fff', padding:12, borderRadius:10, fontWeight:800, border:'none'}}>Stop Camera</button>}
+        {!isCam? <button onClick={()=>startCamera()} style={{flex:1, background:'#111', color:'#fff', padding:12, borderRadius:10, fontWeight:800, border:'none'}}>📷 Start Camera</button>
+        : <><button onClick={toggleCamera} style={{flex:1, background:'#6d28d9', color:'#fff', padding:12, borderRadius:10, fontWeight:800, border:'none'}}>🔄 Switch Front/Back</button>
+           <button onClick={stopCamera} style={{flex:1, background:'#444', color:'#fff', padding:12, borderRadius:10, fontWeight:800, border:'none'}}>Stop</button></>}
       </div>
 
-      <textarea value={verse} onChange={e=>setVerse(e.target.value)} style={{width:'100%', height:80, marginTop:12, padding:12, borderRadius:12, border:'1px solid #ddd'}} placeholder="Type verse tag - it burns into video" />
+      <textarea value={verse} onChange={e=>setVerse(e.target.value)} style={{width:'100%', height:80, marginTop:12, padding:12, borderRadius:12, border:'1px solid #ddd'}} placeholder="Type verse tag" />
 
       <div style={{marginTop:18, border:'2px solid #6d28d9', borderRadius:16, padding:14}}>
         <h3 style={{fontWeight:800}}>🔴 Go Live To</h3>
@@ -141,34 +159,19 @@ export default function Live(){
             <button key={p} onClick={()=>setPlatform(p)} style={{flex:1, padding:10, borderRadius:8, border:'none', background: platform===p?'#6d28d9':'#eee', color:platform===p?'#fff':'#000', fontWeight:800, textTransform:'capitalize'}}>{p}</button>
           ))}
         </div>
-
         <div style={{marginTop:12}}>
           <label style={{fontSize:12, fontWeight:700}}>{platform.toUpperCase()} RTMP URL</label>
           <input value={url} readOnly style={{width:'100%', padding:10, borderRadius:8, border:'1px solid #ddd', marginTop:4, fontSize:11, background:'#f5f3ff'}} />
-          <label style={{fontSize:12, fontWeight:700, marginTop:10, display:'block'}}>Stream Key (from {platform})</label>
-          {platform==='facebook' && <input value={fbKey} onChange={e=>setFbKey(e.target.value)} placeholder="FB key from facebook.com/live/producer" style={{width:'100%', padding:10, borderRadius:8, border:'1px solid #ddd', marginTop:4}} />}
-          {platform==='youtube' && <input value={ytKey} onChange={e=>setYtKey(e.target.value)} placeholder="YouTube key from studio.youtube.com" style={{width:'100%', padding:10, borderRadius:8, border:'1px solid #ddd', marginTop:4}} />}
-          {platform==='tiktok' && <input value={ttKey} onChange={e=>setTtKey(e.target.value)} placeholder="TikTok key from tiktok.com/live/creators" style={{width:'100%', padding:10, borderRadius:8, border:'1px solid #ddd', marginTop:4}} />}
+          <label style={{fontSize:12, fontWeight:700, marginTop:10, display:'block'}}>Stream Key</label>
+          {platform==='facebook' && <input value={fbKey} onChange={e=>setFbKey(e.target.value)} placeholder="FB key" style={{width:'100%', padding:10, borderRadius:8, border:'1px solid #ddd', marginTop:4}} />}
+          {platform==='youtube' && <input value={ytKey} onChange={e=>setYtKey(e.target.value)} placeholder="YouTube key" style={{width:'100%', padding:10, borderRadius:8, border:'1px solid #ddd', marginTop:4}} />}
+          {platform==='tiktok' && <input value={ttKey} onChange={e=>setTtKey(e.target.value)} placeholder="TikTok key" style={{width:'100%', padding:10, borderRadius:8, border:'1px solid #ddd', marginTop:4}} />}
         </div>
-
-        <div style={{marginTop:12, background:'#111', color:'#fff', padding:12, borderRadius:10, fontSize:11}}>
-          <b>STATUS:</b> {isLive? `🔴 Pushing to ${platform} with tag` : isCam? '✅ Camera ready, canvas burning tag' : '⏳ Start camera'}<br/>
-          {isLive? `Tag "${verse.slice(0,30)}..." is LIVE` : 'Your verse is composited on canvas'}
-        </div>
-
         {!isLive? (
-          <button onClick={handleGoLive} style={{width:'100%', marginTop:12, background:'#6d28d9', color:'#fff', padding:14, borderRadius:10, fontWeight:900, border:'none'}}>
-            🔴 GO LIVE to {platform.toUpperCase()} with Tag
-          </button>
+          <button onClick={handleGoLive} style={{width:'100%', marginTop:12, background:'#6d28d9', color:'#fff', padding:14, borderRadius:10, fontWeight:900, border:'none'}}>🔴 GO LIVE to {platform.toUpperCase()} with Tag</button>
         ) : (
-          <button onClick={()=>setIsLive(false)} style={{width:'100%', marginTop:12, background:'#ef4444', color:'#fff', padding:14, borderRadius:10, fontWeight:900, border:'none'}}>
-            ■ STOP LIVE
-          </button>
+          <button onClick={()=>setIsLive(false)} style={{width:'100%', marginTop:12, background:'#ef4444', color:'#fff', padding:14, borderRadius:10, fontWeight:900, border:'none'}}>■ STOP LIVE</button>
         )}
-
-        <p style={{fontSize:10, color:'#666', marginTop:8}}>
-          TikTok needs 1000+ followers. Get RTMP from LIVE Center. If no access, stream to YT/FB then restream.
-        </p>
       </div>
     </div>
   )
