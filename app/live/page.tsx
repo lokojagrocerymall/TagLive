@@ -132,9 +132,7 @@ export default function Live(){
         <video ref={videoRef} muted playsInline style={{width:'100%', height:'100%', objectFit:'cover', display: isCam?'block':'none'}} />
         {!isCam && <div style={{color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', height:400}}>Camera off</div>}
         <canvas ref={canvasRef} style={{position:'absolute', top:0, left:0, width:'100%', height:'100%', objectFit:'cover'}} />
-        <div style={{position:'absolute', bottom:0, left:0, right:0, background:'rgba(0,0,0,0.85)', color:'#fff', padding:14, textAlign:'center', fontWeight:800, zIndex:2}}>
-          {verse}
-        </div>
+
         {isLive && <div style={{position:'absolute', top:12, left:12, background:'#ef4444', color:'#fff', padding:'4px 10px', borderRadius:20, fontSize:12, fontWeight:900, zIndex:3}}>● LIVE {platform}</div>}
 
         {/* Camera controls on video */}
