@@ -1,1 +1,7 @@
-export async function POST(){ return new Response(JSON.stringify({ok:true}), {headers:{'Content-Type':'application/json'}}) }
+import { NextResponse } from 'next/server'
+export async function POST(){
+  return NextResponse.json({ok:true})
+}
+export async function GET(){
+  return NextResponse.json({ok:true, msg:'TagLive API running'})
+}
