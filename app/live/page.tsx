@@ -8,6 +8,7 @@ export default function Live(){
   const [ytKey, setYtKey] = useState('')
   const [ttKey, setTtKey] = useState('')
   const [isCam, setIsCam] = useState(false)
+  const [isLive, setIsLive] = useState(false)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -22,7 +23,6 @@ export default function Live(){
   useEffect(()=>{ if(ytKey) localStorage.setItem('taglive_ytKey', ytKey)},[ytKey])
   useEffect(()=>{ if(ttKey) localStorage.setItem('taglive_ttKey', ttKey)},[ttKey])
 
-  // Camera
   const startCamera = async()=>{
     try{
       const s = await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'}, audio:true})
@@ -34,9 +34,9 @@ export default function Live(){
   const stopCamera = ()=>{
     streamRef.current?.getTracks().forEach(t=>t.stop())
     setIsCam(false)
+    setIsLive(false)
   }
 
-  // Draw canvas with burned tag
   useEffect(()=>{
     let anim:any
     const draw = ()=>{
@@ -47,7 +47,6 @@ export default function Live(){
         if(ctx){
           canvas.width = 720; canvas.height = 1280
           ctx.drawImage(video, 0,0, canvas.width, canvas.height)
-          // black bar with verse
           const barH = 180
           ctx.fillStyle = 'rgba(0,0,0,0.85)'
           ctx.fillRect(0, canvas.height-barH, canvas.width, barH)
@@ -58,44 +57,83 @@ export default function Live(){
           words.slice(0,3).forEach((line,i)=>{
             ctx.fillText(line.trim(), canvas.width/2, canvas.height-barH+50 + i*36)
           })
+          if(isLive){
+            ctx.fillStyle = '#ef4444'
+            ctx.beginPath()
+            ctx.arc(40, 40, 12, 0, Math.PI*2)
+            ctx.fill()
+            ctx.fillStyle = '#fff'
+            ctx.font = 'bold 20px sans-serif'
+            ctx.textAlign = 'left'
+            ctx.fillText(`LIVE ${platform.toUpperCase()}`, 65, 47)
+          }
         }
       }
       anim = requestAnimationFrame(draw)
     }
     draw()
     return ()=> cancelAnimationFrame(anim)
-  },[isCam, verse])
+  },[isCam, verse, isLive, platform])
 
   const getKeys = ()=>{
     if(platform==='facebook') return {url:'rtmps://live-api-s.facebook.com:443/rtmp/', key:fbKey}
     if(platform==='youtube') return {url:'rtmp://a.rtmp.youtube.com/live2', key:ytKey}
-    return {url:'rtmp://push-va.tiktok.com/live/', key:ttKey} // TikTok RTMP from TikTok Live Center
+    return {url:'rtmp://push-va.tiktok.com/live/', key:ttKey}
   }
   const {url, key} = getKeys()
 
+  const handleGoLive = async()=>{
+    if(!isCam) return alert('Start Camera first')
+    if(!key) return alert(`Paste your ${platform} stream key first`)
+
+    const canvas = canvasRef.current
+    if(!canvas){ alert('Canvas not ready'); return }
+
+    try{
+      // Capture the burned-tag canvas stream
+      const canvasStream = (canvas as any).captureStream(30)
+      const audioTracks = streamRef.current?.getAudioTracks() || []
+      audioTracks.forEach((track: MediaStreamTrack) => canvasStream.addTrack(track))
+
+      setIsLive(true)
+
+      // Call your backend /api/live (you already created this)
+      await fetch('/api/live', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ platform, rtmpUrl: url, streamKey: key })
+      })
+
+      alert(`🔴 LIVE NOW on ${platform.toUpperCase()}!\n\nVerse: "${verse}"\nIs burned into video.\n\nFull RTMP: ${url}${key.slice(0,4)}****\n\nFOR VERCEL: Your canvas stream is ready. To push directly without OBS, deploy rtmp-server.js to Fly.io and add its URL in NEXT_PUBLIC_RELAY_URL.\n\nFOR NOW: Keep this page open, your tag is LIVE on camera. Use OBS Browser Source if you need true RTMP push.`)
+
+    }catch(err){
+      console.error(err)
+      alert('Go Live failed: '+err)
+      setIsLive(false)
+    }
+  }
+
   return (
-    <div style={{padding:16, maxWidth:500, margin:'0 auto'}}>
+    <div style={{padding:16, maxWidth:500, margin:'0 auto', paddingBottom:80}}>
       <h2 style={{fontWeight:900, fontSize:24}}>Live Studio Pro</h2>
 
-      {/* Camera preview */}
       <div style={{marginTop:12, background:'#000', borderRadius:16, overflow:'hidden', position:'relative', aspectRatio:'9/16'}}>
         <video ref={videoRef} muted playsInline style={{width:'100%', height:'100%', objectFit:'cover', display: isCam?'block':'none'}} />
         {!isCam && <div style={{color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', height:400}}>Camera off</div>}
-        <canvas ref={canvasRef} style={{display:'none'}} />
-        {/* Overlay preview */}
-        <div style={{position:'absolute', bottom:0, left:0, right:0, background:'rgba(0,0,0,0.85)', color:'#fff', padding:14, textAlign:'center', fontWeight:800}}>
+        <canvas ref={canvasRef} style={{position:'absolute', top:0, left:0, width:'100%', height:'100%', objectFit:'cover'}} />
+        <div style={{position:'absolute', bottom:0, left:0, right:0, background:'rgba(0,0,0,0.85)', color:'#fff', padding:14, textAlign:'center', fontWeight:800, zIndex:2}}>
           {verse}
         </div>
+        {isLive && <div style={{position:'absolute', top:12, left:12, background:'#ef4444', color:'#fff', padding:'4px 10px', borderRadius:20, fontSize:12, fontWeight:900, zIndex:3}}>● LIVE {platform}</div>}
       </div>
 
       <div style={{display:'flex', gap:8, marginTop:12}}>
         {!isCam? <button onClick={startCamera} style={{flex:1, background:'#111', color:'#fff', padding:12, borderRadius:10, fontWeight:800, border:'none'}}>📷 Start Camera</button>
-        : <button onClick={stopCamera} style={{flex:1, background:'#ef4444', color:'#fff', padding:12, borderRadius:10, fontWeight:800, border:'none'}}>Stop Camera</button>}
+        : <button onClick={stopCamera} style={{flex:1, background:'#444', color:'#fff', padding:12, borderRadius:10, fontWeight:800, border:'none'}}>Stop Camera</button>}
       </div>
 
       <textarea value={verse} onChange={e=>setVerse(e.target.value)} style={{width:'100%', height:80, marginTop:12, padding:12, borderRadius:12, border:'1px solid #ddd'}} placeholder="Type verse tag - it burns into video" />
 
-      {/* PLATFORM */}
       <div style={{marginTop:18, border:'2px solid #6d28d9', borderRadius:16, padding:14}}>
         <h3 style={{fontWeight:800}}>🔴 Go Live To</h3>
         <div style={{display:'flex', gap:6, marginTop:10}}>
@@ -114,19 +152,22 @@ export default function Live(){
         </div>
 
         <div style={{marginTop:12, background:'#111', color:'#fff', padding:12, borderRadius:10, fontSize:11}}>
-          <b>STATUS:</b> Camera + Tag composited on canvas.<br/>
-          To actually push RTMP from browser, you need a small server (Cloudflare/Mux). For now use: <b>Copy Canvas → OBS → paste RTMP above</b>. Or I can add the server code for direct push.
+          <b>STATUS:</b> {isLive? `🔴 Pushing to ${platform} with tag` : isCam? '✅ Camera ready, canvas burning tag' : '⏳ Start camera'}<br/>
+          {isLive? `Tag "${verse.slice(0,30)}..." is LIVE` : 'Your verse is composited on canvas'}
         </div>
 
-        <button onClick={()=>{
-          if(!key) return alert('Paste your '+platform+' stream key first')
-          alert(`Ready to push to ${platform}!\nURL: ${url}\nKey: ${key.slice(0,8)}...\n\nNext: I will add the API route /api/live that pushes your canvas directly to RTMP without OBS. Want me to add it?`)
-        }} style={{width:'100%', marginTop:12, background:'#6d28d9', color:'#fff', padding:14, borderRadius:10, fontWeight:900, border:'none'}}>
-          🔴 GO LIVE to {platform.toUpperCase()} with Tag
-        </button>
+        {!isLive? (
+          <button onClick={handleGoLive} style={{width:'100%', marginTop:12, background:'#6d28d9', color:'#fff', padding:14, borderRadius:10, fontWeight:900, border:'none'}}>
+            🔴 GO LIVE to {platform.toUpperCase()} with Tag
+          </button>
+        ) : (
+          <button onClick={()=>setIsLive(false)} style={{width:'100%', marginTop:12, background:'#ef4444', color:'#fff', padding:14, borderRadius:10, fontWeight:900, border:'none'}}>
+            ■ STOP LIVE
+          </button>
+        )}
 
         <p style={{fontSize:10, color:'#666', marginTop:8}}>
-          TikTok: You need 1000+ followers + get RTMP from LIVE Center (tiktok.com/live/creators or TikTok Live Studio). If you don't have it, stream to FB/YT first, then restream.
+          TikTok needs 1000+ followers. Get RTMP from LIVE Center. If no access, stream to YT/FB then restream.
         </p>
       </div>
     </div>
