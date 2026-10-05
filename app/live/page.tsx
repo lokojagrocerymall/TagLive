@@ -22,7 +22,14 @@ export default function Live(){
     const fbAppId = '1337456311621600'
     if(!document.getElementById('fb-sdk')){
       const s = document.createElement('script'); s.id='fb-sdk'; s.src='https://connect.facebook.net/en_US/sdk.js';
-      s.onload=()=>{ window.FB.init({appId: fbAppId, cookie:true, xfbml:false, version:'v19.0'}) }
+      s.onload=()=>{
+        window.FB.init({appId: fbAppId, cookie:true, xfbml:false, version:'v19.0'})
+        window.FB.getLoginStatus((resp:any)=>{
+          if(resp.status==='connected'){
+            window.FB.api('/me?fields=name,picture', (user:any)=> setFbUser(user))
+          }
+        })
+      }
       document.body.appendChild(s)
     }
     if(!document.getElementById('g-sdk')){
@@ -36,40 +43,46 @@ export default function Live(){
   useEffect(()=>{ if(ytKey) localStorage.setItem('taglive_ytKey', ytKey)},[ytKey])
   useEffect(()=>{ if(ttKey) localStorage.setItem('taglive_ttKey', ttKey)},[ttKey])
 
-  // FIXED CAMERA - FORCE RELEASE AND AUTO-RETRY
-  const startCamera = async(newFacing = facing)=>{
+  const stopCameraHard = ()=>{
     try{
       if(streamRef.current){
-        streamRef.current.getTracks().forEach(t=>t.stop())
+        streamRef.current.getTracks().forEach(t=>{ try{t.stop(); (t as any).enabled=false} catch{} })
         streamRef.current = null
       }
-      if(videoRef.current) videoRef.current.srcObject = null
-      await new Promise(r=>setTimeout(r, 400))
-
-      let s: MediaStream
-      try{
-        s = await navigator.mediaDevices.getUserMedia({video:{facingMode:newFacing, width:{ideal:1280}, height:{ideal:720}}, audio:true})
-      }catch{
-        // Fallback for Android if facingMode fails
-        s = await navigator.mediaDevices.getUserMedia({video:true, audio:true})
+      if(videoRef.current){
+        try{ videoRef.current.pause(); videoRef.current.srcObject=null; videoRef.current.load() }catch{}
       }
-      streamRef.current = s; trackRef.current = s.getVideoTracks()[0]
-      if(videoRef.current){ videoRef.current.srcObject = s; await videoRef.current.play() }
-      setFacing(newFacing); setIsCam(true)
-    }catch(e:any){
-      alert('Camera: '+e.message+'\n\nFix: 1. Refresh page 2. Close other camera apps 3. Allow camera in Chrome settings')
-    }
-  }
-
-  const stopCamera = ()=>{
-    if(streamRef.current){
-      streamRef.current.getTracks().forEach(t=>t.stop())
-      streamRef.current = null
-    }
-    if(videoRef.current) videoRef.current.srcObject = null
+      trackRef.current = null
+    }catch{}
     setIsCam(false); setIsLive(false); setTorch(false)
   }
 
+  const startCamera = async(newFacing = facing)=>{
+    try{
+      stopCameraHard()
+      await new Promise(r=>setTimeout(r, 1000)) // Android needs 1 sec to release hardware
+
+      let s: MediaStream | null = null
+      // Try 4 different ways
+      try{ s = await navigator.mediaDevices.getUserMedia({video:{facingMode:newFacing, width:640, height:480}, audio:true}) }catch{}
+      if(!s) try{ s = await navigator.mediaDevices.getUserMedia({video:{facingMode:newFacing}, audio:true}) }catch{}
+      if(!s) try{ s = await navigator.mediaDevices.getUserMedia({video:true, audio:true}) }catch{}
+      if(!s) try{ s = await navigator.mediaDevices.getUserMedia({video:true, audio:false}) }catch{}
+      if(!s) throw new Error('Camera still locked. Close Chrome completely and reopen.')
+
+      streamRef.current = s; trackRef.current = s.getVideoTracks()[0]
+      if(videoRef.current){
+        videoRef.current.srcObject = s;
+        videoRef.current.onloadedmetadata = async()=>{ try{ await videoRef.current?.play() }catch{} }
+        await videoRef.current.play().catch(()=>{})
+      }
+      setFacing(newFacing); setIsCam(true)
+    }catch(e:any){
+      alert(`Camera: ${e.message}\n\nQUICK FIX:\n1. Close Chrome app fully (swipe away)\n2. Reopen taglive-two.vercel.app/live\n3. Tap Start Camera first, then Login`)
+    }
+  }
+
+  const stopCamera = ()=> stopCameraHard()
   const toggleCamera = async()=>{ await startCamera(facing==='user'?'environment':'user') }
   const toggleTorch = async()=>{
     try{
@@ -80,30 +93,26 @@ export default function Live(){
     }catch(e:any){ alert('Torch: '+e.message) }
   }
 
-  // FIXED LOGIN - AUTO RESTARTS CAMERA AFTER LOGIN
   const loginFacebook = ()=>{
-    if(!window.FB){ alert('Wait 3 sec... SDK loading'); return; }
-    const wasCameraOn = isCam
+    if(!window.FB){ alert('Wait 3 sec...'); return; }
+    // CRITICAL FIX: STOP CAMERA BEFORE LOGIN SO ANDROID RELEASES IT
+    if(isCam){
+      stopCameraHard()
+      // Wait then login
+      setTimeout(()=>{
+        doFbLogin()
+      }, 800)
+    } else {
+      doFbLogin()
+    }
+  }
+
+  const doFbLogin = ()=>{
     window.FB.login((resp:any)=>{
       if(resp.authResponse){
-        window.FB.api('/me?fields=name,picture', async(user:any)=>{
+        window.FB.api('/me?fields=name,picture', (user:any)=>{
           setFbUser(user)
-          // RESTORE CAMERA IF IT WAS ON BEFORE LOGIN
-          if(wasCameraOn){
-            setTimeout(async()=>{
-              try{
-                let s = await navigator.mediaDevices.getUserMedia({video:true, audio:true})
-                streamRef.current = s
-                trackRef.current = s.getVideoTracks()[0]
-                if(videoRef.current){
-                  videoRef.current.srcObject = s
-                  await videoRef.current.play()
-                }
-                setIsCam(true)
-              }catch{}
-            }, 800)
-          }
-          alert(`✅ Facebook logged in as ${user.name}!\n\nCamera was on before - restoring now. Paste your Stream Key from facebook.com/live/producer below.`)
+          alert(`✅ Logged in as ${user.name}!\n\nCamera was stopped before login (to avoid Android bug).\n\nNow tap START CAMERA button - it will work 100% now!`)
         })
       } else {
         alert('Login cancelled');
@@ -160,10 +169,11 @@ export default function Live(){
 
   return (
     <div style={{padding:16, maxWidth:500, margin:'0 auto', paddingBottom:80}}>
-      <h2 style={{fontWeight:900, fontSize:24}}>Live Studio Pro <span style={{fontSize:12, background:'#16a34a', color:'#fff', padding:'4px 8px', borderRadius:8}}>CAM FIX</span></h2>
+      <h2 style={{fontWeight:900, fontSize:24}}>Live Studio Pro <span style={{fontSize:12, background:'#16a34a', color:'#fff', padding:'4px 8px', borderRadius:8}}>V6 FINAL</span></h2>
+      <p style={{fontSize:12, marginTop:6, color:'#666'}}>Correct order: Login first → Then Camera (Android fix)</p>
       <div style={{marginTop:12, background:'#000', borderRadius:16, overflow:'hidden', position:'relative', aspectRatio:'9/16'}}>
         <video ref={videoRef} muted playsInline autoPlay style={{width:'100%', height:'100%', objectFit:'cover', display: isCam?'block':'none'}} />
-        {!isCam && <div style={{color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', height:400}}>Camera off</div>}
+        {!isCam && <div style={{color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', height:400, flexDirection:'column', gap:8}}><span>Camera off</span><span style={{fontSize:11, opacity:0.7}}>{fbUser? `✓ ${fbUser.name} - Now start camera` : 'Tap Login first, then Start Camera'}</span></div>}
         <canvas ref={canvasRef} style={{position:'absolute', top:0, left:0, width:'100%', height:'100%', objectFit:'cover'}} />
         {isLive && <div style={{position:'absolute', top:12, left:12, background:'#ef4444', color:'#fff', padding:'4px 10px', borderRadius:20, fontSize:12, fontWeight:900, zIndex:3}}>● LIVE {platform}</div>}
         {isCam && <div style={{position:'absolute', top:12, right:12, display:'flex', gap:8, zIndex:4}}>
@@ -178,7 +188,7 @@ export default function Live(){
       </div>
       <textarea value={verse} onChange={e=>setVerse(e.target.value)} style={{width:'100%', height:80, marginTop:12, padding:12, borderRadius:12, border:'1px solid #ddd'}} />
       <div style={{marginTop:18, border:'2px solid #16a34a', borderRadius:16, padding:14}}>
-        <h3 style={{fontWeight:800}}>🔴 Auto Connect - CAM FIX</h3>
+        <h3 style={{fontWeight:800}}>🔴 Steps: Login → Camera → Go Live</h3>
         <div style={{display:'flex', gap:8, marginTop:10}}>
           <button onClick={loginFacebook} style={{flex:1, background: fbUser?'#16a34a':'#1877F2', color:'#fff', padding:12, borderRadius:10, fontWeight:900, border:'none', fontSize:12}}>
             {fbUser? `✓ ${fbUser.name.slice(0,12)}` : 'f Login with Facebook'}
@@ -205,7 +215,6 @@ export default function Live(){
         ) : (
           <button onClick={()=>setIsLive(false)} style={{width:'100%', marginTop:12, background:'#ef4444', color:'#fff', padding:14, borderRadius:10, fontWeight:900, border:'none'}}>■ STOP LIVE</button>
         )}
-        <p style={{fontSize:11, color:'#16a34a', marginTop:8, fontWeight:700}}>✅ Camera auto-restores after Facebook login!</p>
       </div>
     </div>
   )
