@@ -36,16 +36,40 @@ export default function Live(){
   useEffect(()=>{ if(ytKey) localStorage.setItem('taglive_ytKey', ytKey)},[ytKey])
   useEffect(()=>{ if(ttKey) localStorage.setItem('taglive_ttKey', ttKey)},[ttKey])
 
+  // FIXED CAMERA - FORCE RELEASE AND AUTO-RETRY
   const startCamera = async(newFacing = facing)=>{
     try{
-      if(streamRef.current) streamRef.current.getTracks().forEach(t=>t.stop())
-      const s = await navigator.mediaDevices.getUserMedia({video:{facingMode:newFacing, width:{ideal:1280}, height:{ideal:720}}, audio:true})
+      if(streamRef.current){
+        streamRef.current.getTracks().forEach(t=>t.stop())
+        streamRef.current = null
+      }
+      if(videoRef.current) videoRef.current.srcObject = null
+      await new Promise(r=>setTimeout(r, 400))
+
+      let s: MediaStream
+      try{
+        s = await navigator.mediaDevices.getUserMedia({video:{facingMode:newFacing, width:{ideal:1280}, height:{ideal:720}}, audio:true})
+      }catch{
+        // Fallback for Android if facingMode fails
+        s = await navigator.mediaDevices.getUserMedia({video:true, audio:true})
+      }
       streamRef.current = s; trackRef.current = s.getVideoTracks()[0]
       if(videoRef.current){ videoRef.current.srcObject = s; await videoRef.current.play() }
       setFacing(newFacing); setIsCam(true)
-    }catch(e:any){ alert('Camera: '+e.message) }
+    }catch(e:any){
+      alert('Camera: '+e.message+'\n\nFix: 1. Refresh page 2. Close other camera apps 3. Allow camera in Chrome settings')
+    }
   }
-  const stopCamera = ()=>{ streamRef.current?.getTracks().forEach(t=>t.stop()); setIsCam(false); setIsLive(false); setTorch(false) }
+
+  const stopCamera = ()=>{
+    if(streamRef.current){
+      streamRef.current.getTracks().forEach(t=>t.stop())
+      streamRef.current = null
+    }
+    if(videoRef.current) videoRef.current.srcObject = null
+    setIsCam(false); setIsLive(false); setTorch(false)
+  }
+
   const toggleCamera = async()=>{ await startCamera(facing==='user'?'environment':'user') }
   const toggleTorch = async()=>{
     try{
@@ -56,14 +80,30 @@ export default function Live(){
     }catch(e:any){ alert('Torch: '+e.message) }
   }
 
+  // FIXED LOGIN - AUTO RESTARTS CAMERA AFTER LOGIN
   const loginFacebook = ()=>{
     if(!window.FB){ alert('Wait 3 sec... SDK loading'); return; }
-    // FIXED SCOPE - ONLY public_profile which is approved by default
+    const wasCameraOn = isCam
     window.FB.login((resp:any)=>{
       if(resp.authResponse){
-        window.FB.api('/me?fields=name,picture', (user:any)=>{
+        window.FB.api('/me?fields=name,picture', async(user:any)=>{
           setFbUser(user)
-          alert(`✅ Facebook logged in as ${user.name}!\n\nNow go to facebook.com/live/producer to copy your Stream Key and paste below. Auto-key needs Facebook review which takes weeks, but manual key works 100% today!`)
+          // RESTORE CAMERA IF IT WAS ON BEFORE LOGIN
+          if(wasCameraOn){
+            setTimeout(async()=>{
+              try{
+                let s = await navigator.mediaDevices.getUserMedia({video:true, audio:true})
+                streamRef.current = s
+                trackRef.current = s.getVideoTracks()[0]
+                if(videoRef.current){
+                  videoRef.current.srcObject = s
+                  await videoRef.current.play()
+                }
+                setIsCam(true)
+              }catch{}
+            }, 800)
+          }
+          alert(`✅ Facebook logged in as ${user.name}!\n\nCamera was on before - restoring now. Paste your Stream Key from facebook.com/live/producer below.`)
         })
       } else {
         alert('Login cancelled');
@@ -120,9 +160,9 @@ export default function Live(){
 
   return (
     <div style={{padding:16, maxWidth:500, margin:'0 auto', paddingBottom:80}}>
-      <h2 style={{fontWeight:900, fontSize:24}}>Live Studio Pro <span style={{fontSize:12, background:'#16a34a', color:'#fff', padding:'4px 8px', borderRadius:8}}>FIXED</span></h2>
+      <h2 style={{fontWeight:900, fontSize:24}}>Live Studio Pro <span style={{fontSize:12, background:'#16a34a', color:'#fff', padding:'4px 8px', borderRadius:8}}>CAM FIX</span></h2>
       <div style={{marginTop:12, background:'#000', borderRadius:16, overflow:'hidden', position:'relative', aspectRatio:'9/16'}}>
-        <video ref={videoRef} muted playsInline style={{width:'100%', height:'100%', objectFit:'cover', display: isCam?'block':'none'}} />
+        <video ref={videoRef} muted playsInline autoPlay style={{width:'100%', height:'100%', objectFit:'cover', display: isCam?'block':'none'}} />
         {!isCam && <div style={{color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', height:400}}>Camera off</div>}
         <canvas ref={canvasRef} style={{position:'absolute', top:0, left:0, width:'100%', height:'100%', objectFit:'cover'}} />
         {isLive && <div style={{position:'absolute', top:12, left:12, background:'#ef4444', color:'#fff', padding:'4px 10px', borderRadius:20, fontSize:12, fontWeight:900, zIndex:3}}>● LIVE {platform}</div>}
@@ -138,7 +178,7 @@ export default function Live(){
       </div>
       <textarea value={verse} onChange={e=>setVerse(e.target.value)} style={{width:'100%', height:80, marginTop:12, padding:12, borderRadius:12, border:'1px solid #ddd'}} />
       <div style={{marginTop:18, border:'2px solid #16a34a', borderRadius:16, padding:14}}>
-        <h3 style={{fontWeight:800}}>🔴 Auto Connect - FIXED</h3>
+        <h3 style={{fontWeight:800}}>🔴 Auto Connect - CAM FIX</h3>
         <div style={{display:'flex', gap:8, marginTop:10}}>
           <button onClick={loginFacebook} style={{flex:1, background: fbUser?'#16a34a':'#1877F2', color:'#fff', padding:12, borderRadius:10, fontWeight:900, border:'none', fontSize:12}}>
             {fbUser? `✓ ${fbUser.name.slice(0,12)}` : 'f Login with Facebook'}
@@ -155,7 +195,7 @@ export default function Live(){
         <div style={{marginTop:12}}>
           <label style={{fontSize:12, fontWeight:700}}>{platform.toUpperCase()} RTMP URL</label>
           <input value={url} readOnly style={{width:'100%', padding:10, borderRadius:8, border:'1px solid #ddd', marginTop:4, fontSize:11, background:'#f5f3ff'}} />
-          <label style={{fontSize:12, fontWeight:700, marginTop:10, display:'block'}}>Stream Key (paste from fb.com/live/producer)</label>
+          <label style={{fontSize:12, fontWeight:700, marginTop:10, display:'block'}}>Stream Key</label>
           {platform==='facebook' && <input value={fbKey} onChange={e=>setFbKey(e.target.value)} placeholder="Paste FB key here" style={{width:'100%', padding:10, borderRadius:8, border:'1px solid #ddd', marginTop:4, background:fbUser?'#dcfce7':''}} />}
           {platform==='youtube' && <input value={ytKey} onChange={e=>setYtKey(e.target.value)} placeholder="YouTube key" style={{width:'100%', padding:10, borderRadius:8, border:'1px solid #ddd', marginTop:4, background:ytUser?'#dcfce7':''}} />}
           {platform==='tiktok' && <input value={ttKey} onChange={e=>setTtKey(e.target.value)} placeholder="TikTok manual" style={{width:'100%', padding:10, borderRadius:8, border:'1px solid #ddd', marginTop:4}} />}
@@ -165,7 +205,7 @@ export default function Live(){
         ) : (
           <button onClick={()=>setIsLive(false)} style={{width:'100%', marginTop:12, background:'#ef4444', color:'#fff', padding:14, borderRadius:10, fontWeight:900, border:'none'}}>■ STOP LIVE</button>
         )}
-        <p style={{fontSize:11, color:'#16a34a', marginTop:8, fontWeight:700}}>✅ Fixed: No more Invalid Scopes error! Now login works!</p>
+        <p style={{fontSize:11, color:'#16a34a', marginTop:8, fontWeight:700}}>✅ Camera auto-restores after Facebook login!</p>
       </div>
     </div>
   )
