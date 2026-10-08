@@ -6,7 +6,8 @@ export default function LiveStudio() {
   const [roomName, setRoomName] = useState('my-live-room')
   const [connected, setConnected] = useState(false)
   const [cameraOn, setCameraOn] = useState(false)
-  const [streamKey, setStreamKey] = useState('')
+  const [facebookKey, setFacebookKey] = useState('')
+  const [youtubeKey, setYoutubeKey] = useState('')
   const [streaming, setStreaming] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const roomRef = useRef<Room | null>(null)
@@ -36,7 +37,7 @@ export default function LiveStudio() {
     const res = await fetch('/api/start-egress', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ room: roomName, streamKey })
+      body: JSON.stringify({ room: roomName, facebookKey, youtubeKey })
     })
     if (res.ok) setStreaming(true)
     else alert('Failed to start')
@@ -57,9 +58,10 @@ export default function LiveStudio() {
           
           {cameraOn && (
             <div style={{ marginTop: 12 }}>
-              <input value={streamKey} onChange={(e) => setStreamKey(e.target.value)} placeholder="Paste Facebook Stream Key here" style={{ width: '100%', padding: 12, borderRadius: 8, border: '1px solid #ccc' }} />
-              <button onClick={startStream} disabled={streaming || !streamKey} style={{ width: '100%', marginTop: 8, padding: 14, background: streaming ? '#16a34a' : '#1877F2', color: '#fff', borderRadius: 10, border: 'none', fontWeight: 800 }}>
-                {streaming ? 'LIVE ON FACEBOOK ●' : 'Start Stream'}
+              <input value={facebookKey} onChange={(e) => setFacebookKey(e.target.value)} placeholder="Facebook Stream Key" style={{ width: '100%', padding: 12, borderRadius: 8, border: '1px solid #ccc', marginBottom: 8 }} />
+              <input value={youtubeKey} onChange={(e) => setYoutubeKey(e.target.value)} placeholder="YouTube Stream Key" style={{ width: '100%', padding: 12, borderRadius: 8, border: '1px solid #ccc' }} />
+              <button onClick={startStream} disabled={streaming || (!facebookKey && !youtubeKey)} style={{ width: '100%', marginTop: 8, padding: 14, background: streaming ? '#16a34a' : '#1877F2', color: '#fff', borderRadius: 10, border: 'none', fontWeight: 800 }}>
+                {streaming ? 'LIVE NOW ●' : 'Start Stream (FB + YouTube)'}
               </button>
             </div>
           )}
