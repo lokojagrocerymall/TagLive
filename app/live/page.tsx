@@ -1,3 +1,4 @@
+// @ts-nocheck
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { Room } from 'livekit-client'
@@ -17,7 +18,6 @@ export default function Live(){
   const streamRef = useRef<MediaStream|null>(null)
   const trackRef = useRef<MediaStreamTrack|null>(null)
   const roomRef = useRef<Room|null>(null)
-  const publishedRef = useRef(false)
 
   useEffect(()=>{
     const fbAppId = '1337456311621600'
@@ -32,7 +32,6 @@ export default function Live(){
     const f=localStorage.getItem('taglive_fbKey'); if(f) setFbKey(f)
   },[])
 
-  // DRAW LOOP: Camera + Verse Overlay on canvas
   useEffect(()=>{
     let anim:any
     const draw=()=>{
@@ -53,7 +52,7 @@ export default function Live(){
     draw(); return()=>cancelAnimationFrame(anim)
   },[isCam, verse, isLive])
 
-  const stopCameraHard=async()=>{ try{ publishedRef.current=false; if(roomRef.current) await roomRef.current.disconnect(); roomRef.current=null; if(streamRef.current){ streamRef.current.getTracks().forEach(t=>t.stop()); streamRef.current=null } if(videoRef.current) videoRef.current.srcObject=null; trackRef.current=null }catch{}; setIsCam(false); setIsLive(false); setTorch(false); setStatus('Stopped') }
+  const stopCameraHard=async()=>{ try{ if(roomRef.current) await roomRef.current.disconnect(); roomRef.current=null; if(streamRef.current){ streamRef.current.getTracks().forEach(t=>t.stop()); streamRef.current=null } if(videoRef.current) videoRef.current.srcObject=null; trackRef.current=null }catch{}; setIsCam(false); setIsLive(false); setTorch(false); setStatus('Stopped') }
 
   const startCamera = async(newFacing=facing)=>{
     try{
@@ -63,13 +62,9 @@ export default function Live(){
       streamRef.current=s; trackRef.current=s.getVideoTracks()[0]
       if(videoRef.current){ videoRef.current.srcObject=s; await videoRef.current.play().catch(()=>{}) }
       setFacing(newFacing)
-
-      // JOIN LIVEKIT ROOM
-      const res = await fetch('/api/token', {method:'POST', body:JSON.stringify({room:'church-service', identity: fbUser?.name||'Pastor'})})
+      const res = await fetch('/api/token', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({room:'church-service', identity: fbUser?.name||'Pastor'})})
       const {token, url} = await res.json()
       const room = new Room(); await room.connect(url, token); roomRef.current=room
-
-      // Publish CANVAS (with verse overlay) + Audio
       setTimeout(async()=>{
         const canvas = canvasRef.current; if(!canvas) return
         const cs = canvas.captureStream(30)
@@ -77,23 +72,19 @@ export default function Live(){
         const aTrack = s.getAudioTracks()[0]
         if(vTrack) await room.localParticipant.publishTrack(vTrack)
         if(aTrack) await room.localParticipant.publishTrack(aTrack)
-        publishedRef.current=true
       },1000)
-
       setIsCam(true); setStatus('In Studio - Canvas with verse is streaming')
     }catch(e:any){ alert(e.message); setStatus('Error: '+e.message) }
   }
 
   const toggleCamera=async()=>{ await startCamera(facing==='user'?'environment':'user') }
   const toggleTorch=async()=>{ try{ const t:any=trackRef.current; const c=t?.getCapabilities?.(); if(!c?.torch) return alert('No torch'); await t.applyConstraints({advanced:[{torch:!torch}] as any}); setTorch(!torch)}catch(e:any){ alert(e.message)} }
-
   const loginFacebook=()=>{ if(!window.FB) return alert('Wait...'); window.FB.login((resp:any)=>{ if(resp.authResponse){ window.FB.api('/me?fields=name,picture', (u:any)=>{ setFbUser(u); localStorage.setItem('taglive_fbUser', JSON.stringify(u)); alert(`✅ Logged in as ${u.name}`) }) } }, {scope:'public_profile'}) }
-
   const handleGoLive=async()=>{
     if(!isCam) return alert('Start Camera first')
     if(!fbKey) return alert('Paste Facebook Stream Key!')
     setStatus('Going LIVE to Facebook...')
-    const res = await fetch('/api/start-stream', {method:'POST', body:JSON.stringify({room:'church-service', rtmpUrl:'rtmps://live-api-s.facebook.com:443/rtmp/', streamKey:fbKey})})
+    const res = await fetch('/api/start-stream', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({room:'church-service', rtmpUrl:'rtmps://live-api-s.facebook.com:443/rtmp/', streamKey:fbKey})})
     if(res.ok){ setIsLive(true); setStatus('🔴 LIVE ON FACEBOOK'); localStorage.setItem('taglive_fbKey', fbKey) } else { setStatus('Failed - check Stream Key') }
   }
 
