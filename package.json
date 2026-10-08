@@ -12,7 +12,9 @@
     "react": "^18",
     "react-dom": "^18",
     "@supabase/supabase-js": "^2.45.0",
-    "next-auth": "^4.24.11"
+    "next-auth": "^4.24.11",
+    "livekit-client": "^2.20.0",
+    "livekit-server-sdk": "^2.15.1"
   },
   "devDependencies": {
     "typescript": "^5",
