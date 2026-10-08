@@ -3,7 +3,10 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(req: NextRequest) {
   const { room, identity } = await req.json()
-  const at = new AccessToken(process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET, { identity })
+  const at = new AccessToken(process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!, {
+    identity: identity || 'user',
+  })
   at.addGrant({ roomJoin: true, room })
-  return NextResponse.json({ token: await at.toJwt(), url: process.env.LIVEKIT_URL })
+  const token = await at.toJwt()
+  return NextResponse.json({ token, url: process.env.LIVEKIT_URL })
 }
