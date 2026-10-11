@@ -9,8 +9,10 @@ export default function LiveStudio(){
   const [facing, setFacing] = useState<'user'|'environment'>('user')
   const [torch, setTorch] = useState(false)
   const [fbUser, setFbUser] = useState<any>(null)
-  const [fbKey, setFbKey] = useState('')
   const [pages, setPages] = useState<any[]>([])
+  const [selectedPage, setSelectedPage] = useState<any>(null)
+  const [fbStreamUrl, setFbStreamUrl] = useState('')
+  const [liveId, setLiveId] = useState('')
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream|null>(null)
@@ -23,9 +25,7 @@ export default function LiveStudio(){
       s.onload=()=>{ window.FB.init({appId: fbAppId, cookie:true, xfbml:false, version:'v19.0'}) }
       document.body.appendChild(s)
     }
-    const k = localStorage.getItem('taglive_fbKey'); if(k) setFbKey(k)
   },[])
-  useEffect(()=>{ if(fbKey) localStorage.setItem('taglive_fbKey', fbKey)},[fbKey])
 
   const startCamera = async(newFacing = facing)=>{
     try{
@@ -52,15 +52,42 @@ export default function LiveStudio(){
       if(resp.authResponse){
         window.FB.api('/me?fields=name,picture', (u:any)=>{ setFbUser(u); loadPages(resp.authResponse.accessToken) })
       }
-    },{scope:'public_profile,pages_show_list,pages_read_engagement,business_management'})
+    },{scope:'public_profile,pages_show_list,pages_read_engagement,pages_manage_posts,publish_video'})
   }
   const loadPages = (tok?:string)=>{
     const t = tok || window.FB?.getAuthResponse()?.accessToken
     if(!t) return alert('Login first')
     window.FB.api('/me/accounts', {access_token:t}, (res:any)=>{
-      if(res.data?.length){ setPages(res.data); alert(`Found ${res.data.length} pages`) }
-      else alert('No pages or permission: '+JSON.stringify(res))
+      if(res.data?.length){ setPages(res.data); alert(`Found ${res.data.length} pages - now TAP a page to auto-create live`) }
+      else alert('No pages: '+JSON.stringify(res))
     })
+  }
+
+  // NEW: Auto-create Facebook Live WITHOUT asking for stream key
+  const createFbLiveAuto = async (page:any)=>{
+    setSelectedPage(page)
+    try{
+      const res = await fetch(`https://graph.facebook.com/v19.0/${page.id}/live_videos`,{
+        method:'POST',
+        headers:{'Content-Type':'application/x-www-form-urlencoded'},
+        body: new URLSearchParams({
+          access_token: page.access_token,
+          title: verse.substring(0,60),
+          description: 'TagLive - '+verse,
+          status: 'UNPUBLISHED'
+        })
+      })
+      const data = await res.json()
+      if(data.error) throw new Error(JSON.stringify(data.error))
+      setFbStreamUrl(data.stream_url)
+      setLiveId(data.id)
+      setIsLive(true)
+      alert('✅ LIVE AUTO-CREATED! No stream key paste needed. Stream URL ready.')
+      // Now you push canvas stream to your rtmp-server.js using data.stream_url
+      console.log('AUTO stream_url:', data.stream_url, 'id:', data.id)
+    }catch(e:any){
+      alert('Auto Live failed: '+e.message)
+    }
   }
 
   useEffect(()=>{
@@ -85,7 +112,6 @@ export default function LiveStudio(){
 
   return (
     <div style={{padding:16, maxWidth:480, margin:'0 auto'}}>
-      {/* LOGO HEADER - RESTORED */}
       <div style={{display:'flex', alignItems:'center', gap:12}}>
         <div style={{width:52, height:52, background:'#111', borderRadius:14, display:'flex', alignItems:'center', justifyContent:'center', position:'relative'}}>
           <div style={{width:28, height:28, border:'3px solid #fff', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center'}}>
@@ -123,10 +149,10 @@ export default function LiveStudio(){
           <button onClick={loginFacebook} style={{flex:1, background:fbUser?'#16a34a':'#1877F2', color:'#fff', padding:12, borderRadius:8, fontWeight:800, border:'none'}}>{fbUser?`✓ ${fbUser.name}`:'Login Facebook'}</button>
           <button onClick={()=>loadPages()} style={{flex:1, border:'1px solid #000', padding:12, borderRadius:8, fontWeight:800, background:'#fff'}}>Load My Pages</button>
         </div>
-        {pages.map((p:any)=><div key={p.id} style={{marginTop:6, padding:8, background:'#f3f0ff', borderRadius:8, fontSize:13, fontWeight:700}}>{p.name}</div>)}
-        <input value={fbKey} onChange={e=>setFbKey(e.target.value)} placeholder="Paste Facebook Stream Key" style={{width:'100%', padding:12, marginTop:10, borderRadius:8, border:'2px solid #ef4444'}}/>
+        {pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6, padding:10, background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff', color:selectedPage?.id===p.id?'#fff':'#000', borderRadius:8, fontSize:13, fontWeight:700, cursor:'pointer', border:selectedPage?.id===p.id?'2px solid #000':'1px solid #ddd'}}>{p.name} {selectedPage?.id===p.id?'✓ SELECTED - LIVE READY':'(Tap to Go Live Auto)'}</div>)}
+        {fbStreamUrl && <div style={{marginTop:10, padding:10, background:'#dcfce7', borderRadius:8, fontSize:11, wordBreak:'break-all'}}><b>✅ Auto Stream Created:</b><br/>{fbStreamUrl.substring(0,80)}...<br/>ID: {liveId}</div>}
       </div>
-      <p style={{textAlign:'center', fontSize:11, color:'#16a34a', marginTop:10, fontWeight:700}}>✅ MAIN FEATURE: Text projection on face + Flip + Torch RESTORED</p>
+      <p style={{textAlign:'center', fontSize:11, color:'#16a34a', marginTop:10, fontWeight:700}}>✅ MAIN FEATURE: Text projection on face + Flip + Torch RESTORED - NO KEY PASTE</p>
     </div>
   )
 }
