@@ -35,7 +35,6 @@ export default function LiveStudio(){
   const [showText, setShowText] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false)
   const [stats, setStats] = useState({ live: 0, daily: 0, weekly: 0, monthly: 0, total: 0 })
-  // INTRO / OUTRO FINAL KILLER
   const [intros, setIntros] = useState<any[]>([])
   const [outros, setOutros] = useState<any[]>([])
   const [activeIntroId, setActiveIntroId] = useState<string|null>(null)
@@ -44,7 +43,6 @@ export default function LiveStudio(){
   const [playing, setPlaying] = useState<any>(null)
   const [animTitle, setAnimTitle] = useState('APOSTLE JAMES AGBEM KAJINYANA')
   const [animSub, setAnimSub] = useState('Welcome to Live Service')
-  const [introDur, setIntroDur] = useState(5)
   const introFileRef = useRef<HTMLInputElement>(null)
   const outroFileRef = useRef<HTMLInputElement>(null)
   const introVideoRef = useRef<HTMLVideoElement>(null)
@@ -109,33 +107,44 @@ export default function LiveStudio(){
     trackDevice(); const interval = setInterval(trackDevice, 60000); return ()=> clearInterval(interval)
   },[isAdmin])
 
-  // INTRO / OUTRO LOGIC
   const saveIntros = (arr:any[])=>{ setIntros(arr); localStorage.setItem('taglive_intros', JSON.stringify(arr)) }
   const saveOutros = (arr:any[])=>{ setOutros(arr); localStorage.setItem('taglive_outros', JSON.stringify(arr)) }
   const fileToBase64 = (file:File)=> new Promise<string>((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result as string); r.onerror=rej; r.readAsDataURL(file) })
-  const addImageIntro = async(isOutro=false)=>{
-    const input = isOutro? outroFileRef.current : introFileRef.current
-    const file = (input as any)?.files?.[0]; if(!file) return alert('Pick file first')
+  const getVideoDuration = (base64:string)=> new Promise<number>((res)=>{ const v=document.createElement('video'); v.src=base64; v.onloadedmetadata=()=>res(v.duration); setTimeout(()=>res(10), 2000) })
+
+  const handleIntroFile = async (e:any)=>{
+    const file = e.target.files?.[0]; if(!file) return
     const base64 = await fileToBase64(file)
-    const item = { id: `id_${Date.now()}`, type: file.type.startsWith('video')? 'video' : 'image', data: base64, duration: introDur, title: file.name }
-    if(isOutro){ const n=[...outros, item]; saveOutros(n) } else { const n=[...intros, item]; saveIntros(n) }
-    alert('✅ Saved!')
+    let dur = 5
+    if(file.type.startsWith('video')){ dur = await getVideoDuration(base64) }
+    const item = { id: `id_${Date.now()}`, type: file.type.startsWith('video')? 'video' : 'image', data: base64, duration: dur, title: file.name }
+    const n=[...intros, item]; saveIntros(n); e.target.value=''; alert(`✅ Intro Saved! Duration: ${Math.round(dur)}s`)
+  }
+  const handleOutroFile = async (e:any)=>{
+    const file = e.target.files?.[0]; if(!file) return
+    const base64 = await fileToBase64(file)
+    let dur = 5
+    if(file.type.startsWith('video')){ dur = await getVideoDuration(base64) }
+    const item = { id: `id_${Date.now()}`, type: file.type.startsWith('video')? 'video' : 'image', data: base64, duration: dur, title: file.name }
+    const n=[...outros, item]; saveOutros(n); e.target.value=''; alert(`✅ Outro Saved! Duration: ${Math.round(dur)}s`)
   }
   const addAnimatedIntro = (isOutro=false)=>{
     if(!animTitle.trim()) return alert('Add title')
-    const item = { id: `id_${Date.now()}`, type: 'animated', data: null, duration: introDur, title: animTitle, subtitle: animSub }
+    const item = { id: `id_${Date.now()}`, type: 'animated', data: null, duration: 5, title: animTitle, subtitle: animSub }
     if(isOutro){ const n=[...outros, item]; saveOutros(n) } else { const n=[...intros, item]; saveIntros(n) }
-    alert('✅ Animated Saved!')
+    alert('✅ Animated Saved! (5s)')
   }
   const playItem = (item:any, onEnd?:()=>void)=>{
     setPlaying(item)
-    if(item.type==='video'){ setTimeout(()=>{ introVideoRef.current?.play() },200) }
-    const dur = item.type==='video'? 15000 : item.duration*1000
-    setTimeout(()=>{ setPlaying(null); if(onEnd) onEnd() }, dur)
+    if(item.type==='video'){
+      setTimeout(()=>{ introVideoRef.current?.play() },300)
+    } else {
+      setTimeout(()=>{ setPlaying(null); if(onEnd) onEnd() }, item.duration*1000)
+    }
   }
   const playActiveIntroThen = (cb:()=>void)=>{
     const active = intros.find(i=>i.id===activeIntroId)
-    if(!active) return cb()
+    if(!active){ cb(); return }
     playItem(active, cb)
   }
   const playActiveOutro = ()=>{
@@ -173,7 +182,7 @@ export default function LiveStudio(){
       setSelectedPage(page)
       try{
         const res = await fetch(`https://graph.facebook.com/v19.0/${page.id}/live_videos`,{ method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({ access_token: page.access_token, title: verse.substring(0,60), description: 'TagLive - '+verse, status: 'UNPUBLISHED' }) })
-        const data = await res.json(); if(data.error) throw new Error(JSON.stringify(data.error)); setFbStreamUrl(data.stream_url); setLiveId(data.id); setIsLive(true); alert('✅ FB LIVE AUTO-CREATED AFTER INTRO!')
+        const data = await res.json(); if(data.error) throw new Error(JSON.stringify(data.error)); setFbStreamUrl(data.stream_url); setLiveId(data.id); setIsLive(true); alert('✅ FB LIVE AFTER INTRO!')
       }catch(e:any){ alert('Auto Live needs approval: '+e.message); setIsLive(true) }
     })
   }
@@ -242,9 +251,9 @@ export default function LiveStudio(){
       {playing && (
         <div style={{position:'fixed', top:0, left:0, right:0, bottom:0, zIndex:9999, background:'#000', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column'}}>
           {playing.type==='image' && <img src={playing.data} style={{width:'100%', height:'100%', objectFit:'contain'}} />}
-          {playing.type==='video' && <video ref={introVideoRef} src={playing.data} autoPlay controls={false} style={{width:'100%', height:'100%', objectFit:'contain'}} onEnded={()=>setPlaying(null)} />}
+          {playing.type==='video' && <video ref={introVideoRef} src={playing.data} autoPlay playsInline style={{width:'100%', height:'100%', objectFit:'contain'}} onEnded={()=>{ setPlaying(null) }} />}
           {playing.type==='animated' && (
-            <div style={{textAlign:'center', padding:40, animation:'pulse 1s infinite'}}>
+            <div style={{textAlign:'center', padding:40}}>
               <div style={{fontSize:14, letterSpacing:4, color:'#7c3aed', fontWeight:900, marginBottom:20}}>{playing.subtitle || 'WELCOME'}</div>
               <div style={{fontSize:32, fontWeight:900, color:'#fff', lineHeight:1.1}}>{playing.title}</div>
               <div style={{marginTop:30, width:80, height:80, borderRadius:'50%', border:'4px solid #7c3aed', display:'flex', alignItems:'center', justifyContent:'center', margin:'30px auto 0'}}>
@@ -253,6 +262,7 @@ export default function LiveStudio(){
             </div>
           )}
           <button onClick={()=>setPlaying(null)} style={{position:'absolute', top:20, right:20, background:'rgba(255,255,255,0.2)', color:'#fff', border:'none', borderRadius:20, padding:'8px 14px', fontWeight:800}}>✕ Skip</button>
+          {playing.type==='video' && <div style={{position:'absolute', bottom:30, color:'#fff', fontSize:12, opacity:0.8}}>Playing intro... ends automatically</div>}
         </div>
       )}
       <div style={{display:'flex', alignItems:'center', gap:12}}>
@@ -268,7 +278,7 @@ export default function LiveStudio(){
       </div>
       {isAdmin && (
         <div style={{marginTop:10, background:'#000', border:'2px solid #00ff00', borderRadius:16, padding:14}}>
-          <div style={{color:'#00ff00', fontWeight:900, textAlign:'center', fontSize:12, marginBottom:10}}>👑 ADMIN DASHBOARD - Only you see this!</div>
+          <div style={{color:'#00ff00', fontWeight:900, textAlign:'center', fontSize:12, marginBottom:10}}>👑 ADMIN DASHBOARD!</div>
           <div style={{display:'grid', gridTemplateColumns:'repeat(5, 1fr)', gap:6, textAlign:'center'}}>
             <div style={{background:'#111', borderRadius:10, padding:8}}><div style={{fontSize:10, opacity:0.7, color:'#fff'}}>🟢 LIVE</div><div style={{fontSize:18, fontWeight:900, color:'#00ff00'}}>{stats.live}</div></div>
             <div style={{background:'#111', borderRadius:10, padding:8}}><div style={{fontSize:10, opacity:0.7, color:'#fff'}}>📅 DAILY</div><div style={{fontSize:18, fontWeight:900, color:'#ffeb00'}}>{stats.daily}</div></div>
@@ -281,32 +291,35 @@ export default function LiveStudio(){
 
       <div style={{marginTop:12, border:'2px solid #7c3aed', borderRadius:16, padding:12, background:'#f9f5ff'}}>
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-          <b style={{fontSize:14}}>🎬 Intro / Outro Studio - FINAL KILL</b>
+          <b style={{fontSize:14}}>🎬 Intro / Outro Studio</b>
           <button onClick={()=>setShowStudio(!showStudio)} style={{padding:'6px 12px', borderRadius:20, border:'none', background:'#111', color:'#fff', fontWeight:800, fontSize:11}}>{showStudio?'Hide':'Open'}</button>
         </div>
         {showStudio && (
           <div style={{marginTop:10}}>
-            <div style={{display:'flex', gap:6, alignItems:'center', flexWrap:'wrap', background:'#fff', padding:8, borderRadius:10, border:'1px solid #ddd'}}>
-              <input value={animTitle} onChange={e=>setAnimTitle(e.target.value)} placeholder="Title e.g. APOSTLE JAMES..." style={{flex:1, minWidth:140, padding:8, borderRadius:8, border:'1px solid #ddd', fontSize:12}} />
-              <input value={animSub} onChange={e=>setAnimSub(e.target.value)} placeholder="Subtitle e.g. Welcome" style={{flex:1, minWidth:120, padding:8, borderRadius:8, border:'1px solid #ddd', fontSize:12}} />
-              <div style={{display:'flex', alignItems:'center', gap:4}}><span style={{fontSize:10, fontWeight:800}}>Sec:</span><input type="number" min={1} max={30} value={introDur} onChange={e=>setIntroDur(parseInt(e.target.value)||5)} style={{width:50, padding:6, borderRadius:8, border:'1px solid #ddd'}} /></div>
+            <div style={{background:'#fff', padding:8, borderRadius:10, border:'1px solid #ddd'}}>
+              <input value={animTitle} onChange={e=>setAnimTitle(e.target.value)} placeholder="Title e.g. APOSTLE JAMES..." style={{width:'100%', padding:8, borderRadius:8, border:'1px solid #ddd', fontSize:12, marginBottom:6}} />
+              <input value={animSub} onChange={e=>setAnimSub(e.target.value)} placeholder="Subtitle e.g. Welcome" style={{width:'100%', padding:8, borderRadius:8, border:'1px solid #ddd', fontSize:12}} />
             </div>
             <div style={{display:'flex', gap:6, marginTop:8}}>
               <button onClick={()=>addAnimatedIntro(false)} style={{flex:1, background:'#7c3aed', color:'#fff', padding:10, borderRadius:10, fontWeight:800, border:'none', fontSize:11}}>✨ Save Animated Intro</button>
               <button onClick={()=>addAnimatedIntro(true)} style={{flex:1, background:'#111', color:'#fff', padding:10, borderRadius:10, fontWeight:800, border:'none', fontSize:11}}>✨ Save Animated Outro</button>
             </div>
             <div style={{display:'flex', gap:6, marginTop:8}}>
-              <input ref={introFileRef} type="file" accept="image/*,video/*" style={{display:'none'}} onChange={()=>{}} />
-              <button onClick={()=>{ introFileRef.current?.click(); setTimeout(()=>{ const f=introFileRef.current?.files?.[0]; if(f) addImageIntro(false) },500) }} style={{flex:1, background:'#fff', border:'1px solid #000', padding:10, borderRadius:10, fontWeight:800, fontSize:11}}>🖼️ Upload Intro Image/Video</button>
-              <input ref={outroFileRef} type="file" accept="image/*,video/*" style={{display:'none'}} />
-              <button onClick={()=>{ outroFileRef.current?.click() }} style={{flex:1, background:'#fff', border:'1px solid #000', padding:10, borderRadius:10, fontWeight:800, fontSize:11}}>🖼️ Upload Outro</button>
+              <label style={{flex:1, background:'#7c3aed', color:'#fff', padding:10, borderRadius:10, fontWeight:800, fontSize:11, textAlign:'center', cursor:'pointer'}}>
+                🖼️ Upload Intro Image/Video
+                <input ref={introFileRef} type="file" accept="image/*,video/*" onChange={handleIntroFile} style={{display:'none'}} />
+              </label>
+              <label style={{flex:1, background:'#111', color:'#fff', padding:10, borderRadius:10, fontWeight:800, fontSize:11, textAlign:'center', cursor:'pointer'}}>
+                🖼️ Upload Outro
+                <input ref={outroFileRef} type="file" accept="image/*,video/*" onChange={handleOutroFile} style={{display:'none'}} />
+              </label>
             </div>
             <div style={{marginTop:10, display:'grid', gridTemplateColumns:'1fr 1fr', gap:8}}>
               <div style={{background:'#fff', borderRadius:10, padding:8, border:'1px solid #ddd'}}>
-                <div style={{fontSize:11, fontWeight:900, marginBottom:6}}>INTROs ({intros.length}) - Tap to Activate:</div>
+                <div style={{fontSize:11, fontWeight:900, marginBottom:6}}>INTROs ({intros.length}):</div>
                 {intros.map(i=>(
                   <div key={i.id} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 8px', marginTop:4, background:i.id===activeIntroId?'#7c3aed':'#f3f0ff', color:i.id===activeIntroId?'#fff':'#000', borderRadius:8, fontSize:11}}>
-                    <span onClick={()=>{ setActiveIntroId(i.id); localStorage.setItem('taglive_active_intro', i.id) }} style={{flex:1, cursor:'pointer', fontWeight:700}}>{i.type==='animated'?'✨':i.type==='video'?'🎥':'🖼️'} {i.title?.substring(0,20)} ({i.duration}s) {i.id===activeIntroId?'✅ ACTIVE':''}</span>
+                    <span onClick={()=>{ setActiveIntroId(i.id); localStorage.setItem('taglive_active_intro', i.id) }} style={{flex:1, cursor:'pointer', fontWeight:700}}>{i.type==='animated'?'✨':i.type==='video'?'🎥':'🖼️'} {i.title?.substring(0,18)} ({Math.round(i.duration)}s) {i.id===activeIntroId?'✅':''}</span>
                     <button onClick={()=>{ playItem(i) }} style={{marginLeft:4, background:'#000', color:'#fff', border:'none', borderRadius:6, padding:'2px 6px', fontSize:10}}>▶</button>
                     <button onClick={()=>{ const n=intros.filter(x=>x.id!==i.id); saveIntros(n); if(activeIntroId===i.id){ setActiveIntroId(null); localStorage.removeItem('taglive_active_intro') } }} style={{marginLeft:4, background:'#ef4444', color:'#fff', border:'none', borderRadius:6, padding:'2px 6px', fontSize:10}}>✕</button>
                   </div>
@@ -314,10 +327,10 @@ export default function LiveStudio(){
                 {intros.length===0 && <div style={{fontSize:11, opacity:0.6}}>No intros yet. Create above!</div>}
               </div>
               <div style={{background:'#fff', borderRadius:10, padding:8, border:'1px solid #ddd'}}>
-                <div style={{fontSize:11, fontWeight:900, marginBottom:6}}>OUTROs ({outros.length}) - Tap to Activate:</div>
+                <div style={{fontSize:11, fontWeight:900, marginBottom:6}}>OUTROs ({outros.length}):</div>
                 {outros.map(o=>(
                   <div key={o.id} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 8px', marginTop:4, background:o.id===activeOutroId?'#16a34a':'#f0fdf4', color:o.id===activeOutroId?'#fff':'#000', borderRadius:8, fontSize:11}}>
-                    <span onClick={()=>{ setActiveOutroId(o.id); localStorage.setItem('taglive_active_outro', o.id) }} style={{flex:1, cursor:'pointer', fontWeight:700}}>{o.type==='animated'?'✨':o.type==='video'?'🎥':'🖼️'} {o.title?.substring(0,20)} {o.id===activeOutroId?'✅':''}</span>
+                    <span onClick={()=>{ setActiveOutroId(o.id); localStorage.setItem('taglive_active_outro', o.id) }} style={{flex:1, cursor:'pointer', fontWeight:700}}>{o.type==='animated'?'✨':o.type==='video'?'🎥':'🖼️'} {o.title?.substring(0,18)} {o.id===activeOutroId?'✅':''}</span>
                     <button onClick={()=>{ playItem(o) }} style={{marginLeft:4, background:'#000', color:'#fff', border:'none', borderRadius:6, padding:'2px 6px', fontSize:10}}>▶</button>
                     <button onClick={()=>{ const n=outros.filter(x=>x.id!==o.id); saveOutros(n); if(activeOutroId===o.id){ setActiveOutroId(null); localStorage.removeItem('taglive_active_outro') } }} style={{marginLeft:4, background:'#ef4444', color:'#fff', border:'none', borderRadius:6, padding:'2px 6px', fontSize:10}}>✕</button>
                   </div>
@@ -325,7 +338,7 @@ export default function LiveStudio(){
                 {outros.length===0 && <div style={{fontSize:11, opacity:0.6}}>No outros yet.</div>}
               </div>
             </div>
-            <div style={{marginTop:8, fontSize:10, background:'#111', color:'#00ff88', padding:8, borderRadius:8, textAlign:'center', fontWeight:800}}>✅ Active Intro auto-plays when you tap GO LIVE! Active Outro plays when you STOP!</div>
+            <div style={{marginTop:8, fontSize:10, background:'#111', color:'#00ff88', padding:8, borderRadius:8, textAlign:'center', fontWeight:800}}>✅ Active Intro auto-plays when you tap GO LIVE! Video uses real duration!</div>
           </div>
         )}
       </div>
@@ -390,7 +403,7 @@ export default function LiveStudio(){
       <textarea value={verse} onChange={e=>setVerse(e.target.value)} style={{width:'100%', height:90, marginTop:10, padding:12, borderRadius:12, border:'1px solid #ddd'}} placeholder={"Ministering:\nAPOSTLE JAMES AGBEM KAJINYANA"} />
       {saved.length>0 && <div style={{marginTop:8, border:'1px solid #eee', borderRadius:10, padding:8}}><div style={{fontSize:11, fontWeight:800, marginBottom:6}}>📌 Saved (Tap):</div><div style={{display:'flex', flexWrap:'wrap', gap:6}}>{saved.map((s,i)=><span key={i} onClick={()=>setVerse(s)} style={{fontSize:11, background:'#f3f0ff', border:'1px solid #ddd', padding:'6px 8px', borderRadius:20, cursor:'pointer'}}>{s.substring(0,30)}...</span>)}</div></div>}
       <div style={{marginTop:14, border:'2px solid #111', borderRadius:14, padding:12}}>
-        <b>Connect Facebook - Intro will play first!</b>
+        <b>Connect Facebook - Intro plays first!</b>
         <div style={{display:'flex', gap:8, marginTop:8}}>
           <button onClick={loginFacebook} style={{flex:1, background:fbUser?'#16a34a':'#1877F2', color:'#fff', padding:12, borderRadius:8, fontWeight:800, border:'none'}}>{fbUser?`✓ ${fbUser.name}`:'Login Facebook'}</button>
           <button onClick={()=>loadPages()} style={{flex:1, border:'1px solid #000', padding:12, borderRadius:8, fontWeight:800, background:'#fff'}}>Load My Pages</button>
@@ -400,14 +413,12 @@ export default function LiveStudio(){
       </div>
       <div style={{marginTop:14, border:'2px solid #ff0000', borderRadius:14, padding:12}}>
         <b>🔴 Connect YouTube Live - Intro plays first!</b>
-        <div style={{fontSize:11, color:'#666', marginTop:4}}>YouTube Studio {'>'} Go Live {'>'} Stream {'>'} Copy Stream Key</div>
         <input value={ytKey} onChange={e=>{setYtKey(e.target.value); localStorage.setItem('taglive_ytkey', e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%', marginTop:8, padding:10, borderRadius:8, border:'1px solid #ddd', fontSize:12}} />
         <div style={{display:'flex', gap:8, marginTop:8}}>
-          <button onClick={()=>{ if(!ytKey) return alert('Paste YouTube key first'); playActiveIntroThen(()=>{ setYtLive(true); setIsLive(true); alert('✅ YouTube LIVE ON AFTER INTRO') }) }} style={{flex:1, background:ytLive?'#16a34a':'#ff0000', color:'#fff', padding:12, borderRadius:8, fontWeight:800, border:'none'}}>{ytLive?'✓ YouTube LIVE ON':'Go Live YouTube + Intro'}</button>
+          <button onClick={()=>{ if(!ytKey) return alert('Paste YouTube key first'); playActiveIntroThen(()=>{ setYtLive(true); setIsLive(true); alert('✅ YouTube LIVE AFTER INTRO') }) }} style={{flex:1, background:ytLive?'#16a34a':'#ff0000', color:'#fff', padding:12, borderRadius:8, fontWeight:800, border:'none'}}>{ytLive?'✓ YouTube LIVE ON':'Go Live YouTube + Intro'}</button>
           <button onClick={()=>{setYtLive(false); if(!fbStreamUrl) setIsLive(false); if(activeOutroId) playActiveOutro()}} style={{flex:1, border:'1px solid #000', padding:12, borderRadius:8, fontWeight:800, background:'#fff'}}>Stop YT + Outro</button>
         </div>
       </div>
-      <p style={{textAlign:'center', fontSize:11, color:'#16a34a', marginTop:10, fontWeight:700}}>✅ FINAL KILL: Intro + Outro + Save Forever</p>
     </div>
   )
 }
