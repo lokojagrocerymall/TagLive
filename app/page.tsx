@@ -14,12 +14,11 @@ export default function LiveStudio(){
   const [fbStreamUrl, setFbStreamUrl] = useState('')
   const [liveId, setLiveId] = useState('')
 
-  // --- NEW FEATURES ---
   const [pos, setPos] = useState({ x: 360, y: 1100, scale: 1, rotation: 0 })
   const [bgMode, setBgMode] = useState<'face'|'black'|'image'>('face')
   const [saved, setSaved] = useState<string[]>([])
   const [dragging, setDragging] = useState(false)
-  const lastTouch = useRef({ dist: 0, angle: 0, x:0, y:0 })
+  const lastTouch = useRef({ dist: 0, angle: 0, x:0, y:0, scale:1, rot:0 })
   
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -33,21 +32,16 @@ export default function LiveStudio(){
       s.onload=()=>{ window.FB.init({appId: fbAppId, cookie:true, xfbml:false, version:'v19.0'}) }
       document.body.appendChild(s)
     }
-    // Load saved verses
     try{
       const sv = localStorage.getItem('taglive_saved')
       if(sv) setSaved(JSON.parse(sv))
     }catch{}
-    // Auto paste when app comes back from Bible app
     const handleVis = async ()=>{
       if(!document.hidden){
         try{
           const t = await navigator.clipboard.readText()
-          if(t && t.length>3 && t.length<300 && t!==verse){
-            // If it looks like verse
-            if(t.toLowerCase().includes('john')||t.toLowerCase().includes('psalm')||t.includes(':')||t.length>10){
-               setVerse(t)
-            }
+          if(t && t.length>5 && t.length<500 && t!==verse){
+            setVerse(t)
           }
         }catch{}
       }
@@ -91,6 +85,7 @@ export default function LiveStudio(){
       else alert('No pages: '+JSON.stringify(res))
     })
   }
+
   const createFbLiveAuto = async (page:any)=>{
     setSelectedPage(page)
     try{
@@ -116,17 +111,9 @@ export default function LiveStudio(){
     }
   }
 
-  // --- NEW HANDLERS ---
+  // --- FIXED: No PlayStore redirect ---
   const openBibleApp = ()=>{
-    // Try open popular bible apps
-    const isAndroid = /android/i.test(navigator.userAgent)
-    if(isAndroid){
-      // Try YouVersion
-      window.location.href = 'intent://#Intent;package=com.sirma.mobile.bible.android;end'
-      setTimeout(()=>{ alert('If Bible app did not open, open it manually, copy verse, then return here - TagLive will auto-paste!') }, 1500)
-    } else {
-      alert('Minimize this app, open your Bible app, COPY the verse, then return here - it will auto-paste!')
-    }
+    alert('📖 Now open your Bible app (YouVersion, MySword, etc), COPY the verse, then return to TagLive - it will auto-paste! Or use PASTE VERSE button.')
   }
   const pasteClipboard = async()=>{
     try{
@@ -141,17 +128,23 @@ export default function LiveStudio(){
     setSaved(ns); localStorage.setItem('taglive_saved', JSON.stringify(ns))
     alert('Saved!')
   }
-  // Touch handlers for movable text
+
+  // --- FIXED TOUCH: Rotation continuous ---
   const onTouchStart = (e:any)=>{
     if(e.touches.length===1){
       setDragging(true)
       lastTouch.current.x = e.touches[0].clientX
       lastTouch.current.y = e.touches[0].clientY
+      lastTouch.current.scale = pos.scale
+      lastTouch.current.rot = pos.rotation
     } else if(e.touches.length===2){
       const dx = e.touches[1].clientX - e.touches[0].clientX
       const dy = e.touches[1].clientY - e.touches[0].clientY
       lastTouch.current.dist = Math.hypot(dx,dy)
       lastTouch.current.angle = Math.atan2(dy,dx)*180/Math.PI
+      lastTouch.current.scale = pos.scale
+      lastTouch.current.rot = pos.rotation
+      setDragging(false)
     }
   }
   const onTouchMove = (e:any)=>{
@@ -160,34 +153,39 @@ export default function LiveStudio(){
     if(e.touches.length===1 && dragging){
       const tx = e.touches[0].clientX - rect.left
       const ty = e.touches[0].clientY - rect.top
-      const scaleX = 720 / rect.width
-      const scaleY = 1280 / rect.height
-      setPos(p=>({...p, x: tx*scaleX, y: ty*scaleY}))
+      setPos(p=>({...p, x: tx*(720/rect.width), y: ty*(1280/rect.height)}))
     }
     if(e.touches.length===2){
       const dx = e.touches[1].clientX - e.touches[0].clientX
       const dy = e.touches[1].clientY - e.touches[0].clientY
       const dist = Math.hypot(dx,dy)
       const angle = Math.atan2(dy,dx)*180/Math.PI
-      const scale = dist / (lastTouch.current.dist || dist)
-      if(lastTouch.current.dist){
-        setPos(p=>({...p, scale: Math.min(2.5, Math.max(0.5, p.scale*scale)), rotation: p.rotation + (angle-lastTouch.current.angle)}))
+      if(lastTouch.current.dist>0){
+        const scaleFactor = dist / lastTouch.current.dist
+        setPos(p=>({ 
+          ...p, 
+          scale: Math.min(3, Math.max(0.4, lastTouch.current.scale*scaleFactor)), 
+          rotation: lastTouch.current.rot + (angle-lastTouch.current.angle)
+        }))
       }
-      lastTouch.current.dist = dist
-      lastTouch.current.angle = angle
     }
   }
-  const onTouchEnd = ()=> setDragging(false)
+  const onTouchEnd = ()=> { setDragging(false); lastTouch.current.dist=0 }
 
+  // --- FIXED DRAW: Full text no cut ---
   useEffect(()=>{
     let a:any
+    const wrapText = (ctx:any, text:string, maxWidth:number)=>{
+      const words = text.split(' '); let lines=[]; let cur=''
+      for(let w of words){ const test=cur+w+' '; if(ctx.measureText(test).width>maxWidth && cur!==''){ lines.push(cur.trim()); cur=w+' ' } else cur=test }
+      if(cur) lines.push(cur.trim()); return lines
+    }
     const draw = ()=>{
       const c=canvasRef.current, v=videoRef.current
       if(c&&v&&isCam&&v.readyState>=2){
         const ctx=c.getContext('2d')
         if(ctx){
           c.width=720; c.height=1280
-          // Background modes
           if(bgMode==='black'){
             ctx.fillStyle='#000'; ctx.fillRect(0,0,c.width,c.height)
           } else if(bgMode==='image'){
@@ -197,18 +195,23 @@ export default function LiveStudio(){
           } else {
             ctx.drawImage(v,0,0,c.width,c.height)
           }
-          // Draw movable text at pos
           ctx.save()
           ctx.translate(pos.x, pos.y)
           ctx.rotate(pos.rotation*Math.PI/180)
           ctx.scale(pos.scale, pos.scale)
-          ctx.fillStyle='rgba(0,0,0,0.85)'; 
-          const words=verse.match(/.{1,34}(\s|$)/g)||[verse]
-          const lineH = 36
-          const h = words.slice(0,4).length*lineH + 30
-          ctx.fillRect(-c.width/2, -h/2, c.width, h)
-          ctx.fillStyle='#fff'; ctx.font='bold 28px sans-serif'; ctx.textAlign='center'
-          words.slice(0,4).forEach((l,i)=>ctx.fillText(l.trim(),0, -h/2+45+i*lineH))
+          ctx.font='bold 26px sans-serif'
+          const maxW = 640
+          const lines = wrapText(ctx, verse, maxW)
+          const lineH = 32
+          const pad = 18
+          const boxW = maxW + pad*2
+          const boxH = lines.length*lineH + pad*2
+          ctx.fillStyle='rgba(0,0,0,0.85)'
+          ctx.fillRect(-boxW/2, -boxH/2, boxW, boxH)
+          ctx.fillStyle='#fff'
+          ctx.textAlign='center'
+          ctx.textBaseline='middle'
+          lines.forEach((l,i)=> ctx.fillText(l, 0, -boxH/2+pad+lineH/2 + i*lineH))
           ctx.restore()
           if(isLive){ ctx.fillStyle='#ef4444'; ctx.beginPath(); ctx.arc(40,40,12,0,Math.PI*2); ctx.fill() }
         }
@@ -231,7 +234,6 @@ export default function LiveStudio(){
         <div><div style={{fontSize:26, fontWeight:900}}>Tag<span style={{color:'#7c3aed'}}>Live</span></div><div style={{fontSize:10, letterSpacing:2, fontWeight:800, color:'#666'}}>TAG YOUR LIVE</div></div>
       </div>
 
-      {/* BG SELECTOR NEW */}
       <div style={{display:'flex', gap:6, marginTop:12}}>
         <button onClick={()=>setBgMode('face')} style={{flex:1, padding:8, borderRadius:20, border:'none', background:bgMode==='face'?'#111':'#eee', color:bgMode==='face'?'#fff':'#000', fontWeight:800, fontSize:12}}>👤 Face</button>
         <button onClick={()=>setBgMode('black')} style={{flex:1, padding:8, borderRadius:20, border:'none', background:bgMode==='black'?'#111':'#eee', color:bgMode==='black'?'#fff':'#000', fontWeight:800, fontSize:12}}>⬛ Black</button>
@@ -256,7 +258,6 @@ export default function LiveStudio(){
            <button onClick={stopCamera} style={{flex:1, background:'#444', color:'#fff', padding:14, borderRadius:12, fontWeight:800, border:'none'}}>Stop</button></>}
       </div>
 
-      {/* NEW BIBLE FEATURES */}
       <div style={{display:'flex', gap:6, marginTop:10}}>
         <button onClick={openBibleApp} style={{flex:1, background:'#2563eb', color:'#fff', padding:10, borderRadius:10, fontWeight:800, border:'none', fontSize:12}}>📖 Open Bible App</button>
         <button onClick={pasteClipboard} style={{flex:1, background:'#059669', color:'#fff', padding:10, borderRadius:10, fontWeight:800, border:'none', fontSize:12}}>📋 Paste Verse</button>
