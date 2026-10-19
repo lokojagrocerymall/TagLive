@@ -22,14 +22,16 @@ export default function LiveStudio(){
   const [bgImage, setBgImage] = useState<string|null>(null)
   const [ytKey, setYtKey] = useState('')
   const [ytLive, setYtLive] = useState(false)
-  const [textColor, setTextColor] = useState('#ffffff')
+  const [textColor, setTextColor] = useState('#00ff00')
   const [boxColor, setBoxColor] = useState('#000000')
-  const [boxOpacity, setBoxOpacity] = useState(0.88)
+  const [boxOpacity, setBoxOpacity] = useState(1)
   const [logoImage, setLogoImage] = useState<string|null>(null)
-  const [logoPos, setLogoPos] = useState({ x: 360, y: 200, scale: 0.7 })
+  const [logoPos, setLogoPos] = useState({ x: 360, y: 300, scale: 0.7, rotation: 0 })
   const [isRecording, setIsRecording] = useState(false)
   const [recordedUrl, setRecordedUrl] = useState<string|null>(null)
-  const lastTouch = useRef({ dist: 0, angle: 0, x:0, y:0, scale:1, rot:0 })
+  const [selected, setSelected] = useState<'text'|'logo'>('text')
+  const [showText, setShowText] = useState(true)
+  const lastTouch = useRef({ dist: 0, angle: 0, x:0, y:0, scale:1, rot:0, selScale:1, selRot:0 })
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream|null>(null)
@@ -69,17 +71,12 @@ export default function LiveStudio(){
   }
   const stopCamera = ()=>{ if(isRecording) stopRecording(); streamRef.current?.getTracks().forEach(t=>t.stop()); if(videoRef.current) videoRef.current.srcObject=null; setIsCam(false); setIsLive(false); setTorch(false); setYtLive(false) }
   const toggleCamera = async()=>{ await startCamera(facing==='user'?'environment':'user') }
-  const toggleTorch = async()=>{
-    try{ const track:any = trackRef.current; if(!track?.getCapabilities?.()?.torch) return alert('Torch not supported'); await track.applyConstraints({advanced:[{torch:!torch}] as any}); setTorch(!torch) }catch(e:any){ alert(e.message) }
-  }
+  const toggleTorch = async()=>{ try{ const track:any = trackRef.current; if(!track?.getCapabilities?.()?.torch) return alert('Torch not supported'); await track.applyConstraints({advanced:[{torch:!torch}] as any}); setTorch(!torch) }catch(e:any){ alert(e.message) } }
   const loginFacebook = ()=>{
     if(!window.FB){ alert('Wait 3 sec...'); return }
     window.FB.login((resp:any)=>{ if(resp.authResponse){ window.FB.api('/me?fields=name,picture', (u:any)=>{ setFbUser(u); loadPages(resp.authResponse.accessToken) }) } },{scope:'public_profile,pages_show_list,pages_read_engagement,business_management'})
   }
-  const loadPages = (tok?:string)=>{
-    const t = tok || window.FB?.getAuthResponse()?.accessToken; if(!t) return alert('Login first')
-    window.FB.api('/me/accounts', {access_token:t}, (res:any)=>{ if(res.data?.length){ setPages(res.data); alert(`Found ${res.data.length} pages`) } else alert('No pages') })
-  }
+  const loadPages = (tok?:string)=>{ const t = tok || window.FB?.getAuthResponse()?.accessToken; if(!t) return alert('Login first'); window.FB.api('/me/accounts', {access_token:t}, (res:any)=>{ if(res.data?.length){ setPages(res.data); alert(`Found ${res.data.length} pages`) } else alert('No pages') }) }
   const createFbLiveAuto = async (page:any)=>{
     setSelectedPage(page)
     try{
@@ -93,8 +90,7 @@ export default function LiveStudio(){
   const pickMedia = ()=> fileInputRef.current?.click()
   const pickLogo = ()=> logoInputRef.current?.click()
   const onFilePick = (e:any)=>{ const f = e.target.files?.[0]; if(!f) return; const url = URL.createObjectURL(f); setBgImage(url); setBgMode('image'); const img = new Image(); img.src=url; img.onload=()=>{ bgImageRef.current=img } }
-  const onLogoPick = (e:any)=>{ const f = e.target.files?.[0]; if(!f) return; const url = URL.createObjectURL(f); setLogoImage(url); const img = new Image(); img.src=url; img.onload=()=>{ logoImageRef.current=img } }
-
+  const onLogoPick = (e:any)=>{ const f = e.target.files?.[0]; if(!f) return; const url = URL.createObjectURL(f); setLogoImage(url); const img = new Image(); img.src=url; img.onload=()=>{ logoImageRef.current=img }; setSelected('logo') }
   const startRecording = ()=>{
     const canvas = canvasRef.current; if(!canvas) return alert('Start camera first')
     const canvasStream = (canvas as any).captureStream(30) as MediaStream
@@ -103,28 +99,38 @@ export default function LiveStudio(){
     chunksRef.current = []
     const rec = new MediaRecorder(canvasStream, { mimeType: 'video/webm;codecs=vp9' })
     rec.ondataavailable = (e)=>{ if(e.data.size>0) chunksRef.current.push(e.data) }
-    rec.onstop = ()=>{
-      const blob = new Blob(chunksRef.current, { type: 'video/webm' })
-      const url = URL.createObjectURL(blob); setRecordedUrl(url)
-    }
+    rec.onstop = ()=>{ const blob = new Blob(chunksRef.current, { type: 'video/webm' }); const url = URL.createObjectURL(blob); setRecordedUrl(url) }
     rec.start(100); recorderRef.current = rec; setIsRecording(true)
   }
   const stopRecording = ()=>{ recorderRef.current?.stop(); setIsRecording(false) }
 
   const onTouchStart = (e:any)=>{
+    const rect = canvasRef.current?.getBoundingClientRect(); if(!rect) return
+    const tx = (e.touches[0].clientX - rect.left) * (720/rect.width)
+    const ty = (e.touches[0].clientY - rect.top) * (1280/rect.height)
+    // Decide selection by nearest
+    const distText = Math.hypot(tx - pos.x, ty - pos.y)
+    const distLogo = Math.hypot(tx - logoPos.x, ty - logoPos.y)
+    if(logoImage && distLogo < 180 && distLogo < distText){
+      setSelected('logo')
+      lastTouch.current.selScale = logoPos.scale
+      lastTouch.current.selRot = logoPos.rotation
+    } else {
+      setSelected('text')
+      lastTouch.current.selScale = pos.scale
+      lastTouch.current.selRot = pos.rotation
+    }
     if(e.touches.length===1){
       setDragging(true)
       lastTouch.current.x = e.touches[0].clientX
       lastTouch.current.y = e.touches[0].clientY
-      lastTouch.current.scale = pos.scale
-      lastTouch.current.rot = pos.rotation
     } else if(e.touches.length===2){
       const dx = e.touches[1].clientX - e.touches[0].clientX
       const dy = e.touches[1].clientY - e.touches[0].clientY
       lastTouch.current.dist = Math.hypot(dx,dy)
       lastTouch.current.angle = Math.atan2(dy,dx)*180/Math.PI
-      lastTouch.current.scale = pos.scale
-      lastTouch.current.rot = pos.rotation
+      lastTouch.current.selScale = selected==='logo'? logoPos.scale : pos.scale
+      lastTouch.current.selRot = selected==='logo'? logoPos.rotation : pos.rotation
       setDragging(false)
     }
   }
@@ -133,7 +139,10 @@ export default function LiveStudio(){
     if(e.touches.length===1 && dragging){
       const tx = e.touches[0].clientX - rect.left
       const ty = e.touches[0].clientY - rect.top
-      setPos(p=>({...p, x: tx*(720/rect.width), y: ty*(1280/rect.height)}))
+      const nx = tx*(720/rect.width)
+      const ny = ty*(1280/rect.height)
+      if(selected==='logo') setLogoPos(p=>({...p, x:nx, y:ny}))
+      else setPos(p=>({...p, x:nx, y:ny}))
     }
     if(e.touches.length===2){
       const dx = e.touches[1].clientX - e.touches[0].clientX
@@ -142,7 +151,11 @@ export default function LiveStudio(){
       const angle = Math.atan2(dy,dx)*180/Math.PI
       if(lastTouch.current.dist>0){
         const f = dist / lastTouch.current.dist
-        setPos(p=>({ ...p, scale: Math.min(3, Math.max(0.4, lastTouch.current.scale*f)), rotation: lastTouch.current.rot + (angle-lastTouch.current.angle) }))
+        if(selected==='logo'){
+          setLogoPos(p=>({ ...p, scale: Math.min(3, Math.max(0.2, lastTouch.current.selScale*f)), rotation: lastTouch.current.selRot + (angle-lastTouch.current.angle) }))
+        } else {
+          setPos(p=>({ ...p, scale: Math.min(3, Math.max(0.4, lastTouch.current.selScale*f)), rotation: lastTouch.current.selRot + (angle-lastTouch.current.angle) }))
+        }
       }
     }
   }
@@ -162,75 +175,72 @@ export default function LiveStudio(){
         if(ctx){
           c.width=720; c.height=1280
           if(bgMode==='black'){ ctx.fillStyle='#000'; ctx.fillRect(0,0,c.width,c.height) }
-          else if(bgMode==='image'){
-            if(bgImageRef.current) ctx.drawImage(bgImageRef.current,0,0,c.width,c.height)
-            else { const g=ctx.createLinearGradient(0,0,c.width,c.height); g.addColorStop(0,'#1e3a8a'); g.addColorStop(1,'#581c87'); ctx.fillStyle=g; ctx.fillRect(0,0,c.width,c.height) }
-          } else ctx.drawImage(v,0,0,c.width,c.height)
+          else if(bgMode==='image'){ if(bgImageRef.current) ctx.drawImage(bgImageRef.current,0,0,c.width,c.height); else { const g=ctx.createLinearGradient(0,0,c.width,c.height); g.addColorStop(0,'#1e3a8a'); g.addColorStop(1,'#581c87'); ctx.fillStyle=g; ctx.fillRect(0,0,c.width,c.height) } }
+          else ctx.drawImage(v,0,0,c.width,c.height)
 
-          // Logo
+          // LOGO DRAW
           if(logoImageRef.current){
             ctx.save()
             ctx.translate(logoPos.x, logoPos.y)
+            ctx.rotate(logoPos.rotation*Math.PI/180)
             ctx.scale(logoPos.scale, logoPos.scale)
             const iw = logoImageRef.current.width, ih = logoImageRef.current.height
-            const maxLogoW = 160
-            const scale = Math.min(1, maxLogoW/iw)
-            ctx.drawImage(logoImageRef.current, -iw*scale/2, -ih*scale/2, iw*scale, ih*scale)
+            const maxLogoW = 180
+            const sc = Math.min(1, maxLogoW/iw)
+            ctx.drawImage(logoImageRef.current, -iw*sc/2, -ih*sc/2, iw*sc, ih*sc)
+            if(selected==='logo'){
+              ctx.strokeStyle='#00ff00'; ctx.lineWidth=4; ctx.setLineDash([10,10])
+              ctx.strokeRect(-iw*sc/2-6, -ih*sc/2-6, iw*sc+12, ih*sc+12)
+              ctx.setLineDash([])
+            }
             ctx.restore()
           }
 
-          ctx.save(); ctx.translate(pos.x, pos.y); ctx.rotate(pos.rotation*Math.PI/180); ctx.scale(pos.scale, pos.scale)
-          ctx.font=`bold ${fontSize}px sans-serif`
-          const maxW = 560
-          const pad = 24
-          const boxW = maxW + pad*2
-          const paragraphs = verse.split('\n')
-          let allLines:{text:string, isLastInPara:boolean, paraIdx:number}[] = []
-          paragraphs.forEach((para,pIdx)=>{
-            if(!para.trim()){ allLines.push({text:'', isLastInPara:true, paraIdx:pIdx}); return }
-            const wrapped = wrapText(ctx, para.trim(), maxW)
-            wrapped.forEach((l,i)=> allLines.push({text:l, isLastInPara:i===wrapped.length-1, paraIdx:pIdx}))
-          })
-          const realCount = allLines.filter(l=>l.text!=='').length
-          const lineH = fontSize * 1.38
-          const boxH = realCount*lineH + (paragraphs.length-1)*10 + pad*2
-
-          // Box color with opacity
-          const hexToRgba = (hex:string, op:number)=>{ const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(1,5).slice(2,4),16), b=parseInt(hex.slice(5,7),16); return `rgba(${r},${g},${b},${op})` }
-          if(bgMode==='face'){ ctx.fillStyle=hexToRgba(boxColor, boxOpacity); ctx.fillRect(-boxW/2, -boxH/2, boxW, boxH) }
-          else if(bgMode==='image'){ ctx.shadowColor='rgba(0,0,0,0.9)'; ctx.shadowBlur=10; ctx.shadowOffsetX=2; ctx.shadowOffsetY=3 }
-
-          ctx.fillStyle=textColor
-          let y = -boxH/2 + pad + lineH/2
-          allLines.forEach((ln)=>{
-            if(!ln.text){ y+=10; return }
-            if(paragraphs.length>1 && ln.paraIdx>0){
-              ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(ln.text, 0, y)
-            } else {
-              if(align==='justify' && !ln.isLastInPara){
-                const words = ln.text.split(' ')
-                if(words.length===1){ ctx.textAlign='center'; ctx.fillText(ln.text, 0, y) }
-                else {
-                  ctx.textAlign='left'; ctx.textBaseline='middle'
-                  const totalWordsWidth = words.reduce((s,w)=>s+ctx.measureText(w).width,0)
-                  const gap = (maxW - totalWordsWidth) / (words.length-1)
-                  let x = -maxW/2
-                  words.forEach((w)=>{
-                    ctx.fillText(w, x, y)
-                    x += ctx.measureText(w).width + gap
-                  })
-                }
-              } else { ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(ln.text, 0, y) }
+          // TEXT DRAW if showText
+          if(showText){
+            ctx.save(); ctx.translate(pos.x, pos.y); ctx.rotate(pos.rotation*Math.PI/180); ctx.scale(pos.scale, pos.scale)
+            ctx.font=`bold ${fontSize}px sans-serif`
+            const maxW = 560
+            const pad = 24
+            const boxW = maxW + pad*2
+            const paragraphs = verse.split('\n')
+            let allLines:{text:string, isLastInPara:boolean, paraIdx:number}[] = []
+            paragraphs.forEach((para,pIdx)=>{
+              if(!para.trim()){ allLines.push({text:'', isLastInPara:true, paraIdx:pIdx}); return }
+              const wrapped = wrapText(ctx, para.trim(), maxW)
+              wrapped.forEach((l,i)=> allLines.push({text:l, isLastInPara:i===wrapped.length-1, paraIdx:pIdx}))
+            })
+            const realCount = allLines.filter(l=>l.text!=='').length
+            const lineH = fontSize * 1.38
+            const boxH = realCount*lineH + (paragraphs.length-1)*10 + pad*2
+            const hexToRgba = (hex:string, op:number)=>{ const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16); return `rgba(${r},${g},${b},${op})` }
+            if(bgMode==='face'){ ctx.fillStyle=hexToRgba(boxColor, boxOpacity); ctx.fillRect(-boxW/2, -boxH/2, boxW, boxH) }
+            else if(bgMode==='image'){ ctx.shadowColor='rgba(0,0,0,0.9)'; ctx.shadowBlur=10; ctx.shadowOffsetX=2; ctx.shadowOffsetY=3 }
+            ctx.fillStyle=textColor
+            let y = -boxH/2 + pad + lineH/2
+            allLines.forEach((ln)=>{
+              if(!ln.text){ y+=10; return }
+              if(paragraphs.length>1 && ln.paraIdx>0){ ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(ln.text, 0, y) }
+              else {
+                if(align==='justify' && !ln.isLastInPara){
+                  const words = ln.text.split(' ')
+                  if(words.length===1){ ctx.textAlign='center'; ctx.fillText(ln.text, 0, y) }
+                  else { ctx.textAlign='left'; ctx.textBaseline='middle'; const totalWordsWidth = words.reduce((s,w)=>s+ctx.measureText(w).width,0); const gap = (maxW - totalWordsWidth) / (words.length-1); let x = -maxW/2; words.forEach((w)=>{ ctx.fillText(w, x, y); x += ctx.measureText(w).width + gap }) }
+                } else { ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(ln.text, 0, y) }
+              }
+              y+= lineH
+            })
+            if(selected==='text'){
+              ctx.strokeStyle='#7c3aed'; ctx.lineWidth=3; ctx.setLineDash([12,8]); ctx.strokeRect(-boxW/2-4, -boxH/2-4, boxW+8, boxH+8); ctx.setLineDash([])
             }
-            y+= lineH
-          })
-          ctx.restore()
+            ctx.restore()
+          }
           if(isLive || ytLive || isRecording){ ctx.fillStyle=isRecording?'#a21caf':'#ef4444'; ctx.beginPath(); ctx.arc(40,40,12,0,Math.PI*2); ctx.fill() }
         }
       }
       a=requestAnimationFrame(draw)
     }; draw(); return()=>cancelAnimationFrame(a)
-  },[isCam,verse,isLive,pos,bgMode,fontSize,align,bgImage,ytLive,textColor,boxColor,boxOpacity,logoImage,logoPos,isRecording])
+  },[isCam,verse,isLive,pos,bgMode,fontSize,align,bgImage,ytLive,textColor,boxColor,boxOpacity,logoImage,logoPos,isRecording,selected,showText])
 
   return (
     <div style={{padding:16, maxWidth:480, margin:'0 auto'}}>
@@ -251,7 +261,7 @@ export default function LiveStudio(){
         <button onClick={()=>setBgMode('image')} style={{flex:1, padding:8, borderRadius:20, border:'none', background:bgMode==='image'?'#111':'#eee', color:bgMode==='image'?'#fff':'#000', fontWeight:800, fontSize:12}}>🖼️ Image</button>
       </div>
       <div style={{display:'flex', alignItems:'center', gap:6, marginTop:10, flexWrap:'wrap'}}>
-        <div style={{flex:1, minWidth:160, display:'flex', alignItems:'center', gap:6, background:'#f3f0ff', padding:'6px 10px', borderRadius:10}}>
+        <div style={{flex:1, minWidth:140, display:'flex', alignItems:'center', gap:6, background:'#f3f0ff', padding:'6px 10px', borderRadius:10}}>
           <span style={{fontSize:10, fontWeight:800}}>A-</span>
           <input type="range" min={20} max={60} value={fontSize} onChange={e=>setFontSize(parseInt(e.target.value))} style={{flex:1}} />
           <span style={{fontSize:10, fontWeight:800}}>A+</span>
@@ -261,16 +271,19 @@ export default function LiveStudio(){
         <button onClick={pickMedia} style={{padding:'8px 10px', borderRadius:10, border:'none', background:'#7c3aed', color:'#fff', fontWeight:800, fontSize:10}}>🖼️ Media</button>
         <input ref={fileInputRef} type="file" accept="image/*" onChange={onFilePick} style={{display:'none'}} />
       </div>
-
-      <div style={{display:'flex', gap:6, marginTop:8, alignItems:'center', background:'#fff', border:'1px solid #eee', padding:8, borderRadius:10}}>
+      <div style={{display:'flex', gap:6, marginTop:8, alignItems:'center', background:'#fff', border:'1px solid #eee', padding:8, borderRadius:10, flexWrap:'wrap'}}>
         <div style={{display:'flex', alignItems:'center', gap:4}}><span style={{fontSize:10, fontWeight:800}}>Text</span><input type="color" value={textColor} onChange={e=>setTextColor(e.target.value)} style={{width:28, height:28, border:'none', borderRadius:6}} /></div>
         <div style={{display:'flex', alignItems:'center', gap:4}}><span style={{fontSize:10, fontWeight:800}}>Box</span><input type="color" value={boxColor} onChange={e=>setBoxColor(e.target.value)} style={{width:28, height:28, border:'none', borderRadius:6}} /></div>
         <div style={{display:'flex', alignItems:'center', gap:4, flex:1}}><span style={{fontSize:10, fontWeight:800}}>Opac</span><input type="range" min={0} max={1} step={0.05} value={boxOpacity} onChange={e=>setBoxOpacity(parseFloat(e.target.value))} style={{flex:1}} /></div>
         <button onClick={pickLogo} style={{padding:'6px 10px', borderRadius:8, border:'none', background:logoImage?'#16a34a':'#111', color:'#fff', fontWeight:800, fontSize:10}}>{logoImage?'✓ Logo':'➕ Logo'}</button>
         <input ref={logoInputRef} type="file" accept="image/*" onChange={onLogoPick} style={{display:'none'}} />
+        <button onClick={()=>setShowText(!showText)} style={{padding:'6px 10px', borderRadius:8, border:'none', background:showText?'#111':'#ddd', color:showText?'#fff':'#000', fontWeight:800, fontSize:10}}>{showText?'👁️ Text':'🚫 Text'}</button>
       </div>
-
-      <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{marginTop:10, background:'#000', borderRadius:18, overflow:'hidden', position:'relative', aspectRatio:'9/16', touchAction:'none'}}>
+      <div style={{display:'flex', gap:6, marginTop:6, fontSize:10, fontWeight:800}}>
+        <div style={{flex:1, padding:'4px 8px', borderRadius:20, background:selected==='text'?'#7c3aed':'#eee', color:selected==='text'?'#fff':'#000', textAlign:'center'}}>✏️ {selected==='text'?'TEXT SELECTED (drag/pinch)':'Tap Text'}</div>
+        <div style={{flex:1, padding:'4px 8px', borderRadius:20, background:selected==='logo'?'#16a34a':'#eee', color:selected==='logo'?'#fff':'#000', textAlign:'center'}}>🖼️ {selected==='logo'?'LOGO SELECTED':'Tap Logo'}</div>
+      </div>
+      <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onMouseDown={onTouchStart as any} style={{marginTop:10, background:'#000', borderRadius:18, overflow:'hidden', position:'relative', aspectRatio:'9/16', touchAction:'none'}}>
         <video ref={videoRef} muted playsInline autoPlay style={{width:'100%', height:'100%', objectFit:'cover', display:isCam&&bgMode==='face'?'block':'none'}}/>
         {!isCam && <div style={{color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', height:420}}>Camera off</div>}
         <canvas ref={canvasRef} style={{position:'absolute', top:0, left:0, width:'100%', height:'100%'}}/>
@@ -281,31 +294,26 @@ export default function LiveStudio(){
         {isLive && <div style={{position:'absolute', top:12, left:12, background:'#ef4444', color:'#fff', padding:'4px 10px', borderRadius:20, fontSize:12, fontWeight:900}}>● FB LIVE</div>}
         {ytLive && <div style={{position:'absolute', top:42, left:12, background:'#ff0000', color:'#fff', padding:'4px 10px', borderRadius:20, fontSize:12, fontWeight:900}}>● YT LIVE</div>}
         {isRecording && <div style={{position:'absolute', top:72, left:12, background:'#a21caf', color:'#fff', padding:'4px 10px', borderRadius:20, fontSize:12, fontWeight:900}}>● REC</div>}
-        <div style={{position:'absolute', bottom:8, left:0, right:0, textAlign:'center', color:'#fff', fontSize:10, opacity:0.7}}>👆 Drag • Pinch • Rotate • {align}</div>
+        <div style={{position:'absolute', bottom:8, left:0, right:0, textAlign:'center', color:'#fff', fontSize:10, opacity:0.7}}>Tap Logo=Select Logo | Tap Text=Select Text | {showText?'Text ON':'Text OFF'}</div>
       </div>
-
       <div style={{display:'flex', gap:8, marginTop:12}}>
         {!isCam? <button onClick={()=>startCamera()} style={{flex:1, background:'#111', color:'#fff', padding:14, borderRadius:12, fontWeight:800, border:'none'}}>📷 Start Camera</button>
         : <><button onClick={toggleCamera} style={{flex:1, background:'#7c3aed', color:'#fff', padding:14, borderRadius:12, fontWeight:800, border:'none'}}>🔄 Switch Camera</button>
            <button onClick={stopCamera} style={{flex:1, background:'#444', color:'#fff', padding:14, borderRadius:12, fontWeight:800, border:'none'}}>Stop</button></>}
       </div>
-
       <div style={{display:'flex', gap:6, marginTop:10}}>
         {!isRecording? <button onClick={startRecording} disabled={!isCam} style={{flex:1, background:isCam?'#a21caf':'#ccc', color:'#fff', padding:12, borderRadius:10, fontWeight:800, border:'none', fontSize:12}}>● Record Video</button>
         : <button onClick={stopRecording} style={{flex:1, background:'#111', color:'#fff', padding:12, borderRadius:10, fontWeight:800, border:'none', fontSize:12}}>■ Stop Recording</button>}
         {recordedUrl && <a href={recordedUrl} download={`taglive-${Date.now()}.webm`} style={{flex:1, background:'#16a34a', color:'#fff', padding:12, borderRadius:10, fontWeight:800, textAlign:'center', textDecoration:'none', fontSize:12}}>⬇ Download</a>}
       </div>
       {recordedUrl && <video src={recordedUrl} controls style={{width:'100%', marginTop:8, borderRadius:12}} />}
-
       <div style={{display:'flex', gap:6, marginTop:10}}>
         <button onClick={openBibleApp} style={{flex:1, background:'#2563eb', color:'#fff', padding:10, borderRadius:10, fontWeight:800, border:'none', fontSize:12}}>📖 Open Bible App</button>
         <button onClick={pasteClipboard} style={{flex:1, background:'#059669', color:'#fff', padding:10, borderRadius:10, fontWeight:800, border:'none', fontSize:12}}>📋 Paste Verse</button>
         <button onClick={saveVerse} style={{flex:1, background:'#f59e0b', color:'#000', padding:10, borderRadius:10, fontWeight:800, border:'none', fontSize:12}}>💾 Save</button>
       </div>
-
-      <textarea value={verse} onChange={e=>setVerse(e.target.value)} style={{width:'100%', height:90, marginTop:10, padding:12, borderRadius:12, border:'1px solid #ddd', color:textColor}} placeholder={"Ministering:\nAPOSTLE JAMES AGBEM KAJINYANA"} />
+      <textarea value={verse} onChange={e=>setVerse(e.target.value)} style={{width:'100%', height:90, marginTop:10, padding:12, borderRadius:12, border:'1px solid #ddd'}} placeholder={"Ministering:\nAPOSTLE JAMES AGBEM KAJINYANA"} />
       {saved.length>0 && <div style={{marginTop:8, border:'1px solid #eee', borderRadius:10, padding:8}}><div style={{fontSize:11, fontWeight:800, marginBottom:6}}>📌 Saved (Tap):</div><div style={{display:'flex', flexWrap:'wrap', gap:6}}>{saved.map((s,i)=><span key={i} onClick={()=>setVerse(s)} style={{fontSize:11, background:'#f3f0ff', border:'1px solid #ddd', padding:'6px 8px', borderRadius:20, cursor:'pointer'}}>{s.substring(0,30)}...</span>)}</div></div>}
-
       <div style={{marginTop:14, border:'2px solid #111', borderRadius:14, padding:12}}>
         <b>Connect Facebook</b>
         <div style={{display:'flex', gap:8, marginTop:8}}>
@@ -324,7 +332,7 @@ export default function LiveStudio(){
           <button onClick={()=>{setYtLive(false); if(!fbStreamUrl) setIsLive(false)}} style={{flex:1, border:'1px solid #000', padding:12, borderRadius:8, fontWeight:800, background:'#fff'}}>Stop YT</button>
         </div>
       </div>
-      <p style={{textAlign:'center', fontSize:11, color:'#16a34a', marginTop:10, fontWeight:700}}>✅ Color + Logo + Recording + Justify Fixed</p>
+      <p style={{textAlign:'center', fontSize:11, color:'#16a34a', marginTop:10, fontWeight:700}}>✅ Tap Select + Moveable Logo + Hide Text</p>
     </div>
   )
 }
