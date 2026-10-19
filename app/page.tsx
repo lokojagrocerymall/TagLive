@@ -179,17 +179,9 @@ export default function LiveStudio(){
   useEffect(()=>{
     let a:any
     const wrapText = (ctx:any, text:string, maxWidth:number)=>{
-      const words = text.split(' '); let lines=[]; let cur=''
+      const words=text.split(' '); let lines=[]; let cur=''
       for(let w of words){ const test=cur+w+' '; if(ctx.measureText(test).width>maxWidth && cur!==''){ lines.push(cur.trim()); cur=w+' ' } else cur=test }
       if(cur) lines.push(cur.trim()); return lines
-    }
-    const drawJustifyLine = (ctx:any, line:string, x:number, y:number, maxW:number, isLast:boolean)=>{
-      if(isLast || align==='center'){ ctx.fillText(line, x, y); return }
-      const words = line.split(' '); if(words.length<=1){ ctx.fillText(line, x, y); return }
-      const wordsWidth = words.reduce((s,w)=>s+ctx.measureText(w).width,0)
-      const spaceWidth = (maxW - wordsWidth) / (words.length-1)
-      let curX = x - maxW/2
-      words.forEach((w,i)=>{ ctx.fillText(w, curX, y); curX+= ctx.measureText(w).width + (i<words.length-1?spaceWidth:0) })
     }
     const draw = ()=>{
       const c=canvasRef.current, v=videoRef.current
@@ -197,55 +189,62 @@ export default function LiveStudio(){
         const ctx=c.getContext('2d')
         if(ctx){
           c.width=720; c.height=1280
-          if(bgMode==='black'){
-            ctx.fillStyle='#000'; ctx.fillRect(0,0,c.width,c.height)
-          } else if(bgMode==='image'){
-            if(bgImageRef.current){ ctx.drawImage(bgImageRef.current,0,0,c.width,c.height) }
-            else { const grad = ctx.createLinearGradient(0,0,c.width,c.height); grad.addColorStop(0,'#1e3a8a'); grad.addColorStop(1,'#581c87'); ctx.fillStyle=grad; ctx.fillRect(0,0,c.width,c.height) }
-          } else {
-            ctx.drawImage(v,0,0,c.width,c.height)
-          }
-          ctx.save()
-          ctx.translate(pos.x, pos.y)
-          ctx.rotate(pos.rotation*Math.PI/180)
-          ctx.scale(pos.scale, pos.scale)
+          if(bgMode==='black'){ ctx.fillStyle='#000'; ctx.fillRect(0,0,c.width,c.height) }
+          else if(bgMode==='image'){
+            if(bgImageRef.current) ctx.drawImage(bgImageRef.current,0,0,c.width,c.height)
+            else { const g=ctx.createLinearGradient(0,0,c.width,c.height); g.addColorStop(0,'#1e3a8a'); g.addColorStop(1,'#581c87'); ctx.fillStyle=g; ctx.fillRect(0,0,c.width,c.height) }
+          } else ctx.drawImage(v,0,0,c.width,c.height)
+
+          ctx.save(); ctx.translate(pos.x, pos.y); ctx.rotate(pos.rotation*Math.PI/180); ctx.scale(pos.scale, pos.scale)
           ctx.font=`bold ${fontSize}px sans-serif`
-          ctx.textAlign='center'
-          ctx.textBaseline='middle'
-          const maxW = 620
+          const maxW = 560
+          const pad = 24
+          const boxW = maxW + pad*2
           const paragraphs = verse.split('\n')
-          const allLines:{text:string, isParaEnd:boolean, paraIdx:number}[] = []
-          paragraphs.forEach((para, pIdx)=>{
-            if(!para.trim()){ allLines.push({text:'', isParaEnd:true, paraIdx:pIdx}); return }
+          let allLines:{text:string, isLastInPara:boolean, paraIdx:number}[] = []
+          paragraphs.forEach((para,pIdx)=>{
+            if(!para.trim()){ allLines.push({text:'', isLastInPara:true, paraIdx:pIdx}); return }
             const wrapped = wrapText(ctx, para.trim(), maxW)
-            wrapped.forEach((l,i)=> allLines.push({text:l, isParaEnd: i===wrapped.length-1, paraIdx:pIdx}))
+            wrapped.forEach((l,i)=> allLines.push({text:l, isLastInPara:i===wrapped.length-1, paraIdx:pIdx}))
           })
           const realCount = allLines.filter(l=>l.text!=='').length
-          const lineH = fontSize * 1.35
-          const pad = 20
-          const boxW = maxW + pad*2
+          const lineH = fontSize * 1.38
           const boxH = realCount*lineH + (paragraphs.length-1)*10 + pad*2
-          if(bgMode==='face'){ ctx.fillStyle='rgba(0,0,0,0.85)'; ctx.fillRect(-boxW/2, -boxH/2, boxW, boxH) }
+
+          if(bgMode==='face'){ ctx.fillStyle='rgba(0,0,0,0.88)'; ctx.fillRect(-boxW/2, -boxH/2, boxW, boxH) }
           else if(bgMode==='image'){ ctx.shadowColor='rgba(0,0,0,0.9)'; ctx.shadowBlur=10; ctx.shadowOffsetX=2; ctx.shadowOffsetY=3 }
+
           ctx.fillStyle='#fff'
           let y = -boxH/2 + pad + lineH/2
           allLines.forEach((ln)=>{
             if(!ln.text){ y+=10; return }
-            // Paragraph 0 = Ministering: - justify, Paragraph 1+ = name - always centered
             if(paragraphs.length>1 && ln.paraIdx>0){
-              ctx.textAlign='center'; ctx.fillText(ln.text.trim(), 0, y)
+              ctx.textAlign='center'; ctx.textBaseline='middle'
+              ctx.fillText(ln.text, 0, y)
             } else {
-              if(align==='justify' && !ln.isParaEnd){ drawJustifyLine(ctx, ln.text.trim(), 0, y, maxW, false) }
-              else { ctx.textAlign='center'; ctx.fillText(ln.text.trim(), 0, y) }
+              if(align==='justify' && !ln.isLastInPara){
+                const words = ln.text.split(' ')
+                if(words.length===1){
+                  ctx.textAlign='center'; ctx.fillText(ln.text, 0, y)
+                } else {
+                  ctx.textAlign='left'; ctx.textBaseline='middle'
+                  const totalWordsWidth = words.reduce((s,w)=>s+ctx.measureText(w).width,0)
+                  const gap = (maxW - totalWordsWidth) / (words.length-1)
+                  let x = -maxW/2
+                  words.forEach((w,i)=>{
+                    ctx.fillText(w, x, y)
+                    x += ctx.measureText(w).width + gap
+                  })
+                }
+              } else {
+                ctx.textAlign='center'; ctx.textBaseline='middle'
+                ctx.fillText(ln.text, 0, y)
+              }
             }
             y+= lineH
           })
           ctx.restore()
-          if(isLive || ytLive){
-            ctx.fillStyle= isLive ? '#ef4444' : '#ff0000'
-            ctx.beginPath(); ctx.arc(40,40,12,0,Math.PI*2); ctx.fill()
-            if(isLive && ytLive){ ctx.fillStyle='#ff0000'; ctx.beginPath(); ctx.arc(80,40,12,0,Math.PI*2); ctx.fill() }
-          }
+          if(isLive || ytLive){ ctx.fillStyle='#ef4444'; ctx.beginPath(); ctx.arc(40,40,12,0,Math.PI*2); ctx.fill() }
         }
       }
       a=requestAnimationFrame(draw)
@@ -265,13 +264,11 @@ export default function LiveStudio(){
         </div>
         <div><div style={{fontSize:26, fontWeight:900}}>Tag<span style={{color:'#7c3aed'}}>Live</span></div><div style={{fontSize:10, letterSpacing:2, fontWeight:800, color:'#666'}}>TAG YOUR LIVE</div></div>
       </div>
-
       <div style={{display:'flex', gap:6, marginTop:12}}>
         <button onClick={()=>setBgMode('face')} style={{flex:1, padding:8, borderRadius:20, border:'none', background:bgMode==='face'?'#111':'#eee', color:bgMode==='face'?'#fff':'#000', fontWeight:800, fontSize:12}}>👤 Face</button>
         <button onClick={()=>setBgMode('black')} style={{flex:1, padding:8, borderRadius:20, border:'none', background:bgMode==='black'?'#111':'#eee', color:bgMode==='black'?'#fff':'#000', fontWeight:800, fontSize:12}}>⬛ Black</button>
         <button onClick={()=>setBgMode('image')} style={{flex:1, padding:8, borderRadius:20, border:'none', background:bgMode==='image'?'#111':'#eee', color:bgMode==='image'?'#fff':'#000', fontWeight:800, fontSize:12}}>🖼️ Image</button>
       </div>
-
       <div style={{display:'flex', alignItems:'center', gap:6, marginTop:10}}>
         <div style={{flex:1, display:'flex', alignItems:'center', gap:6, background:'#f3f0ff', padding:'6px 10px', borderRadius:10}}>
           <span style={{fontSize:10, fontWeight:800}}>A-</span>
@@ -283,7 +280,6 @@ export default function LiveStudio(){
         <button onClick={pickMedia} style={{padding:'8px 10px', borderRadius:10, border:'none', background:'#7c3aed', color:'#fff', fontWeight:800, fontSize:10}}>🖼️ Media</button>
         <input ref={fileInputRef} type="file" accept="image/*" onChange={onFilePick} style={{display:'none'}} />
       </div>
-
       <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{marginTop:10, background:'#000', borderRadius:18, overflow:'hidden', position:'relative', aspectRatio:'9/16', touchAction:'none'}}>
         <video ref={videoRef} muted playsInline autoPlay style={{width:'100%', height:'100%', objectFit:'cover', display:isCam&&bgMode==='face'?'block':'none'}}/>
         {!isCam && <div style={{color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', height:420}}>Camera off</div>}
@@ -296,50 +292,37 @@ export default function LiveStudio(){
         {ytLive && <div style={{position:'absolute', top:42, left:12, background:'#ff0000', color:'#fff', padding:'4px 10px', borderRadius:20, fontSize:12, fontWeight:900}}>● YT LIVE</div>}
         <div style={{position:'absolute', bottom:8, left:0, right:0, textAlign:'center', color:'#fff', fontSize:10, opacity:0.7}}>👆 Drag • Pinch • Rotate • {align}</div>
       </div>
-
       <div style={{display:'flex', gap:8, marginTop:12}}>
         {!isCam? <button onClick={()=>startCamera()} style={{flex:1, background:'#111', color:'#fff', padding:14, borderRadius:12, fontWeight:800, border:'none'}}>📷 Start Camera</button>
         : <><button onClick={toggleCamera} style={{flex:1, background:'#7c3aed', color:'#fff', padding:14, borderRadius:12, fontWeight:800, border:'none'}}>🔄 Switch Camera</button>
            <button onClick={stopCamera} style={{flex:1, background:'#444', color:'#fff', padding:14, borderRadius:12, fontWeight:800, border:'none'}}>Stop</button></>}
       </div>
-
       <div style={{display:'flex', gap:6, marginTop:10}}>
         <button onClick={openBibleApp} style={{flex:1, background:'#2563eb', color:'#fff', padding:10, borderRadius:10, fontWeight:800, border:'none', fontSize:12}}>📖 Open Bible App</button>
         <button onClick={pasteClipboard} style={{flex:1, background:'#059669', color:'#fff', padding:10, borderRadius:10, fontWeight:800, border:'none', fontSize:12}}>📋 Paste Verse</button>
         <button onClick={saveVerse} style={{flex:1, background:'#f59e0b', color:'#000', padding:10, borderRadius:10, fontWeight:800, border:'none', fontSize:12}}>💾 Save</button>
       </div>
-
-      <textarea value={verse} onChange={e=>setVerse(e.target.value)} style={{width:'100%', height:90, marginTop:10, padding:12, borderRadius:12, border:'1px solid #ddd'}} placeholder={"Ministering:\nAPOSTLE JAMES AGBEM KAJINYANA\n\nPress Enter for centered name"} />
-
-      {saved.length>0 && <div style={{marginTop:8, border:'1px solid #eee', borderRadius:10, padding:8}}>
-        <div style={{fontSize:11, fontWeight:800, marginBottom:6}}>📌 Saved Verses (Tap to use):</div>
-        <div style={{display:'flex', flexWrap:'wrap', gap:6}}>
-          {saved.map((s,i)=><span key={i} onClick={()=>setVerse(s)} style={{fontSize:11, background:'#f3f0ff', border:'1px solid #ddd', padding:'6px 8px', borderRadius:20, cursor:'pointer', maxWidth:'100%', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{s.substring(0,30)}...</span>)}
-        </div>
-      </div>}
-
+      <textarea value={verse} onChange={e=>setVerse(e.target.value)} style={{width:'100%', height:90, marginTop:10, padding:12, borderRadius:12, border:'1px solid #ddd'}} placeholder={"Ministering:\nAPOSTLE JAMES AGBEM KAJINYANA"} />
+      {saved.length>0 && <div style={{marginTop:8, border:'1px solid #eee', borderRadius:10, padding:8}}><div style={{fontSize:11, fontWeight:800, marginBottom:6}}>📌 Saved (Tap):</div><div style={{display:'flex', flexWrap:'wrap', gap:6}}>{saved.map((s,i)=><span key={i} onClick={()=>setVerse(s)} style={{fontSize:11, background:'#f3f0ff', border:'1px solid #ddd', padding:'6px 8px', borderRadius:20, cursor:'pointer'}}>{s.substring(0,30)}...</span>)}</div></div>}
       <div style={{marginTop:14, border:'2px solid #111', borderRadius:14, padding:12}}>
         <b>Connect Facebook</b>
         <div style={{display:'flex', gap:8, marginTop:8}}>
           <button onClick={loginFacebook} style={{flex:1, background:fbUser?'#16a34a':'#1877F2', color:'#fff', padding:12, borderRadius:8, fontWeight:800, border:'none'}}>{fbUser?`✓ ${fbUser.name}`:'Login Facebook'}</button>
           <button onClick={()=>loadPages()} style={{flex:1, border:'1px solid #000', padding:12, borderRadius:8, fontWeight:800, background:'#fff'}}>Load My Pages</button>
         </div>
-        {pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6, padding:10, background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff', color:selectedPage?.id===p.id?'#fff':'#000', borderRadius:8, fontSize:13, fontWeight:700, cursor:'pointer', border:selectedPage?.id===p.id?'2px solid #000':'1px solid #ddd'}}>{p.name} {selectedPage?.id===p.id?'✓ SELECTED':'(Tap to Go Live Auto)'}</div>)}
-        {fbStreamUrl && <div style={{marginTop:10, padding:10, background:'#dcfce7', borderRadius:8, fontSize:11, wordBreak:'break-all'}}><b>✅ Auto Stream Created - No Paste Needed:</b><br/>{fbStreamUrl.substring(0,80)}...<br/>ID: {liveId}</div>}
+        {pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6, padding:10, background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff', color:selectedPage?.id===p.id?'#fff':'#000', borderRadius:8, fontSize:13, fontWeight:700, cursor:'pointer'}}>{p.name} {selectedPage?.id===p.id?'✓':'(Tap)'}</div>)}
+        {fbStreamUrl && <div style={{marginTop:10, padding:10, background:'#dcfce7', borderRadius:8, fontSize:11, wordBreak:'break-all'}}>✅ FB: {fbStreamUrl.substring(0,70)}...</div>}
       </div>
-
       <div style={{marginTop:14, border:'2px solid #ff0000', borderRadius:14, padding:12}}>
         <b>🔴 Connect YouTube Live</b>
         <div style={{fontSize:11, color:'#666', marginTop:4}}>YouTube Studio > Go Live > Stream > Copy Stream Key</div>
         <input value={ytKey} onChange={e=>{setYtKey(e.target.value); localStorage.setItem('taglive_ytkey', e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%', marginTop:8, padding:10, borderRadius:8, border:'1px solid #ddd', fontSize:12}} />
         <div style={{display:'flex', gap:8, marginTop:8}}>
-          <button onClick={()=>{ if(!ytKey) return alert('Paste YouTube key first'); setYtLive(true); setIsLive(true); alert('✅ YouTube LIVE mode ON - Use rtmp://a.rtmp.youtube.com/live2 with your key in OBS. TagLive overlay ready!') }} style={{flex:1, background:ytLive?'#16a34a':'#ff0000', color:'#fff', padding:12, borderRadius:8, fontWeight:800, border:'none'}}>{ytLive?'✓ YouTube LIVE ON':'Go Live YouTube'}</button>
+          <button onClick={()=>{ if(!ytKey) return alert('Paste YouTube key first'); setYtLive(true); setIsLive(true); alert('✅ YouTube LIVE ON') }} style={{flex:1, background:ytLive?'#16a34a':'#ff0000', color:'#fff', padding:12, borderRadius:8, fontWeight:800, border:'none'}}>{ytLive?'✓ YouTube LIVE ON':'Go Live YouTube'}</button>
           <button onClick={()=>{setYtLive(false); if(!fbStreamUrl) setIsLive(false)}} style={{flex:1, border:'1px solid #000', padding:12, borderRadius:8, fontWeight:800, background:'#fff'}}>Stop YT</button>
         </div>
-        {ytLive && <div style={{marginTop:8, padding:8, background:'#fee2e2', borderRadius:8, fontSize:10}}>🔴 RTMP: rtmp://a.rtmp.youtube.com/live2 | Key: {ytKey.substring(0,10)}...</div>}
       </div>
-
-      <p style={{textAlign:'center', fontSize:11, color:'#16a34a', marginTop:10, fontWeight:700}}>✅ Justify + Enter Center + Media Picker + YouTube</p>
+      <p style={{textAlign:'center', fontSize:11, color:'#16a34a', marginTop:10, fontWeight:700}}>✅ FIXED Justify - Stays Inside Box</p>
     </div>
   )
 }
