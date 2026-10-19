@@ -43,7 +43,6 @@ export default function LiveStudio(){
   const [playing, setPlaying] = useState<any>(null)
   const [animTitle, setAnimTitle] = useState('APOSTLE JAMES AGBEM KAJINYANA')
   const [animSub, setAnimSub] = useState('Welcome to Live Service')
-  // TICKER FINAL FEATURE
   const [tickerText, setTickerText] = useState('📢 ANNOUNCEMENT: Sunday Service 9AM | Midweek Service Wednesday 6PM | Invite Someone!')
   const [tickerOn, setTickerOn] = useState(false)
   const [tickerSize, setTickerSize] = useState(26)
@@ -248,11 +247,10 @@ export default function LiveStudio(){
           if(showText){
             ctx.save(); ctx.translate(pos.x, pos.y); ctx.rotate(pos.rotation*Math.PI/180); ctx.scale(pos.scale, pos.scale); ctx.font=`bold ${fontSize}px sans-serif`; const maxW = 560; const pad = 24; const boxW = maxW + pad*2; const paragraphs = verse.split('\n'); let allLines:{text:string, isLastInPara:boolean, paraIdx:number}[] = []; paragraphs.forEach((para,pIdx)=>{ if(!para.trim()){ allLines.push({text:'', isLastInPara:true, paraIdx:pIdx}); return } const wrapped = wrapText(ctx, para.trim(), maxW); wrapped.forEach((l,i)=> allLines.push({text:l, isLastInPara:i===wrapped.length-1, paraIdx:pIdx})) }); const realCount = allLines.filter(l=>l.text!=='').length; const lineH = fontSize * 1.38; const boxH = realCount*lineH + (paragraphs.length-1)*10 + pad*2; const hexToRgba = (hex:string, op:number)=>{ const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16); return `rgba(${r},${g},${b},${op})` }; if(bgMode==='face'){ ctx.fillStyle=hexToRgba(boxColor, boxOpacity); ctx.fillRect(-boxW/2, -boxH/2, boxW, boxH) } else if(bgMode==='image'){ ctx.shadowColor='rgba(0,0,0,0.9)'; ctx.shadowBlur=10; ctx.shadowOffsetX=2; ctx.shadowOffsetY=3 } ctx.fillStyle=textColor; let y = -boxH/2 + pad + lineH/2; allLines.forEach((ln)=>{ if(!ln.text){ y+=10; return } if(paragraphs.length>1 && ln.paraIdx>0){ ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(ln.text, 0, y) } else { if(align==='justify' && !ln.isLastInPara){ const words = ln.text.split(' '); if(words.length===1){ ctx.textAlign='center'; ctx.fillText(ln.text, 0, y) } else { ctx.textAlign='left'; ctx.textBaseline='middle'; const totalWordsWidth = words.reduce((s,w)=>s+ctx.measureText(w).width,0); const gap = (maxW - totalWordsWidth) / (words.length-1); let x = -maxW/2; words.forEach((w)=>{ ctx.fillText(w, x, y); x += ctx.measureText(w).width + gap }) } } else { ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(ln.text, 0, y) } } y+= lineH }); if(selected==='text'){ ctx.strokeStyle='#7c3aed'; ctx.lineWidth=3; ctx.setLineDash([12,8]); ctx.strokeRect(-boxW/2-4, -boxH/2-4, boxW+8, boxH+8); ctx.setLineDash([]) } ctx.restore() }
           if(isLive || ytLive || isRecording){ ctx.fillStyle=isRecording?'#a21caf':'#ef4444'; ctx.beginPath(); ctx.arc(40,40,12,0,Math.PI*2); ctx.fill() }
-          // SCROLLING TICKER - BLACK BG + YELLOW BOLD
           if(tickerOn && tickerText){
             const tickerH = tickerSize + 24
             ctx.fillStyle = '#000000'
-            ctx.fillRect(0, c.height - tickerH - 10, c.width, tickerH)
+            ctx.fillRect(0, c.height - tickerH, c.width, tickerH)
             ctx.fillStyle = '#FFFF00'
             ctx.font = `bold ${tickerSize}px sans-serif`
             ctx.textAlign = 'left'
@@ -260,7 +258,7 @@ export default function LiveStudio(){
             const w = ctx.measureText(tickerText + '   •   ').width
             tickerOffsetRef.current -= tickerSpeed
             if(tickerOffsetRef.current < -w) tickerOffsetRef.current = c.width
-            ctx.fillText(tickerText + '   •   ' + tickerText, tickerOffsetRef.current, c.height - tickerH/2 - 10)
+            ctx.fillText(tickerText + '   •   ' + tickerText, tickerOffsetRef.current, c.height - tickerH/2)
           }
         }
       }
@@ -363,26 +361,26 @@ export default function LiveStudio(){
         )}
       </div>
 
-      {/* TICKER ANNOUNCEMENT STUDIO - NEW */}
-      <div style={{marginTop:12, border:'2px solid #000', borderRadius:16, padding:12, background:'#ffff00'}}>
-        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-          <b style={{fontSize:13, color:'#000'}}>📢 Scrolling Announcement Ticker</b>
-          <button onClick={()=>setTickerOn(!tickerOn)} style={{padding:'6px 14px', borderRadius:20, border:'none', background:tickerOn?'#16a34a':'#111', color:'#fff', fontWeight:900, fontSize:11}}>{tickerOn?'✅ ON - Scrolling':'○ OFF'}</button>
+      {/* FIXED TICKER STUDIO - NOT ROWDY, NO OVERFLOW */}
+      <div style={{marginTop:12, border:'2px solid #111', borderRadius:16, padding:12, background:'#ffffff'}}>
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8}}>
+          <b style={{fontSize:13, color:'#111', flex:1}}>📢 Scrolling Announcement Ticker</b>
+          <button onClick={()=>setTickerOn(!tickerOn)} style={{padding:'8px 14px', borderRadius:20, border:'none', background:tickerOn?'#16a34a':'#111', color:'#fff', fontWeight:900, fontSize:11, flexShrink:0, whiteSpace:'nowrap'}}>{tickerOn?'✅ ON':'○ OFF'}</button>
         </div>
-        <input value={tickerText} onChange={e=>{setTickerText(e.target.value); localStorage.setItem('taglive_ticker_text', e.target.value); tickerOffsetRef.current=720}} placeholder="Type announcement e.g. Sunday Service 9AM..." style={{width:'100%', marginTop:8, padding:10, borderRadius:10, border:'2px solid #000', fontSize:12, fontWeight:700, background:'#000', color:'#FFFF00'}} />
-        <div style={{display:'flex', gap:8, marginTop:8, alignItems:'center'}}>
-          <div style={{flex:1, background:'#fff', borderRadius:10, padding:'6px 10px', display:'flex', alignItems:'center', gap:6}}>
-            <span style={{fontSize:10, fontWeight:900}}>Size:</span>
-            <input type="range" min={16} max={48} value={tickerSize} onChange={e=>{setTickerSize(parseInt(e.target.value)); localStorage.setItem('taglive_ticker_size', e.target.value)}} style={{flex:1}} />
-            <span style={{fontSize:11, fontWeight:900, background:'#000', color:'#FFFF00', padding:'2px 6px', borderRadius:10}}>{tickerSize}</span>
+        <input value={tickerText} onChange={e=>{setTickerText(e.target.value); localStorage.setItem('taglive_ticker_text', e.target.value); tickerOffsetRef.current=720}} placeholder="Type announcement..." style={{width:'100%', marginTop:8, padding:10, borderRadius:10, border:'2px solid #111', fontSize:12, fontWeight:700, background:'#000', color:'#FFFF00', boxSizing:'border-box'}} />
+        
+        <div style={{marginTop:8, display:'flex', flexDirection:'column', gap:8}}>
+          <div style={{background:'#f3f0ff', borderRadius:10, padding:'8px 12px', display:'flex', alignItems:'center', gap:8, minWidth:0}}>
+            <span style={{fontSize:11, fontWeight:900, flexShrink:0}}>Size:</span>
+            <input type="range" min={16} max={48} value={tickerSize} onChange={e=>{setTickerSize(parseInt(e.target.value)); localStorage.setItem('taglive_ticker_size', e.target.value)}} style={{flex:1, minWidth:0}} />
+            <span style={{fontSize:11, fontWeight:900, background:'#111', color:'#FFFF00', padding:'4px 8px', borderRadius:10, flexShrink:0}}>{tickerSize}</span>
           </div>
-          <div style={{flex:1, background:'#fff', borderRadius:10, padding:'6px 10px', display:'flex', alignItems:'center', gap:6}}>
-            <span style={{fontSize:10, fontWeight:900}}>Speed:</span>
-            <input type="range" min={1} max={6} step={0.5} value={tickerSpeed} onChange={e=>setTickerSpeed(parseFloat(e.target.value))} style={{flex:1}} />
-            <span style={{fontSize:11, fontWeight:900, background:'#000', color:'#FFFF00', padding:'2px 6px', borderRadius:10}}>{tickerSpeed}</span>
+          <div style={{background:'#f3f0ff', borderRadius:10, padding:'8px 12px', display:'flex', alignItems:'center', gap:8, minWidth:0}}>
+            <span style={{fontSize:11, fontWeight:900, flexShrink:0}}>Speed:</span>
+            <input type="range" min={1} max={6} step={0.5} value={tickerSpeed} onChange={e=>setTickerSpeed(parseFloat(e.target.value))} style={{flex:1, minWidth:0}} />
+            <span style={{fontSize:11, fontWeight:900, background:'#111', color:'#FFFF00', padding:'4px 8px', borderRadius:10, flexShrink:0}}>{tickerSpeed}</span>
           </div>
         </div>
-        <div style={{marginTop:6, fontSize:10, fontWeight:800, textAlign:'center', color:'#000'}}>⬛ Black background + 🟨 Yellow Bold Text + Adjustable Size/Speed + Saved!</div>
       </div>
 
       <div style={{display:'flex', gap:6, marginTop:12}}>
@@ -424,7 +422,6 @@ export default function LiveStudio(){
         {isLive && <div style={{position:'absolute', top:12, left:12, background:'#ef4444', color:'#fff', padding:'4px 10px', borderRadius:20, fontSize:12, fontWeight:900}}>● FB LIVE</div>}
         {ytLive && <div style={{position:'absolute', top:42, left:12, background:'#ff0000', color:'#fff', padding:'4px 10px', borderRadius:20, fontSize:12, fontWeight:900}}>● YT LIVE</div>}
         {isRecording && <div style={{position:'absolute', top:72, left:12, background:'#a21caf', color:'#fff', padding:'4px 10px', borderRadius:20, fontSize:12, fontWeight:900}}>● REC</div>}
-        <div style={{position:'absolute', bottom:8, left:0, right:0, textAlign:'center', color:'#fff', fontSize:10, opacity:0.7}}>Tap Logo=Select Logo | Tap Text=Select Text | {showText?'Text ON':'Text OFF'}</div>
       </div>
       <div style={{display:'flex', gap:8, marginTop:12}}>
         {!isCam? <button onClick={()=>startCamera()} style={{flex:1, background:'#111', color:'#fff', padding:14, borderRadius:12, fontWeight:800, border:'none'}}>📷 Start Camera</button>
