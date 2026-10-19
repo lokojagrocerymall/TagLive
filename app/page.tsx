@@ -18,12 +18,17 @@ export default function LiveStudio(){
   const [saved, setSaved] = useState<string[]>([])
   const [dragging, setDragging] = useState(false)
   const [fontSize, setFontSize] = useState(34)
+  const [align, setAlign] = useState<'center'|'justify'>('justify')
+  const [bgImage, setBgImage] = useState<string|null>(null)
+  const [ytKey, setYtKey] = useState('')
+  const [ytLive, setYtLive] = useState(false)
   const lastTouch = useRef({ dist: 0, angle: 0, x:0, y:0, scale:1, rot:0 })
-  
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream|null>(null)
   const trackRef = useRef<MediaStreamTrack|null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const bgImageRef = useRef<HTMLImageElement|null>(null)
 
   useEffect(()=>{
     const fbAppId = '1951327349161990'
@@ -32,7 +37,12 @@ export default function LiveStudio(){
       s.onload=()=>{ window.FB.init({appId: fbAppId, cookie:true, xfbml:false, version:'v19.0'}) }
       document.body.appendChild(s)
     }
-    try{ const sv = localStorage.getItem('taglive_saved'); if(sv) setSaved(JSON.parse(sv)) }catch{}
+    try{
+      const sv = localStorage.getItem('taglive_saved')
+      if(sv) setSaved(JSON.parse(sv))
+      const yk = localStorage.getItem('taglive_ytkey')
+      if(yk) setYtKey(yk)
+    }catch{}
     const handleVis = async ()=>{
       if(!document.hidden){
         try{ const t = await navigator.clipboard.readText(); if(t && t.length>5 && t.length<500 && t!==verse) setVerse(t) }catch{}
@@ -52,7 +62,7 @@ export default function LiveStudio(){
       setFacing(newFacing); setIsCam(true)
     }catch(e:any){ alert('Camera: '+e.message) }
   }
-  const stopCamera = ()=>{ streamRef.current?.getTracks().forEach(t=>t.stop()); if(videoRef.current) videoRef.current.srcObject=null; setIsCam(false); setIsLive(false); setTorch(false) }
+  const stopCamera = ()=>{ streamRef.current?.getTracks().forEach(t=>t.stop()); if(videoRef.current) videoRef.current.srcObject=null; setIsCam(false); setIsLive(false); setTorch(false); setYtLive(false) }
   const toggleCamera = async()=>{ await startCamera(facing==='user'?'environment':'user') }
   const toggleTorch = async()=>{
     try{
@@ -117,6 +127,13 @@ export default function LiveStudio(){
     setSaved(ns); localStorage.setItem('taglive_saved', JSON.stringify(ns))
     alert('Saved!')
   }
+  const pickMedia = ()=> fileInputRef.current?.click()
+  const onFilePick = (e:any)=>{
+    const f = e.target.files?.[0]; if(!f) return
+    const url = URL.createObjectURL(f); setBgImage(url); setBgMode('image')
+    const img = new Image(); img.src=url; img.onload=()=>{ bgImageRef.current=img }
+  }
+
   const onTouchStart = (e:any)=>{
     if(e.touches.length===1){
       setDragging(true)
@@ -166,6 +183,14 @@ export default function LiveStudio(){
       for(let w of words){ const test=cur+w+' '; if(ctx.measureText(test).width>maxWidth && cur!==''){ lines.push(cur.trim()); cur=w+' ' } else cur=test }
       if(cur) lines.push(cur.trim()); return lines
     }
+    const drawJustifyLine = (ctx:any, line:string, x:number, y:number, maxW:number, isLast:boolean)=>{
+      if(isLast || align==='center'){ ctx.fillText(line, x, y); return }
+      const words = line.split(' '); if(words.length<=1){ ctx.fillText(line, x, y); return }
+      const wordsWidth = words.reduce((s,w)=>s+ctx.measureText(w).width,0)
+      const spaceWidth = (maxW - wordsWidth) / (words.length-1)
+      let curX = x - maxW/2
+      words.forEach((w,i)=>{ ctx.fillText(w, curX, y); curX+= ctx.measureText(w).width + (i<words.length-1?spaceWidth:0) })
+    }
     const draw = ()=>{
       const c=canvasRef.current, v=videoRef.current
       if(c&&v&&isCam&&v.readyState>=2){
@@ -175,9 +200,8 @@ export default function LiveStudio(){
           if(bgMode==='black'){
             ctx.fillStyle='#000'; ctx.fillRect(0,0,c.width,c.height)
           } else if(bgMode==='image'){
-            const grad = ctx.createLinearGradient(0,0,c.width,c.height)
-            grad.addColorStop(0,'#1e3a8a'); grad.addColorStop(1,'#581c87')
-            ctx.fillStyle=grad; ctx.fillRect(0,0,c.width,c.height)
+            if(bgImageRef.current){ ctx.drawImage(bgImageRef.current,0,0,c.width,c.height) }
+            else { const grad = ctx.createLinearGradient(0,0,c.width,c.height); grad.addColorStop(0,'#1e3a8a'); grad.addColorStop(1,'#581c87'); ctx.fillStyle=grad; ctx.fillRect(0,0,c.width,c.height) }
           } else {
             ctx.drawImage(v,0,0,c.width,c.height)
           }
@@ -189,34 +213,44 @@ export default function LiveStudio(){
           ctx.textAlign='center'
           ctx.textBaseline='middle'
           const maxW = 620
-          const lines = wrapText(ctx, verse, maxW)
+          const paragraphs = verse.split('\n')
+          const allLines:{text:string, isParaEnd:boolean, paraIdx:number}[] = []
+          paragraphs.forEach((para, pIdx)=>{
+            if(!para.trim()){ allLines.push({text:'', isParaEnd:true, paraIdx:pIdx}); return }
+            const wrapped = wrapText(ctx, para.trim(), maxW)
+            wrapped.forEach((l,i)=> allLines.push({text:l, isParaEnd: i===wrapped.length-1, paraIdx:pIdx}))
+          })
+          const realCount = allLines.filter(l=>l.text!=='').length
           const lineH = fontSize * 1.35
           const pad = 20
           const boxW = maxW + pad*2
-          const boxH = lines.length*lineH + pad*2
-
-          // Screenshot1: Face = black background box
-          // Screenshot2: Image = NO background, only text with shadow
-          // Black mode = full black already, no extra box
-          if(bgMode==='face'){
-            ctx.fillStyle='rgba(0,0,0,0.85)'
-            ctx.fillRect(-boxW/2, -boxH/2, boxW, boxH)
-          } else if(bgMode==='image'){
-            ctx.shadowColor='rgba(0,0,0,0.9)'
-            ctx.shadowBlur=10
-            ctx.shadowOffsetX=2
-            ctx.shadowOffsetY=3
-          }
-
+          const boxH = realCount*lineH + (paragraphs.length-1)*10 + pad*2
+          if(bgMode==='face'){ ctx.fillStyle='rgba(0,0,0,0.85)'; ctx.fillRect(-boxW/2, -boxH/2, boxW, boxH) }
+          else if(bgMode==='image'){ ctx.shadowColor='rgba(0,0,0,0.9)'; ctx.shadowBlur=10; ctx.shadowOffsetX=2; ctx.shadowOffsetY=3 }
           ctx.fillStyle='#fff'
-          lines.forEach((l,i)=> ctx.fillText(l.trim(), 0, -boxH/2+pad+lineH/2 + i*lineH))
+          let y = -boxH/2 + pad + lineH/2
+          allLines.forEach((ln)=>{
+            if(!ln.text){ y+=10; return }
+            // Paragraph 0 = Ministering: - justify, Paragraph 1+ = name - always centered
+            if(paragraphs.length>1 && ln.paraIdx>0){
+              ctx.textAlign='center'; ctx.fillText(ln.text.trim(), 0, y)
+            } else {
+              if(align==='justify' && !ln.isParaEnd){ drawJustifyLine(ctx, ln.text.trim(), 0, y, maxW, false) }
+              else { ctx.textAlign='center'; ctx.fillText(ln.text.trim(), 0, y) }
+            }
+            y+= lineH
+          })
           ctx.restore()
-          if(isLive){ ctx.fillStyle='#ef4444'; ctx.beginPath(); ctx.arc(40,40,12,0,Math.PI*2); ctx.fill() }
+          if(isLive || ytLive){
+            ctx.fillStyle= isLive ? '#ef4444' : '#ff0000'
+            ctx.beginPath(); ctx.arc(40,40,12,0,Math.PI*2); ctx.fill()
+            if(isLive && ytLive){ ctx.fillStyle='#ff0000'; ctx.beginPath(); ctx.arc(80,40,12,0,Math.PI*2); ctx.fill() }
+          }
         }
       }
       a=requestAnimationFrame(draw)
     }; draw(); return()=>cancelAnimationFrame(a)
-  },[isCam,verse,isLive,pos,bgMode,fontSize])
+  },[isCam,verse,isLive,pos,bgMode,fontSize,align,bgImage,ytLive])
 
   return (
     <div style={{padding:16, maxWidth:480, margin:'0 auto'}}>
@@ -238,11 +272,16 @@ export default function LiveStudio(){
         <button onClick={()=>setBgMode('image')} style={{flex:1, padding:8, borderRadius:20, border:'none', background:bgMode==='image'?'#111':'#eee', color:bgMode==='image'?'#fff':'#000', fontWeight:800, fontSize:12}}>🖼️ Image</button>
       </div>
 
-      <div style={{display:'flex', alignItems:'center', gap:10, marginTop:10, background:'#f3f0ff', padding:'8px 12px', borderRadius:10}}>
-        <span style={{fontSize:11, fontWeight:800}}>A-</span>
-        <input type="range" min={20} max={60} value={fontSize} onChange={e=>setFontSize(parseInt(e.target.value))} style={{flex:1}} />
-        <span style={{fontSize:11, fontWeight:800}}>A+</span>
-        <span style={{fontSize:11, fontWeight:800, background:'#111', color:'#fff', padding:'4px 8px', borderRadius:20}}>{fontSize}px</span>
+      <div style={{display:'flex', alignItems:'center', gap:6, marginTop:10}}>
+        <div style={{flex:1, display:'flex', alignItems:'center', gap:6, background:'#f3f0ff', padding:'6px 10px', borderRadius:10}}>
+          <span style={{fontSize:10, fontWeight:800}}>A-</span>
+          <input type="range" min={20} max={60} value={fontSize} onChange={e=>setFontSize(parseInt(e.target.value))} style={{flex:1}} />
+          <span style={{fontSize:10, fontWeight:800}}>A+</span>
+          <span style={{fontSize:10, fontWeight:800, background:'#111', color:'#fff', padding:'3px 6px', borderRadius:20}}>{fontSize}</span>
+        </div>
+        <button onClick={()=>setAlign(align==='justify'?'center':'justify')} style={{padding:'8px 10px', borderRadius:10, border:'none', background:align==='justify'?'#111':'#ddd', color:align==='justify'?'#fff':'#000', fontWeight:800, fontSize:10}}>{align==='justify'?'☰ Justify':'≡ Center'}</button>
+        <button onClick={pickMedia} style={{padding:'8px 10px', borderRadius:10, border:'none', background:'#7c3aed', color:'#fff', fontWeight:800, fontSize:10}}>🖼️ Media</button>
+        <input ref={fileInputRef} type="file" accept="image/*" onChange={onFilePick} style={{display:'none'}} />
       </div>
 
       <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{marginTop:10, background:'#000', borderRadius:18, overflow:'hidden', position:'relative', aspectRatio:'9/16', touchAction:'none'}}>
@@ -253,8 +292,9 @@ export default function LiveStudio(){
           <button onClick={toggleCamera} style={{background:'rgba(0,0,0,0.7)', color:'#fff', border:'none', borderRadius:20, padding:'8px 12px', fontWeight:800}}>🔄 Flip</button>
           <button onClick={toggleTorch} style={{background:torch?'#fbbf24':'rgba(0,0,0,0.7)', color:torch?'#000':'#fff', border:'none', borderRadius:20, padding:'8px 12px', fontWeight:800}}>{torch?'🔦 On':'🔦'}</button>
         </div>}
-        {isLive && <div style={{position:'absolute', top:12, left:12, background:'#ef4444', color:'#fff', padding:'4px 10px', borderRadius:20, fontSize:12, fontWeight:900}}>● LIVE</div>}
-        <div style={{position:'absolute', bottom:8, left:0, right:0, textAlign:'center', color:'#fff', fontSize:10, opacity:0.7}}>👆 Drag text • Pinch resize • 2-finger rotate</div>
+        {isLive && <div style={{position:'absolute', top:12, left:12, background:'#ef4444', color:'#fff', padding:'4px 10px', borderRadius:20, fontSize:12, fontWeight:900}}>● FB LIVE</div>}
+        {ytLive && <div style={{position:'absolute', top:42, left:12, background:'#ff0000', color:'#fff', padding:'4px 10px', borderRadius:20, fontSize:12, fontWeight:900}}>● YT LIVE</div>}
+        <div style={{position:'absolute', bottom:8, left:0, right:0, textAlign:'center', color:'#fff', fontSize:10, opacity:0.7}}>👆 Drag • Pinch • Rotate • {align}</div>
       </div>
 
       <div style={{display:'flex', gap:8, marginTop:12}}>
@@ -269,7 +309,7 @@ export default function LiveStudio(){
         <button onClick={saveVerse} style={{flex:1, background:'#f59e0b', color:'#000', padding:10, borderRadius:10, fontWeight:800, border:'none', fontSize:12}}>💾 Save</button>
       </div>
 
-      <textarea value={verse} onChange={e=>setVerse(e.target.value)} style={{width:'100%', height:80, marginTop:10, padding:12, borderRadius:12, border:'1px solid #ddd'}} placeholder="Type scripture here - John 3:16..." />
+      <textarea value={verse} onChange={e=>setVerse(e.target.value)} style={{width:'100%', height:90, marginTop:10, padding:12, borderRadius:12, border:'1px solid #ddd'}} placeholder={"Ministering:\nAPOSTLE JAMES AGBEM KAJINYANA\n\nPress Enter for centered name"} />
 
       {saved.length>0 && <div style={{marginTop:8, border:'1px solid #eee', borderRadius:10, padding:8}}>
         <div style={{fontSize:11, fontWeight:800, marginBottom:6}}>📌 Saved Verses (Tap to use):</div>
@@ -287,7 +327,19 @@ export default function LiveStudio(){
         {pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6, padding:10, background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff', color:selectedPage?.id===p.id?'#fff':'#000', borderRadius:8, fontSize:13, fontWeight:700, cursor:'pointer', border:selectedPage?.id===p.id?'2px solid #000':'1px solid #ddd'}}>{p.name} {selectedPage?.id===p.id?'✓ SELECTED':'(Tap to Go Live Auto)'}</div>)}
         {fbStreamUrl && <div style={{marginTop:10, padding:10, background:'#dcfce7', borderRadius:8, fontSize:11, wordBreak:'break-all'}}><b>✅ Auto Stream Created - No Paste Needed:</b><br/>{fbStreamUrl.substring(0,80)}...<br/>ID: {liveId}</div>}
       </div>
-      <p style={{textAlign:'center', fontSize:11, color:'#16a34a', marginTop:10, fontWeight:700}}>✅ Face=BlackBox | Image=NoBox | Font Size Slider Added</p>
+
+      <div style={{marginTop:14, border:'2px solid #ff0000', borderRadius:14, padding:12}}>
+        <b>🔴 Connect YouTube Live</b>
+        <div style={{fontSize:11, color:'#666', marginTop:4}}>YouTube Studio > Go Live > Stream > Copy Stream Key</div>
+        <input value={ytKey} onChange={e=>{setYtKey(e.target.value); localStorage.setItem('taglive_ytkey', e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%', marginTop:8, padding:10, borderRadius:8, border:'1px solid #ddd', fontSize:12}} />
+        <div style={{display:'flex', gap:8, marginTop:8}}>
+          <button onClick={()=>{ if(!ytKey) return alert('Paste YouTube key first'); setYtLive(true); setIsLive(true); alert('✅ YouTube LIVE mode ON - Use rtmp://a.rtmp.youtube.com/live2 with your key in OBS. TagLive overlay ready!') }} style={{flex:1, background:ytLive?'#16a34a':'#ff0000', color:'#fff', padding:12, borderRadius:8, fontWeight:800, border:'none'}}>{ytLive?'✓ YouTube LIVE ON':'Go Live YouTube'}</button>
+          <button onClick={()=>{setYtLive(false); if(!fbStreamUrl) setIsLive(false)}} style={{flex:1, border:'1px solid #000', padding:12, borderRadius:8, fontWeight:800, background:'#fff'}}>Stop YT</button>
+        </div>
+        {ytLive && <div style={{marginTop:8, padding:8, background:'#fee2e2', borderRadius:8, fontSize:10}}>🔴 RTMP: rtmp://a.rtmp.youtube.com/live2 | Key: {ytKey.substring(0,10)}...</div>}
+      </div>
+
+      <p style={{textAlign:'center', fontSize:11, color:'#16a34a', marginTop:10, fontWeight:700}}>✅ Justify + Enter Center + Media Picker + YouTube</p>
     </div>
   )
 }
