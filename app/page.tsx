@@ -34,7 +34,7 @@ export default function LiveStudio(){
   const [selected, setSelected] = useState<'text'|'logo'>('text')
   const [showText, setShowText] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false)
-  const [totalUsers, setTotalUsers] = useState(0)
+  const [stats, setStats] = useState({ live: 0, daily: 0, weekly: 0, monthly: 0, total: 0 })
   const lastTouch = useRef({ dist: 0, angle: 0, x:0, y:0, scale:1, rot:0, selScale:1, selRot:0 })
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -79,13 +79,32 @@ export default function LiveStudio(){
           localStorage.setItem('taglive_device', deviceId)
         }
         await supabase.from('taglive_devices').upsert({ device_id: deviceId, last_seen: new Date().toISOString(), user_agent: navigator.userAgent.substring(0,200) }, { onConflict: 'device_id' })
+        
+        const lastView = localStorage.getItem('tl_last_view')
+        const now = Date.now()
+        if(!lastView || now - parseInt(lastView) > 30*60*1000){
+          await supabase.from('taglive_views').insert({ device_id: deviceId })
+          localStorage.setItem('tl_last_view', now.toString())
+        }
+
         if(localStorage.getItem('taglive_admin')==='true'){
-          const { count } = await supabase.from('taglive_devices').select('*', { count: 'exact', head: true })
-          if(count) setTotalUsers(count)
+          const nowDate = new Date()
+          const todayStart = new Date(nowDate); todayStart.setHours(0,0,0,0)
+          const weekStart = new Date(nowDate); weekStart.setDate(nowDate.getDate() - 7)
+          const monthStart = new Date(nowDate); monthStart.setDate(nowDate.getDate() - 30)
+          const fiveMinAgo = new Date(nowDate.getTime() - 5*60*1000)
+          const { count: live } = await supabase.from('taglive_devices').select('*', { count: 'exact', head: true }).gt('last_seen', fiveMinAgo.toISOString())
+          const { count: total } = await supabase.from('taglive_views').select('*', { count: 'exact', head: true })
+          const { count: daily } = await supabase.from('taglive_views').select('*', { count: 'exact', head: true }).gte('created_at', todayStart.toISOString())
+          const { count: weekly } = await supabase.from('taglive_views').select('*', { count: 'exact', head: true }).gte('created_at', weekStart.toISOString())
+          const { count: monthly } = await supabase.from('taglive_views').select('*', { count: 'exact', head: true }).gte('created_at', monthStart.toISOString())
+          setStats({ live: live||0, daily: daily||0, weekly: weekly||0, monthly: monthly||0, total: total||0 })
         }
       }catch(e){}
     }
     trackDevice()
+    const interval = setInterval(trackDevice, 60000)
+    return ()=> clearInterval(interval)
   },[isAdmin])
 
   const startCamera = async(newFacing = facing)=>{
@@ -280,8 +299,15 @@ export default function LiveStudio(){
         <div><div style={{fontSize:26, fontWeight:900}}>Tag<span style={{color:'#7c3aed'}}>Live</span></div><div style={{fontSize:10, letterSpacing:2, fontWeight:800, color:'#666'}}>TAG YOUR LIVE</div></div>
       </div>
       {isAdmin && (
-        <div style={{marginTop:10, background:'#111', color:'#00ff88', padding:'10px', borderRadius:12, fontSize:13, fontWeight:900, textAlign:'center', border:'2px solid #00ff88'}}>
-          👑 ADMIN: {totalUsers} devices connected — You only see this!
+        <div style={{marginTop:10, background:'#000', border:'2px solid #00ff00', borderRadius:16, padding:14}}>
+          <div style={{color:'#00ff00', fontWeight:900, textAlign:'center', fontSize:12, marginBottom:10}}>👑 ADMIN DASHBOARD - Only you see this!</div>
+          <div style={{display:'grid', gridTemplateColumns:'repeat(5, 1fr)', gap:6, textAlign:'center'}}>
+            <div style={{background:'#111', borderRadius:10, padding:8}}><div style={{fontSize:10, opacity:0.7, color:'#fff'}}>🟢 LIVE</div><div style={{fontSize:18, fontWeight:900, color:'#00ff00'}}>{stats.live}</div></div>
+            <div style={{background:'#111', borderRadius:10, padding:8}}><div style={{fontSize:10, opacity:0.7, color:'#fff'}}>📅 DAILY</div><div style={{fontSize:18, fontWeight:900, color:'#ffeb00'}}>{stats.daily}</div></div>
+            <div style={{background:'#111', borderRadius:10, padding:8}}><div style={{fontSize:10, opacity:0.7, color:'#fff'}}>📊 WEEKLY</div><div style={{fontSize:18, fontWeight:900, color:'#00d4ff'}}>{stats.weekly}</div></div>
+            <div style={{background:'#111', borderRadius:10, padding:8}}><div style={{fontSize:10, opacity:0.7, color:'#fff'}}>🗓️ MONTHLY</div><div style={{fontSize:18, fontWeight:900, color:'#ff00ff'}}>{stats.monthly}</div></div>
+            <div style={{background:'#111', borderRadius:10, padding:8}}><div style={{fontSize:10, opacity:0.7, color:'#fff'}}>📈 TOTAL</div><div style={{fontSize:18, fontWeight:900, color:'#fff'}}>{stats.total}</div></div>
+          </div>
         </div>
       )}
       <div style={{display:'flex', gap:6, marginTop:12}}>
@@ -354,7 +380,7 @@ export default function LiveStudio(){
       </div>
       <div style={{marginTop:14, border:'2px solid #ff0000', borderRadius:14, padding:12}}>
         <b>🔴 Connect YouTube Live</b>
-        <div style={{fontSize:11, color:'#666', marginTop:4}}>YouTube Studio > Go Live > Stream > Copy Stream Key</div>
+        <div style={{fontSize:11, color:'#666', marginTop:4}}>YouTube Studio {'>'} Go Live {'>'} Stream {'>'} Copy Stream Key</div>
         <input value={ytKey} onChange={e=>{setYtKey(e.target.value); localStorage.setItem('taglive_ytkey', e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%', marginTop:8, padding:10, borderRadius:8, border:'1px solid #ddd', fontSize:12}} />
         <div style={{display:'flex', gap:8, marginTop:8}}>
           <button onClick={()=>{ if(!ytKey) return alert('Paste YouTube key first'); setYtLive(true); setIsLive(true); alert('✅ YouTube LIVE ON') }} style={{flex:1, background:ytLive?'#16a34a':'#ff0000', color:'#fff', padding:12, borderRadius:8, fontWeight:800, border:'none'}}>{ytLive?'✓ YouTube LIVE ON':'Go Live YouTube'}</button>
