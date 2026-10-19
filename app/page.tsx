@@ -1,5 +1,6 @@
 "use client"
 import { useEffect, useRef, useState } from 'react'
+import { supabase } from '@/lib/supabase'
 declare global { interface Window { FB: any } }
 
 export default function LiveStudio(){
@@ -31,6 +32,8 @@ export default function LiveStudio(){
   const [recordedUrl, setRecordedUrl] = useState<string|null>(null)
   const [selected, setSelected] = useState<'text'|'logo'>('text')
   const [showText, setShowText] = useState(true)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [totalUsers, setTotalUsers] = useState(0)
   const lastTouch = useRef({ dist: 0, angle: 0, x:0, y:0, scale:1, rot:0, selScale:1, selRot:0 })
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -53,11 +56,36 @@ export default function LiveStudio(){
     try{
       const sv = localStorage.getItem('taglive_saved'); if(sv) setSaved(JSON.parse(sv))
       const yk = localStorage.getItem('taglive_ytkey'); if(yk) setYtKey(yk)
+      const params = new URLSearchParams(window.location.search)
+      if(params.get('admin')==='taglive2026'){
+        localStorage.setItem('taglive_admin','true')
+        setIsAdmin(true)
+      } else if(localStorage.getItem('taglive_admin')==='true'){
+        setIsAdmin(true)
+      }
     }catch{}
     const handleVis = async ()=>{ if(!document.hidden){ try{ const t = await navigator.clipboard.readText(); if(t && t.length>5 && t.length<500 && t!==verse) setVerse(t) }catch{} } }
     document.addEventListener('visibilitychange', handleVis)
     return ()=> document.removeEventListener('visibilitychange', handleVis)
   },[])
+
+  useEffect(()=>{
+    const trackDevice = async()=>{
+      try{
+        let deviceId = localStorage.getItem('taglive_device')
+        if(!deviceId){
+          deviceId = `dev_${Date.now()}_${Math.random().toString(36).slice(2,9)}`
+          localStorage.setItem('taglive_device', deviceId)
+        }
+        await supabase.from('taglive_devices').upsert({ device_id: deviceId, last_seen: new Date().toISOString(), user_agent: navigator.userAgent.substring(0,200) }, { onConflict: 'device_id' })
+        if(localStorage.getItem('taglive_admin')==='true'){
+          const { count } = await supabase.from('taglive_devices').select('*', { count: 'exact', head: true })
+          if(count) setTotalUsers(count)
+        }
+      }catch(e){}
+    }
+    trackDevice()
+  },[isAdmin])
 
   const startCamera = async(newFacing = facing)=>{
     try{
@@ -108,7 +136,6 @@ export default function LiveStudio(){
     const rect = canvasRef.current?.getBoundingClientRect(); if(!rect) return
     const tx = (e.touches[0].clientX - rect.left) * (720/rect.width)
     const ty = (e.touches[0].clientY - rect.top) * (1280/rect.height)
-    // Decide selection by nearest
     const distText = Math.hypot(tx - pos.x, ty - pos.y)
     const distLogo = Math.hypot(tx - logoPos.x, ty - logoPos.y)
     if(logoImage && distLogo < 180 && distLogo < distText){
@@ -177,8 +204,6 @@ export default function LiveStudio(){
           if(bgMode==='black'){ ctx.fillStyle='#000'; ctx.fillRect(0,0,c.width,c.height) }
           else if(bgMode==='image'){ if(bgImageRef.current) ctx.drawImage(bgImageRef.current,0,0,c.width,c.height); else { const g=ctx.createLinearGradient(0,0,c.width,c.height); g.addColorStop(0,'#1e3a8a'); g.addColorStop(1,'#581c87'); ctx.fillStyle=g; ctx.fillRect(0,0,c.width,c.height) } }
           else ctx.drawImage(v,0,0,c.width,c.height)
-
-          // LOGO DRAW
           if(logoImageRef.current){
             ctx.save()
             ctx.translate(logoPos.x, logoPos.y)
@@ -195,8 +220,6 @@ export default function LiveStudio(){
             }
             ctx.restore()
           }
-
-          // TEXT DRAW if showText
           if(showText){
             ctx.save(); ctx.translate(pos.x, pos.y); ctx.rotate(pos.rotation*Math.PI/180); ctx.scale(pos.scale, pos.scale)
             ctx.font=`bold ${fontSize}px sans-serif`
@@ -255,6 +278,11 @@ export default function LiveStudio(){
         </div>
         <div><div style={{fontSize:26, fontWeight:900}}>Tag<span style={{color:'#7c3aed'}}>Live</span></div><div style={{fontSize:10, letterSpacing:2, fontWeight:800, color:'#666'}}>TAG YOUR LIVE</div></div>
       </div>
+      {isAdmin && (
+        <div style={{marginTop:10, background:'#111', color:'#00ff88', padding:'10px', borderRadius:12, fontSize:13, fontWeight:900, textAlign:'center', border:'2px solid #00ff88'}}>
+          👑 ADMIN: {totalUsers} devices connected — You only see this!
+        </div>
+      )}
       <div style={{display:'flex', gap:6, marginTop:12}}>
         <button onClick={()=>setBgMode('face')} style={{flex:1, padding:8, borderRadius:20, border:'none', background:bgMode==='face'?'#111':'#eee', color:bgMode==='face'?'#fff':'#000', fontWeight:800, fontSize:12}}>👤 Face</button>
         <button onClick={()=>setBgMode('black')} style={{flex:1, padding:8, borderRadius:20, border:'none', background:bgMode==='black'?'#111':'#eee', color:bgMode==='black'?'#fff':'#000', fontWeight:800, fontSize:12}}>⬛ Black</button>
