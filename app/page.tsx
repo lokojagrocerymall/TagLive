@@ -13,11 +13,11 @@ export default function LiveStudio(){
   const [selectedPage, setSelectedPage] = useState<any>(null)
   const [fbStreamUrl, setFbStreamUrl] = useState('')
   const [liveId, setLiveId] = useState('')
-
   const [pos, setPos] = useState({ x: 360, y: 1100, scale: 1, rotation: 0 })
   const [bgMode, setBgMode] = useState<'face'|'black'|'image'>('face')
   const [saved, setSaved] = useState<string[]>([])
   const [dragging, setDragging] = useState(false)
+  const [fontSize, setFontSize] = useState(34)
   const lastTouch = useRef({ dist: 0, angle: 0, x:0, y:0, scale:1, rot:0 })
   
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -32,18 +32,10 @@ export default function LiveStudio(){
       s.onload=()=>{ window.FB.init({appId: fbAppId, cookie:true, xfbml:false, version:'v19.0'}) }
       document.body.appendChild(s)
     }
-    try{
-      const sv = localStorage.getItem('taglive_saved')
-      if(sv) setSaved(JSON.parse(sv))
-    }catch{}
+    try{ const sv = localStorage.getItem('taglive_saved'); if(sv) setSaved(JSON.parse(sv)) }catch{}
     const handleVis = async ()=>{
       if(!document.hidden){
-        try{
-          const t = await navigator.clipboard.readText()
-          if(t && t.length>5 && t.length<500 && t!==verse){
-            setVerse(t)
-          }
-        }catch{}
+        try{ const t = await navigator.clipboard.readText(); if(t && t.length>5 && t.length<500 && t!==verse) setVerse(t) }catch{}
       }
     }
     document.addEventListener('visibilitychange', handleVis)
@@ -85,7 +77,6 @@ export default function LiveStudio(){
       else alert('No pages: '+JSON.stringify(res))
     })
   }
-
   const createFbLiveAuto = async (page:any)=>{
     setSelectedPage(page)
     try{
@@ -110,8 +101,6 @@ export default function LiveStudio(){
       setIsLive(true)
     }
   }
-
-  // --- FIXED: No PlayStore redirect ---
   const openBibleApp = ()=>{
     alert('📖 Now open your Bible app (YouVersion, MySword, etc), COPY the verse, then return to TagLive - it will auto-paste! Or use PASTE VERSE button.')
   }
@@ -128,8 +117,6 @@ export default function LiveStudio(){
     setSaved(ns); localStorage.setItem('taglive_saved', JSON.stringify(ns))
     alert('Saved!')
   }
-
-  // --- FIXED TOUCH: Rotation continuous ---
   const onTouchStart = (e:any)=>{
     if(e.touches.length===1){
       setDragging(true)
@@ -172,7 +159,6 @@ export default function LiveStudio(){
   }
   const onTouchEnd = ()=> { setDragging(false); lastTouch.current.dist=0 }
 
-  // --- FIXED DRAW: Full text no cut ---
   useEffect(()=>{
     let a:any
     const wrapText = (ctx:any, text:string, maxWidth:number)=>{
@@ -199,26 +185,38 @@ export default function LiveStudio(){
           ctx.translate(pos.x, pos.y)
           ctx.rotate(pos.rotation*Math.PI/180)
           ctx.scale(pos.scale, pos.scale)
-          ctx.font='bold 26px sans-serif'
-          const maxW = 640
-          const lines = wrapText(ctx, verse, maxW)
-          const lineH = 32
-          const pad = 18
-          const boxW = maxW + pad*2
-          const boxH = lines.length*lineH + pad*2
-          ctx.fillStyle='rgba(0,0,0,0.85)'
-          ctx.fillRect(-boxW/2, -boxH/2, boxW, boxH)
-          ctx.fillStyle='#fff'
+          ctx.font=`bold ${fontSize}px sans-serif`
           ctx.textAlign='center'
           ctx.textBaseline='middle'
-          lines.forEach((l,i)=> ctx.fillText(l, 0, -boxH/2+pad+lineH/2 + i*lineH))
+          const maxW = 620
+          const lines = wrapText(ctx, verse, maxW)
+          const lineH = fontSize * 1.35
+          const pad = 20
+          const boxW = maxW + pad*2
+          const boxH = lines.length*lineH + pad*2
+
+          // Screenshot1: Face = black background box
+          // Screenshot2: Image = NO background, only text with shadow
+          // Black mode = full black already, no extra box
+          if(bgMode==='face'){
+            ctx.fillStyle='rgba(0,0,0,0.85)'
+            ctx.fillRect(-boxW/2, -boxH/2, boxW, boxH)
+          } else if(bgMode==='image'){
+            ctx.shadowColor='rgba(0,0,0,0.9)'
+            ctx.shadowBlur=10
+            ctx.shadowOffsetX=2
+            ctx.shadowOffsetY=3
+          }
+
+          ctx.fillStyle='#fff'
+          lines.forEach((l,i)=> ctx.fillText(l.trim(), 0, -boxH/2+pad+lineH/2 + i*lineH))
           ctx.restore()
           if(isLive){ ctx.fillStyle='#ef4444'; ctx.beginPath(); ctx.arc(40,40,12,0,Math.PI*2); ctx.fill() }
         }
       }
       a=requestAnimationFrame(draw)
     }; draw(); return()=>cancelAnimationFrame(a)
-  },[isCam,verse,isLive,pos,bgMode])
+  },[isCam,verse,isLive,pos,bgMode,fontSize])
 
   return (
     <div style={{padding:16, maxWidth:480, margin:'0 auto'}}>
@@ -240,7 +238,14 @@ export default function LiveStudio(){
         <button onClick={()=>setBgMode('image')} style={{flex:1, padding:8, borderRadius:20, border:'none', background:bgMode==='image'?'#111':'#eee', color:bgMode==='image'?'#fff':'#000', fontWeight:800, fontSize:12}}>🖼️ Image</button>
       </div>
 
-      <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{marginTop:12, background:'#000', borderRadius:18, overflow:'hidden', position:'relative', aspectRatio:'9/16', touchAction:'none'}}>
+      <div style={{display:'flex', alignItems:'center', gap:10, marginTop:10, background:'#f3f0ff', padding:'8px 12px', borderRadius:10}}>
+        <span style={{fontSize:11, fontWeight:800}}>A-</span>
+        <input type="range" min={20} max={60} value={fontSize} onChange={e=>setFontSize(parseInt(e.target.value))} style={{flex:1}} />
+        <span style={{fontSize:11, fontWeight:800}}>A+</span>
+        <span style={{fontSize:11, fontWeight:800, background:'#111', color:'#fff', padding:'4px 8px', borderRadius:20}}>{fontSize}px</span>
+      </div>
+
+      <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{marginTop:10, background:'#000', borderRadius:18, overflow:'hidden', position:'relative', aspectRatio:'9/16', touchAction:'none'}}>
         <video ref={videoRef} muted playsInline autoPlay style={{width:'100%', height:'100%', objectFit:'cover', display:isCam&&bgMode==='face'?'block':'none'}}/>
         {!isCam && <div style={{color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', height:420}}>Camera off</div>}
         <canvas ref={canvasRef} style={{position:'absolute', top:0, left:0, width:'100%', height:'100%'}}/>
@@ -282,7 +287,7 @@ export default function LiveStudio(){
         {pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6, padding:10, background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff', color:selectedPage?.id===p.id?'#fff':'#000', borderRadius:8, fontSize:13, fontWeight:700, cursor:'pointer', border:selectedPage?.id===p.id?'2px solid #000':'1px solid #ddd'}}>{p.name} {selectedPage?.id===p.id?'✓ SELECTED':'(Tap to Go Live Auto)'}</div>)}
         {fbStreamUrl && <div style={{marginTop:10, padding:10, background:'#dcfce7', borderRadius:8, fontSize:11, wordBreak:'break-all'}}><b>✅ Auto Stream Created - No Paste Needed:</b><br/>{fbStreamUrl.substring(0,80)}...<br/>ID: {liveId}</div>}
       </div>
-      <p style={{textAlign:'center', fontSize:11, color:'#16a34a', marginTop:10, fontWeight:700}}>✅ MAIN FEATURE: Text projection on face + Flip + Torch + Draggable + Bible App - NO KEY PASTE</p>
+      <p style={{textAlign:'center', fontSize:11, color:'#16a34a', marginTop:10, fontWeight:700}}>✅ Face=BlackBox | Image=NoBox | Font Size Slider Added</p>
     </div>
   )
 }
