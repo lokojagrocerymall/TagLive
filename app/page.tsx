@@ -51,6 +51,9 @@ export default function LiveStudio(){
   const [tickerSpeed, setTickerSpeed] = useState(2)
   const [churchName, setChurchName] = useState('THE LAST FIRE GLOBAL MINISTRY')
   const [showChurchName, setShowChurchName] = useState(true)
+  // PREMIUM: LIVE TIMER
+  const [liveSeconds, setLiveSeconds] = useState(0)
+  const timerRef = useRef<any>(null)
   const tickerOffsetRef = useRef(720)
   const introFileRef = useRef<HTMLInputElement>(null)
   const outroFileRef = useRef<HTMLInputElement>(null)
@@ -67,6 +70,23 @@ export default function LiveStudio(){
   const logoImageRef = useRef<HTMLImageElement|null>(null)
   const recorderRef = useRef<MediaRecorder|null>(null)
   const chunksRef = useRef<Blob[]>([])
+
+  const formatTime = (sec:number)=>{
+    const h = Math.floor(sec/3600)
+    const m = Math.floor((sec%3600)/60)
+    const s = sec%60
+    return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`
+  }
+  const startTimer = ()=>{
+    if(timerRef.current) clearInterval(timerRef.current)
+    setLiveSeconds(0)
+    timerRef.current = setInterval(()=> setLiveSeconds(prev=>prev+1), 1000)
+  }
+  const stopTimer = ()=>{
+    if(timerRef.current) clearInterval(timerRef.current)
+    timerRef.current = null
+    setLiveSeconds(0)
+  }
 
   useEffect(()=>{
     const fbAppId = '1951327349161990'
@@ -91,7 +111,7 @@ export default function LiveStudio(){
     }catch{}
     const handleVis = async ()=>{ if(!document.hidden){ try{ const t = await navigator.clipboard.readText(); if(t && t.length>5 && t.length<500 && t!==verse) setVerse(t) }catch{} } }
     document.addEventListener('visibilitychange', handleVis)
-    return ()=> document.removeEventListener('visibilitychange', handleVis)
+    return ()=>{ document.removeEventListener('visibilitychange', handleVis); if(timerRef.current) clearInterval(timerRef.current) }
   },[])
 
   useEffect(()=>{
@@ -179,7 +199,7 @@ export default function LiveStudio(){
     if(isRecording) stopRecording(); 
     streamRef.current?.getTracks().forEach(t=>t.stop()); 
     if(videoRef.current) videoRef.current.srcObject=null; 
-    setIsCam(false); setIsLive(false); setTorch(false); setYtLive(false)
+    setIsCam(false); setIsLive(false); setTorch(false); setYtLive(false); stopTimer()
     if(activeOutroId) playActiveOutro()
   }
   const toggleCamera = async()=>{ await startCamera(facing==='user'?'environment':'user') }
@@ -194,8 +214,8 @@ export default function LiveStudio(){
       setSelectedPage(page)
       try{
         const res = await fetch(`https://graph.facebook.com/v19.0/${page.id}/live_videos`,{ method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({ access_token: page.access_token, title: verse.substring(0,60), description: 'TagLive - '+verse, status: 'UNPUBLISHED' }) })
-        const data = await res.json(); if(data.error) throw new Error(JSON.stringify(data.error)); setFbStreamUrl(data.stream_url); setLiveId(data.id); setIsLive(true); alert('✅ FB LIVE AFTER INTRO!')
-      }catch(e:any){ alert('Auto Live needs approval: '+e.message); setIsLive(true) }
+        const data = await res.json(); if(data.error) throw new Error(JSON.stringify(data.error)); setFbStreamUrl(data.stream_url); setLiveId(data.id); setIsLive(true); startTimer(); alert('✅ FB LIVE AFTER INTRO!')
+      }catch(e:any){ alert('Auto Live needs approval: '+e.message); setIsLive(true); startTimer() }
     })
   }
   const openBibleApp = ()=>{ alert('📖 Open Bible app, COPY verse, return here - auto-paste!') }
@@ -214,9 +234,9 @@ export default function LiveStudio(){
     const rec = new MediaRecorder(canvasStream, { mimeType: 'video/webm;codecs=vp9' })
     rec.ondataavailable = (e)=>{ if(e.data.size>0) chunksRef.current.push(e.data) }
     rec.onstop = ()=>{ const blob = new Blob(chunksRef.current, { type: 'video/webm' }); const url = URL.createObjectURL(blob); setRecordedUrl(url) }
-    rec.start(100); recorderRef.current = rec; setIsRecording(true)
+    rec.start(100); recorderRef.current = rec; setIsRecording(true); startTimer()
   }
-  const stopRecording = ()=>{ recorderRef.current?.stop(); setIsRecording(false) }
+  const stopRecording = ()=>{ recorderRef.current?.stop(); setIsRecording(false); if(!isLive && !ytLive) stopTimer() }
 
   const onTouchStart = (e:any)=>{
     const rect = canvasRef.current?.getBoundingClientRect(); if(!rect) return
@@ -272,25 +292,32 @@ export default function LiveStudio(){
             const drawY = isSplit ? c.height*0.25 : pos.y
             const maxW = isSplit ? 600 : 560
             ctx.translate(drawX, drawY); ctx.rotate(pos.rotation*Math.PI/180); ctx.scale(pos.scale, pos.scale); ctx.font=`bold ${fontSize}px sans-serif`; const pad = 24; const boxW = maxW + pad*2; const paragraphs = verse.split('\n'); let allLines:{text:string, isLastInPara:boolean, paraIdx:number}[] = []; paragraphs.forEach((para,pIdx)=>{ if(!para.trim()){ allLines.push({text:'', isLastInPara:true, paraIdx:pIdx}); return } const wrapped = wrapText(ctx, para.trim(), maxW); wrapped.forEach((l,i)=> allLines.push({text:l, isLastInPara:i===wrapped.length-1, paraIdx:pIdx})) }); const realCount = allLines.filter(l=>l.text!=='').length; const lineH = fontSize * 1.38; const boxH = realCount*lineH + (paragraphs.length-1)*10 + pad*2; if(bgMode==='face' || bgMode==='split'){ ctx.fillStyle=hexToRgba(boxColor, boxOpacity); ctx.fillRect(-boxW/2, -boxH/2, boxW, boxH) } else if(bgMode==='image'){ ctx.shadowColor='rgba(0,0,0,0.9)'; ctx.shadowBlur=10; ctx.shadowOffsetX=2; ctx.shadowOffsetY=3 } ctx.fillStyle=textColor; let y = -boxH/2 + pad + lineH/2; allLines.forEach((ln)=>{ if(!ln.text){ y+=10; return } if(paragraphs.length>1 && ln.paraIdx>0){ ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(ln.text, 0, y) } else { if(align==='justify' && !ln.isLastInPara){ const words = ln.text.split(' '); if(words.length===1){ ctx.textAlign='center'; ctx.fillText(ln.text, 0, y) } else { ctx.textAlign='left'; ctx.textBaseline='middle'; const totalWordsWidth = words.reduce((s,w)=>s+ctx.measureText(w).width,0); const gap = (maxW - totalWordsWidth) / (words.length-1); let x = -maxW/2; words.forEach((w)=>{ ctx.fillText(w, x, y); x += ctx.measureText(w).width + gap }) } } else { ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(ln.text, 0, y) } } y+= lineH }); 
-            // PREMIUM: Church name UNDER text (only in split mode)
             if(isSplit && showChurchName && churchName){
               ctx.fillStyle = '#FFD700'
               ctx.font = `900 ${Math.max(14, Math.floor(fontSize*0.52))}px sans-serif`
               ctx.textAlign = 'center'
               ctx.textBaseline = 'middle'
-              // Draw below the verse box with small gap
               const churchY = y + 22
-              // Optional small background pill for premium look
               const tW = ctx.measureText(churchName.toUpperCase()).width + 28
               ctx.fillStyle = 'rgba(124,58,237,0.95)'
               const pillH = 28
-              // @ts-ignore rounded rect fallback
               ctx.fillRect(-tW/2, churchY - pillH/2, tW, pillH)
               ctx.fillStyle = '#FFD700'
               ctx.fillText(churchName.toUpperCase(), 0, churchY)
             }
             if(selected==='text' && !isSplit){ ctx.strokeStyle='#7c3aed'; ctx.lineWidth=3; ctx.setLineDash([12,8]); ctx.strokeRect(-boxW/2-4, -boxH/2-4, boxW+8, boxH+8); ctx.setLineDash([]) } ctx.restore() }
-          if(isLive || ytLive || isRecording){ ctx.fillStyle=isRecording?'#a21caf':'#ef4444'; ctx.beginPath(); ctx.arc(40,40,12,0,Math.PI*2); ctx.fill() }
+          if(isLive || ytLive || isRecording){
+            const timeStr = formatTime(liveSeconds)
+            // Premium LIVE timer pill
+            ctx.fillStyle = isRecording ? '#a21caf' : '#ef4444'
+            const pillW = 165
+            ctx.fillRect(16, 16, pillW, 32)
+            ctx.fillStyle = '#fff'
+            ctx.font = 'bold 18px sans-serif'
+            ctx.textAlign = 'left'
+            ctx.textBaseline = 'middle'
+            ctx.fillText(`● LIVE ${timeStr}`, 28, 32)
+          }
           if(tickerOn && tickerText){
             const tickerH = tickerSize + 24
             ctx.fillStyle = '#000000'
@@ -308,7 +335,7 @@ export default function LiveStudio(){
       }
       a=requestAnimationFrame(draw)
     }; draw(); return()=>cancelAnimationFrame(a)
-  },[isCam,verse,isLive,pos,bgMode,fontSize,align,bgImage,ytLive,textColor,boxColor,boxOpacity,logoImage,logoPos,isRecording,selected,showText,tickerOn,tickerText,tickerSize,tickerSpeed,churchName,showChurchName])
+  },[isCam,verse,isLive,pos,bgMode,fontSize,align,bgImage,ytLive,textColor,boxColor,boxOpacity,logoImage,logoPos,isRecording,selected,showText,tickerOn,tickerText,tickerSize,tickerSpeed,churchName,showChurchName,liveSeconds])
 
   return (
     <div style={{padding:16, maxWidth:480, margin:'0 auto'}}>
@@ -337,6 +364,12 @@ export default function LiveStudio(){
           </div>
         </div>
         <div><div style={{fontSize:26, fontWeight:900}}>Tag<span style={{color:'#7c3aed'}}>Live</span></div><div style={{fontSize:10, letterSpacing:2, fontWeight:800, color:'#666'}}>TAG YOUR LIVE</div></div>
+        {/* PREMIUM LIVE TIMER BADGE OUTSIDE CANVAS */}
+        {(isLive || ytLive || isRecording) && (
+          <div style={{marginLeft:'auto', background: isRecording?'#a21caf':'#ef4444', color:'#fff', padding:'6px 12px', borderRadius:20, fontSize:12, fontWeight:900, display:'flex', alignItems:'center', gap:4}}>
+            <span style={{width:8, height:8, background:'#fff', borderRadius:'50%', display:'inline-block'}}/> LIVE {formatTime(liveSeconds)}
+          </div>
+        )}
       </div>
 
       {isAdmin && (
@@ -439,7 +472,6 @@ export default function LiveStudio(){
         )}
       </div>
 
-      {/* PREMIUM: Church Name Input */}
       <div style={{marginTop:12, border:'2px solid #7c3aed', borderRadius:16, padding:12, background:'#fff'}}>
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
           <b style={{fontSize:13}}>🏛️ Church Name (Under Text)</b>
@@ -485,9 +517,6 @@ export default function LiveStudio(){
           <button onClick={toggleCamera} style={{background:'rgba(0,0,0,0.7)', color:'#fff', border:'none', borderRadius:20, padding:'8px 12px', fontWeight:800}}>🔄 Flip</button>
           <button onClick={toggleTorch} style={{background:torch?'#fbbf24':'rgba(0,0,0,0.7)', color:torch?'#000':'#fff', border:'none', borderRadius:20, padding:'8px 12px', fontWeight:800}}>{torch?'🔦 On':'🔦'}</button>
         </div>}
-        {isLive && <div style={{position:'absolute', top:12, left:12, background:'#ef4444', color:'#fff', padding:'4px 10px', borderRadius:20, fontSize:12, fontWeight:900}}>● FB LIVE</div>}
-        {ytLive && <div style={{position:'absolute', top:42, left:12, background:'#ff0000', color:'#fff', padding:'4px 10px', borderRadius:20, fontSize:12, fontWeight:900}}>● YT LIVE</div>}
-        {isRecording && <div style={{position:'absolute', top:72, left:12, background:'#a21caf', color:'#fff', padding:'4px 10px', borderRadius:20, fontSize:12, fontWeight:900}}>● REC</div>}
       </div>
       <div style={{display:'flex', gap:8, marginTop:12}}>
         {!isCam? <button onClick={()=>startCamera()} style={{flex:1, background:'#111', color:'#fff', padding:14, borderRadius:12, fontWeight:800, border:'none'}}>📷 Start Camera</button>
@@ -496,7 +525,7 @@ export default function LiveStudio(){
       </div>
       <div style={{display:'flex', gap:6, marginTop:10}}>
         {!isRecording? <button onClick={startRecording} disabled={!isCam} style={{flex:1, background:isCam?'#a21caf':'#ccc', color:'#fff', padding:12, borderRadius:10, fontWeight:800, border:'none', fontSize:12}}>● Record Video</button>
-        : <button onClick={stopRecording} style={{flex:1, background:'#111', color:'#fff', padding:12, borderRadius:10, fontWeight:800, border:'none', fontSize:12}}>■ Stop Recording</button>}
+        : <button onClick={stopRecording} style={{flex:1, background:'#111', color:'#fff', padding:12, borderRadius:10, fontWeight:800, border:'none', fontSize:12}}>■ Stop Recording ({formatTime(liveSeconds)})</button>}
         {recordedUrl && <a href={recordedUrl} download={`taglive-${Date.now()}.webm`} style={{flex:1, background:'#16a34a', color:'#fff', padding:12, borderRadius:10, fontWeight:800, textAlign:'center', textDecoration:'none', fontSize:12}}>⬇ Download</a>}
       </div>
       {recordedUrl && <video src={recordedUrl} controls style={{width:'100%', marginTop:8, borderRadius:12}} />}
@@ -513,15 +542,15 @@ export default function LiveStudio(){
           <button onClick={loginFacebook} style={{flex:1, background:fbUser?'#16a34a':'#1877F2', color:'#fff', padding:12, borderRadius:8, fontWeight:800, border:'none'}}>{fbUser?`✓ ${fbUser.name}`:'Login Facebook'}</button>
           <button onClick={()=>loadPages()} style={{flex:1, border:'1px solid #000', padding:12, borderRadius:8, fontWeight:800, background:'#fff'}}>Load My Pages</button>
         </div>
-        {pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6, padding:10, background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff', color:selectedPage?.id===p.id?'#fff':'#000', borderRadius:8, fontSize:13, fontWeight:700, cursor:'pointer'}}>{p.name} {selectedPage?.id===p.id?'✓':'(Tap to Go Live with Intro)'}</div>)}
+        {pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6, padding:10, background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff', color:selectedPage?.id===p.id?'#fff':'#000', borderRadius:8, fontSize:13, fontWeight:700, cursor:'pointer'}}>{p.name} {selectedPage?.id===p.id?`✓ LIVE ${formatTime(liveSeconds)}`:'(Tap to Go Live with Intro)'}</div>)}
         {fbStreamUrl && <div style={{marginTop:10, padding:10, background:'#dcfce7', borderRadius:8, fontSize:11, wordBreak:'break-all'}}>✅ FB: {fbStreamUrl.substring(0,70)}...</div>}
       </div>
       <div style={{marginTop:14, border:'2px solid #ff0000', borderRadius:14, padding:12}}>
         <b>🔴 Connect YouTube Live - Intro plays first!</b>
         <input value={ytKey} onChange={e=>{setYtKey(e.target.value); localStorage.setItem('taglive_ytkey', e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%', marginTop:8, padding:10, borderRadius:8, border:'1px solid #ddd', fontSize:12}} />
         <div style={{display:'flex', gap:8, marginTop:8}}>
-          <button onClick={()=>{ if(!ytKey) return alert('Paste YouTube key first'); playActiveIntroThen(()=>{ setYtLive(true); setIsLive(true); alert('✅ YouTube LIVE AFTER INTRO') }) }} style={{flex:1, background:ytLive?'#16a34a':'#ff0000', color:'#fff', padding:12, borderRadius:8, fontWeight:800, border:'none'}}>{ytLive?'✓ YouTube LIVE ON':'Go Live YouTube + Intro'}</button>
-          <button onClick={()=>{setYtLive(false); if(!fbStreamUrl) setIsLive(false); if(activeOutroId) playActiveOutro()}} style={{flex:1, border:'1px solid #000', padding:12, borderRadius:8, fontWeight:800, background:'#fff'}}>Stop YT + Outro</button>
+          <button onClick={()=>{ if(!ytKey) return alert('Paste YouTube key first'); playActiveIntroThen(()=>{ setYtLive(true); setIsLive(true); startTimer(); alert('✅ YouTube LIVE AFTER INTRO') }) }} style={{flex:1, background:ytLive?'#16a34a':'#ff0000', color:'#fff', padding:12, borderRadius:8, fontWeight:800, border:'none'}}>{ytLive?`✓ YouTube LIVE ${formatTime(liveSeconds)}`:'Go Live YouTube + Intro'}</button>
+          <button onClick={()=>{setYtLive(false); if(!fbStreamUrl) setIsLive(false); stopTimer(); if(activeOutroId) playActiveOutro()}} style={{flex:1, border:'1px solid #000', padding:12, borderRadius:8, fontWeight:800, background:'#fff'}}>Stop YT + Outro</button>
         </div>
       </div>
     </div>
