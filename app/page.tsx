@@ -40,6 +40,8 @@ export default function LiveStudio(){
   const [activeIntroId, setActiveIntroId] = useState<string|null>(null)
   const [activeOutroId, setActiveOutroId] = useState<string|null>(null)
   const [showStudio, setShowStudio] = useState(false)
+  const [showTickerStudio, setShowTickerStudio] = useState(false)
+  const [showAdmin, setShowAdmin] = useState(false)
   const [playing, setPlaying] = useState<any>(null)
   const [animTitle, setAnimTitle] = useState('APOSTLE JAMES AGBEM KAJINYANA')
   const [animSub, setAnimSub] = useState('Welcome to Live Service')
@@ -242,42 +244,20 @@ export default function LiveStudio(){
           c.width=720; c.height=1280
           const hexToRgba = (hex:string, op:number)=>{ const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16); return `rgba(${r},${g},${b},${op})` }
           if(bgMode==='split'){
-            // LEFT = YOU, RIGHT = SCRIPTURE BG - same functionality
             ctx.drawImage(v,0,0,c.width*0.5,c.height)
             ctx.fillStyle=hexToRgba(boxColor, 1)
             ctx.fillRect(c.width*0.5,0,c.width*0.5,c.height)
           } else if(bgMode==='black'){ ctx.fillStyle='#000'; ctx.fillRect(0,0,c.width,c.height) }
           else if(bgMode==='image'){ if(bgImageRef.current) ctx.drawImage(bgImageRef.current,0,0,c.width,c.height); else { const g=ctx.createLinearGradient(0,0,c.width,c.height); g.addColorStop(0,'#1e3a8a'); g.addColorStop(1,'#581c87'); ctx.fillStyle=g; ctx.fillRect(0,0,c.width,c.height) } }
           else ctx.drawImage(v,0,0,c.width,c.height)
-
           if(logoImageRef.current){ ctx.save(); ctx.translate(logoPos.x, logoPos.y); ctx.rotate(logoPos.rotation*Math.PI/180); ctx.scale(logoPos.scale, logoPos.scale); const iw = logoImageRef.current.width, ih = logoImageRef.current.height; const maxLogoW = 180; const sc = Math.min(1, maxLogoW/iw); ctx.drawImage(logoImageRef.current, -iw*sc/2, -ih*sc/2, iw*sc, ih*sc); if(selected==='logo'){ ctx.strokeStyle='#00ff00'; ctx.lineWidth=4; ctx.setLineDash([10,10]); ctx.strokeRect(-iw*sc/2-6, -ih*sc/2-6, iw*sc+12, ih*sc+12); ctx.setLineDash([]) } ctx.restore() }
-
           if(showText){
             ctx.save();
             const isSplit = bgMode==='split'
             const drawX = isSplit ? c.width*0.75 : pos.x
             const drawY = isSplit ? c.height*0.5 : pos.y
             const maxW = isSplit ? 320 : 560
-            ctx.translate(drawX, drawY); 
-            ctx.rotate(pos.rotation*Math.PI/180); 
-            ctx.scale(pos.scale, pos.scale); 
-            ctx.font=`bold ${fontSize}px sans-serif`; 
-            const pad = 24; 
-            const boxW = maxW + pad*2; 
-            const paragraphs = verse.split('\n'); 
-            let allLines:{text:string, isLastInPara:boolean, paraIdx:number}[] = []; 
-            paragraphs.forEach((para,pIdx)=>{ if(!para.trim()){ allLines.push({text:'', isLastInPara:true, paraIdx:pIdx}); return } const wrapped = wrapText(ctx, para.trim(), maxW); wrapped.forEach((l,i)=> allLines.push({text:l, isLastInPara:i===wrapped.length-1, paraIdx:pIdx})) }); 
-            const realCount = allLines.filter(l=>l.text!=='').length; 
-            const lineH = fontSize * 1.38; 
-            const boxH = realCount*lineH + (paragraphs.length-1)*10 + pad*2; 
-            if(bgMode==='face' || bgMode==='split'){ ctx.fillStyle=hexToRgba(boxColor, boxOpacity); ctx.fillRect(-boxW/2, -boxH/2, boxW, boxH) } else if(bgMode==='image'){ ctx.shadowColor='rgba(0,0,0,0.9)'; ctx.shadowBlur=10; ctx.shadowOffsetX=2; ctx.shadowOffsetY=3 } 
-            ctx.fillStyle=textColor; 
-            let y = -boxH/2 + pad + lineH/2; 
-            allLines.forEach((ln)=>{ if(!ln.text){ y+=10; return } if(paragraphs.length>1 && ln.paraIdx>0){ ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(ln.text, 0, y) } else { if(align==='justify' && !ln.isLastInPara){ const words = ln.text.split(' '); if(words.length===1){ ctx.textAlign='center'; ctx.fillText(ln.text, 0, y) } else { ctx.textAlign='left'; ctx.textBaseline='middle'; const totalWordsWidth = words.reduce((s,w)=>s+ctx.measureText(w).width,0); const gap = (maxW - totalWordsWidth) / (words.length-1); let x = -maxW/2; words.forEach((w)=>{ ctx.fillText(w, x, y); x += ctx.measureText(w).width + gap }) } } else { ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(ln.text, 0, y) } } y+= lineH }); 
-            if(selected==='text'){ ctx.strokeStyle='#7c3aed'; ctx.lineWidth=3; ctx.setLineDash([12,8]); ctx.strokeRect(-boxW/2-4, -boxH/2-4, boxW+8, boxH+8); ctx.setLineDash([]) } 
-            ctx.restore() 
-          }
-
+            ctx.translate(drawX, drawY); ctx.rotate(pos.rotation*Math.PI/180); ctx.scale(pos.scale, pos.scale); ctx.font=`bold ${fontSize}px sans-serif`; const pad = 24; const boxW = maxW + pad*2; const paragraphs = verse.split('\n'); let allLines:{text:string, isLastInPara:boolean, paraIdx:number}[] = []; paragraphs.forEach((para,pIdx)=>{ if(!para.trim()){ allLines.push({text:'', isLastInPara:true, paraIdx:pIdx}); return } const wrapped = wrapText(ctx, para.trim(), maxW); wrapped.forEach((l,i)=> allLines.push({text:l, isLastInPara:i===wrapped.length-1, paraIdx:pIdx})) }); const realCount = allLines.filter(l=>l.text!=='').length; const lineH = fontSize * 1.38; const boxH = realCount*lineH + (paragraphs.length-1)*10 + pad*2; if(bgMode==='face' || bgMode==='split'){ ctx.fillStyle=hexToRgba(boxColor, boxOpacity); ctx.fillRect(-boxW/2, -boxH/2, boxW, boxH) } else if(bgMode==='image'){ ctx.shadowColor='rgba(0,0,0,0.9)'; ctx.shadowBlur=10; ctx.shadowOffsetX=2; ctx.shadowOffsetY=3 } ctx.fillStyle=textColor; let y = -boxH/2 + pad + lineH/2; allLines.forEach((ln)=>{ if(!ln.text){ y+=10; return } if(paragraphs.length>1 && ln.paraIdx>0){ ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(ln.text, 0, y) } else { if(align==='justify' && !ln.isLastInPara){ const words = ln.text.split(' '); if(words.length===1){ ctx.textAlign='center'; ctx.fillText(ln.text, 0, y) } else { ctx.textAlign='left'; ctx.textBaseline='middle'; const totalWordsWidth = words.reduce((s,w)=>s+ctx.measureText(w).width,0); const gap = (maxW - totalWordsWidth) / (words.length-1); let x = -maxW/2; words.forEach((w)=>{ ctx.fillText(w, x, y); x += ctx.measureText(w).width + gap }) } } else { ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(ln.text, 0, y) } } y+= lineH }); if(selected==='text'){ ctx.strokeStyle='#7c3aed'; ctx.lineWidth=3; ctx.setLineDash([12,8]); ctx.strokeRect(-boxW/2-4, -boxH/2-4, boxW+8, boxH+8); ctx.setLineDash([]) } ctx.restore() }
           if(isLive || ytLive || isRecording){ ctx.fillStyle=isRecording?'#a21caf':'#ef4444'; ctx.beginPath(); ctx.arc(40,40,12,0,Math.PI*2); ctx.fill() }
           if(tickerOn && tickerText){
             const tickerH = tickerSize + 24
@@ -326,16 +306,24 @@ export default function LiveStudio(){
         </div>
         <div><div style={{fontSize:26, fontWeight:900}}>Tag<span style={{color:'#7c3aed'}}>Live</span></div><div style={{fontSize:10, letterSpacing:2, fontWeight:800, color:'#666'}}>TAG YOUR LIVE</div></div>
       </div>
+
       {isAdmin && (
-        <div style={{marginTop:10, background:'#000', border:'2px solid #00ff00', borderRadius:16, padding:14}}>
-          <div style={{color:'#00ff00', fontWeight:900, textAlign:'center', fontSize:12, marginBottom:10}}>👑 ADMIN DASHBOARD!</div>
-          <div style={{display:'grid', gridTemplateColumns:'repeat(5, 1fr)', gap:6, textAlign:'center'}}>
-            <div style={{background:'#111', borderRadius:10, padding:8}}><div style={{fontSize:10, opacity:0.7, color:'#fff'}}>🟢 LIVE</div><div style={{fontSize:18, fontWeight:900, color:'#00ff00'}}>{stats.live}</div></div>
-            <div style={{background:'#111', borderRadius:10, padding:8}}><div style={{fontSize:10, opacity:0.7, color:'#fff'}}>📅 DAILY</div><div style={{fontSize:18, fontWeight:900, color:'#ffeb00'}}>{stats.daily}</div></div>
-            <div style={{background:'#111', borderRadius:10, padding:8}}><div style={{fontSize:10, opacity:0.7, color:'#fff'}}>📊 WEEKLY</div><div style={{fontSize:18, fontWeight:900, color:'#00d4ff'}}>{stats.weekly}</div></div>
-            <div style={{background:'#111', borderRadius:10, padding:8}}><div style={{fontSize:10, opacity:0.7, color:'#fff'}}>🗓️ MONTHLY</div><div style={{fontSize:18, fontWeight:900, color:'#ff00ff'}}>{stats.monthly}</div></div>
-            <div style={{background:'#111', borderRadius:10, padding:8}}><div style={{fontSize:10, opacity:0.7, color:'#fff'}}>📈 TOTAL</div><div style={{fontSize:18, fontWeight:900, color:'#fff'}}>{stats.total}</div></div>
+        <div style={{marginTop:10, background:'#000', border:'2px solid #00ff00', borderRadius:16, padding:12}}>
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+            <b style={{fontSize:12, color:'#00ff00'}}>👑 ADMIN DASHBOARD!</b>
+            <button onClick={()=>setShowAdmin(!showAdmin)} style={{padding:'6px 12px', borderRadius:20, border:'none', background:showAdmin?'#00ff00':'#111', color:showAdmin?'#000':'#00ff00', fontWeight:800, fontSize:11, border:'1px solid #00ff00'}}>{showAdmin?'Hide':'Open'}</button>
           </div>
+          {showAdmin && (
+            <div style={{marginTop:10}}>
+              <div style={{display:'grid', gridTemplateColumns:'repeat(5, 1fr)', gap:6, textAlign:'center'}}>
+                <div style={{background:'#111', borderRadius:10, padding:8}}><div style={{fontSize:10, opacity:0.7, color:'#fff'}}>🟢 LIVE</div><div style={{fontSize:18, fontWeight:900, color:'#00ff00'}}>{stats.live}</div></div>
+                <div style={{background:'#111', borderRadius:10, padding:8}}><div style={{fontSize:10, opacity:0.7, color:'#fff'}}>📅 DAILY</div><div style={{fontSize:18, fontWeight:900, color:'#ffeb00'}}>{stats.daily}</div></div>
+                <div style={{background:'#111', borderRadius:10, padding:8}}><div style={{fontSize:10, opacity:0.7, color:'#fff'}}>📊 WEEKLY</div><div style={{fontSize:18, fontWeight:900, color:'#00d4ff'}}>{stats.weekly}</div></div>
+                <div style={{background:'#111', borderRadius:10, padding:8}}><div style={{fontSize:10, opacity:0.7, color:'#fff'}}>🗓️ MONTHLY</div><div style={{fontSize:18, fontWeight:900, color:'#ff00ff'}}>{stats.monthly}</div></div>
+                <div style={{background:'#111', borderRadius:10, padding:8}}><div style={{fontSize:10, opacity:0.7, color:'#fff'}}>📈 TOTAL</div><div style={{fontSize:18, fontWeight:900, color:'#fff'}}>{stats.total}</div></div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -388,7 +376,6 @@ export default function LiveStudio(){
                 {outros.length===0 && <div style={{fontSize:11, opacity:0.6}}>No outros yet.</div>}
               </div>
             </div>
-            <div style={{marginTop:8, fontSize:10, background:'#111', color:'#00ff88', padding:8, borderRadius:8, textAlign:'center', fontWeight:800}}>✅ Active Intro auto-plays when you tap GO LIVE!</div>
           </div>
         )}
       </div>
@@ -396,21 +383,28 @@ export default function LiveStudio(){
       <div style={{marginTop:12, border:'2px solid #111', borderRadius:16, padding:12, background:'#ffffff'}}>
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8}}>
           <b style={{fontSize:13, color:'#111', flex:1}}>📢 Scrolling Announcement Ticker</b>
-          <button onClick={()=>setTickerOn(!tickerOn)} style={{padding:'8px 14px', borderRadius:20, border:'none', background:tickerOn?'#16a34a':'#111', color:'#fff', fontWeight:900, fontSize:11, flexShrink:0, whiteSpace:'nowrap'}}>{tickerOn?'✅ ON':'○ OFF'}</button>
-        </div>
-        <input value={tickerText} onChange={e=>{setTickerText(e.target.value); localStorage.setItem('taglive_ticker_text', e.target.value); tickerOffsetRef.current=720}} placeholder="Type announcement..." style={{width:'100%', marginTop:8, padding:10, borderRadius:10, border:'2px solid #111', fontSize:12, fontWeight:700, background:'#000', color:'#FFFF00', boxSizing:'border-box'}} />
-        <div style={{marginTop:8, display:'flex', flexDirection:'column', gap:8}}>
-          <div style={{background:'#f3f0ff', borderRadius:10, padding:'8px 12px', display:'flex', alignItems:'center', gap:8, minWidth:0}}>
-            <span style={{fontSize:11, fontWeight:900, flexShrink:0}}>Size:</span>
-            <input type="range" min={16} max={48} value={tickerSize} onChange={e=>{setTickerSize(parseInt(e.target.value)); localStorage.setItem('taglive_ticker_size', e.target.value)}} style={{flex:1, minWidth:0}} />
-            <span style={{fontSize:11, fontWeight:900, background:'#111', color:'#FFFF00', padding:'4px 8px', borderRadius:10, flexShrink:0}}>{tickerSize}</span>
-          </div>
-          <div style={{background:'#f3f0ff', borderRadius:10, padding:'8px 12px', display:'flex', alignItems:'center', gap:8, minWidth:0}}>
-            <span style={{fontSize:11, fontWeight:900, flexShrink:0}}>Speed:</span>
-            <input type="range" min={1} max={6} step={0.5} value={tickerSpeed} onChange={e=>setTickerSpeed(parseFloat(e.target.value))} style={{flex:1, minWidth:0}} />
-            <span style={{fontSize:11, fontWeight:900, background:'#111', color:'#FFFF00', padding:'4px 8px', borderRadius:10, flexShrink:0}}>{tickerSpeed}</span>
+          <div style={{display:'flex', gap:6}}>
+            <button onClick={()=>setTickerOn(!tickerOn)} style={{padding:'8px 14px', borderRadius:20, border:'none', background:tickerOn?'#16a34a':'#111', color:'#fff', fontWeight:900, fontSize:11}}>{tickerOn?'✅ ON':'○ OFF'}</button>
+            <button onClick={()=>setShowTickerStudio(!showTickerStudio)} style={{padding:'8px 12px', borderRadius:20, border:'none', background:showTickerStudio?'#111':'#eee', color:showTickerStudio?'#fff':'#000', fontWeight:800, fontSize:11}}>{showTickerStudio?'Hide':'Open'}</button>
           </div>
         </div>
+        {showTickerStudio && (
+          <div style={{marginTop:10}}>
+            <input value={tickerText} onChange={e=>{setTickerText(e.target.value); localStorage.setItem('taglive_ticker_text', e.target.value); tickerOffsetRef.current=720}} placeholder="Type announcement..." style={{width:'100%', padding:10, borderRadius:10, border:'2px solid #111', fontSize:12, fontWeight:700, background:'#000', color:'#FFFF00', boxSizing:'border-box'}} />
+            <div style={{marginTop:8, display:'flex', flexDirection:'column', gap:8}}>
+              <div style={{background:'#f3f0ff', borderRadius:10, padding:'8px 12px', display:'flex', alignItems:'center', gap:8, minWidth:0}}>
+                <span style={{fontSize:11, fontWeight:900, flexShrink:0}}>Size:</span>
+                <input type="range" min={16} max={48} value={tickerSize} onChange={e=>{setTickerSize(parseInt(e.target.value)); localStorage.setItem('taglive_ticker_size', e.target.value)}} style={{flex:1, minWidth:0}} />
+                <span style={{fontSize:11, fontWeight:900, background:'#111', color:'#FFFF00', padding:'4px 8px', borderRadius:10, flexShrink:0}}>{tickerSize}</span>
+              </div>
+              <div style={{background:'#f3f0ff', borderRadius:10, padding:'8px 12px', display:'flex', alignItems:'center', gap:8, minWidth:0}}>
+                <span style={{fontSize:11, fontWeight:900, flexShrink:0}}>Speed:</span>
+                <input type="range" min={1} max={6} step={0.5} value={tickerSpeed} onChange={e=>setTickerSpeed(parseFloat(e.target.value))} style={{flex:1, minWidth:0}} />
+                <span style={{fontSize:11, fontWeight:900, background:'#111', color:'#FFFF00', padding:'4px 8px', borderRadius:10, flexShrink:0}}>{tickerSpeed}</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div style={{display:'flex', gap:6, marginTop:12}}>
@@ -419,7 +413,6 @@ export default function LiveStudio(){
         <button onClick={()=>setBgMode('image')} style={{flex:1, padding:8, borderRadius:20, border:'none', background:bgMode==='image'?'#111':'#eee', color:bgMode==='image'?'#fff':'#000', fontWeight:800, fontSize:12}}>🖼️ Image</button>
         <button onClick={()=>setBgMode('split')} style={{flex:1, padding:8, borderRadius:20, border:'none', background:bgMode==='split'?'#7c3aed':'#eee', color:bgMode==='split'?'#fff':'#000', fontWeight:800, fontSize:12}}>◑ Split</button>
       </div>
-
       <div style={{display:'flex', alignItems:'center', gap:6, marginTop:10, flexWrap:'wrap'}}>
         <div style={{flex:1, minWidth:140, display:'flex', alignItems:'center', gap:6, background:'#f3f0ff', padding:'6px 10px', borderRadius:10}}>
           <span style={{fontSize:10, fontWeight:800}}>A-</span>
