@@ -49,6 +49,8 @@ export default function LiveStudio(){
   const [tickerOn, setTickerOn] = useState(false)
   const [tickerSize, setTickerSize] = useState(26)
   const [tickerSpeed, setTickerSpeed] = useState(2)
+  const [churchName, setChurchName] = useState('THE LAST FIRE GLOBAL MINISTRY')
+  const [showChurchName, setShowChurchName] = useState(true)
   const tickerOffsetRef = useRef(720)
   const introFileRef = useRef<HTMLInputElement>(null)
   const outroFileRef = useRef<HTMLInputElement>(null)
@@ -82,6 +84,7 @@ export default function LiveStudio(){
       const ao = localStorage.getItem('taglive_active_outro'); if(ao) setActiveOutroId(ao)
       const tk = localStorage.getItem('taglive_ticker_text'); if(tk) setTickerText(tk)
       const ts = localStorage.getItem('taglive_ticker_size'); if(ts) setTickerSize(parseInt(ts))
+      const cn = localStorage.getItem('taglive_church_name'); if(cn) setChurchName(cn)
       const params = new URLSearchParams(window.location.search)
       if(params.get('admin')==='taglive2026'){ localStorage.setItem('taglive_admin','true'); setIsAdmin(true) }
       else if(localStorage.getItem('taglive_admin')==='true'){ setIsAdmin(true) }
@@ -244,10 +247,8 @@ export default function LiveStudio(){
           c.width=720; c.height=1280
           const hexToRgba = (hex:string, op:number)=>{ const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16); return `rgba(${r},${g},${b},${op})` }
           if(bgMode==='split'){
-            // FIXED: UP/DOWN SPLIT - Text TOP, Face BOTTOM - No stretch
             ctx.fillStyle='#000'
             ctx.fillRect(0,0,c.width,c.height)
-            // BOTTOM 50% = FACE with original ratio (cover crop, no stretch)
             const vw = v.videoWidth || 1280
             const vh = v.videoHeight || 720
             const targetW = c.width
@@ -258,7 +259,6 @@ export default function LiveStudio(){
             const sX = (vw - sW) / 2
             const sY = (vh - sH) / 2
             ctx.drawImage(v, sX, sY, sW, sH, 0, c.height*0.5, targetW, targetH)
-            // TOP 50% = TEXT background
             ctx.fillStyle=hexToRgba(boxColor, 1)
             ctx.fillRect(0,0,c.width,c.height*0.5)
           } else if(bgMode==='black'){ ctx.fillStyle='#000'; ctx.fillRect(0,0,c.width,c.height) }
@@ -268,11 +268,28 @@ export default function LiveStudio(){
           if(showText){
             ctx.save();
             const isSplit = bgMode==='split'
-            // FIXED: For split, text is in TOP half center
             const drawX = isSplit ? c.width*0.5 : pos.x
             const drawY = isSplit ? c.height*0.25 : pos.y
             const maxW = isSplit ? 600 : 560
-            ctx.translate(drawX, drawY); ctx.rotate(pos.rotation*Math.PI/180); ctx.scale(pos.scale, pos.scale); ctx.font=`bold ${fontSize}px sans-serif`; const pad = 24; const boxW = maxW + pad*2; const paragraphs = verse.split('\n'); let allLines:{text:string, isLastInPara:boolean, paraIdx:number}[] = []; paragraphs.forEach((para,pIdx)=>{ if(!para.trim()){ allLines.push({text:'', isLastInPara:true, paraIdx:pIdx}); return } const wrapped = wrapText(ctx, para.trim(), maxW); wrapped.forEach((l,i)=> allLines.push({text:l, isLastInPara:i===wrapped.length-1, paraIdx:pIdx})) }); const realCount = allLines.filter(l=>l.text!=='').length; const lineH = fontSize * 1.38; const boxH = realCount*lineH + (paragraphs.length-1)*10 + pad*2; if(bgMode==='face' || bgMode==='split'){ ctx.fillStyle=hexToRgba(boxColor, boxOpacity); ctx.fillRect(-boxW/2, -boxH/2, boxW, boxH) } else if(bgMode==='image'){ ctx.shadowColor='rgba(0,0,0,0.9)'; ctx.shadowBlur=10; ctx.shadowOffsetX=2; ctx.shadowOffsetY=3 } ctx.fillStyle=textColor; let y = -boxH/2 + pad + lineH/2; allLines.forEach((ln)=>{ if(!ln.text){ y+=10; return } if(paragraphs.length>1 && ln.paraIdx>0){ ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(ln.text, 0, y) } else { if(align==='justify' && !ln.isLastInPara){ const words = ln.text.split(' '); if(words.length===1){ ctx.textAlign='center'; ctx.fillText(ln.text, 0, y) } else { ctx.textAlign='left'; ctx.textBaseline='middle'; const totalWordsWidth = words.reduce((s,w)=>s+ctx.measureText(w).width,0); const gap = (maxW - totalWordsWidth) / (words.length-1); let x = -maxW/2; words.forEach((w)=>{ ctx.fillText(w, x, y); x += ctx.measureText(w).width + gap }) } } else { ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(ln.text, 0, y) } } y+= lineH }); if(selected==='text' && !isSplit){ ctx.strokeStyle='#7c3aed'; ctx.lineWidth=3; ctx.setLineDash([12,8]); ctx.strokeRect(-boxW/2-4, -boxH/2-4, boxW+8, boxH+8); ctx.setLineDash([]) } ctx.restore() }
+            ctx.translate(drawX, drawY); ctx.rotate(pos.rotation*Math.PI/180); ctx.scale(pos.scale, pos.scale); ctx.font=`bold ${fontSize}px sans-serif`; const pad = 24; const boxW = maxW + pad*2; const paragraphs = verse.split('\n'); let allLines:{text:string, isLastInPara:boolean, paraIdx:number}[] = []; paragraphs.forEach((para,pIdx)=>{ if(!para.trim()){ allLines.push({text:'', isLastInPara:true, paraIdx:pIdx}); return } const wrapped = wrapText(ctx, para.trim(), maxW); wrapped.forEach((l,i)=> allLines.push({text:l, isLastInPara:i===wrapped.length-1, paraIdx:pIdx})) }); const realCount = allLines.filter(l=>l.text!=='').length; const lineH = fontSize * 1.38; const boxH = realCount*lineH + (paragraphs.length-1)*10 + pad*2; if(bgMode==='face' || bgMode==='split'){ ctx.fillStyle=hexToRgba(boxColor, boxOpacity); ctx.fillRect(-boxW/2, -boxH/2, boxW, boxH) } else if(bgMode==='image'){ ctx.shadowColor='rgba(0,0,0,0.9)'; ctx.shadowBlur=10; ctx.shadowOffsetX=2; ctx.shadowOffsetY=3 } ctx.fillStyle=textColor; let y = -boxH/2 + pad + lineH/2; allLines.forEach((ln)=>{ if(!ln.text){ y+=10; return } if(paragraphs.length>1 && ln.paraIdx>0){ ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(ln.text, 0, y) } else { if(align==='justify' && !ln.isLastInPara){ const words = ln.text.split(' '); if(words.length===1){ ctx.textAlign='center'; ctx.fillText(ln.text, 0, y) } else { ctx.textAlign='left'; ctx.textBaseline='middle'; const totalWordsWidth = words.reduce((s,w)=>s+ctx.measureText(w).width,0); const gap = (maxW - totalWordsWidth) / (words.length-1); let x = -maxW/2; words.forEach((w)=>{ ctx.fillText(w, x, y); x += ctx.measureText(w).width + gap }) } } else { ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(ln.text, 0, y) } } y+= lineH }); 
+            // PREMIUM: Church name UNDER text (only in split mode)
+            if(isSplit && showChurchName && churchName){
+              ctx.fillStyle = '#FFD700'
+              ctx.font = `900 ${Math.max(14, Math.floor(fontSize*0.52))}px sans-serif`
+              ctx.textAlign = 'center'
+              ctx.textBaseline = 'middle'
+              // Draw below the verse box with small gap
+              const churchY = y + 22
+              // Optional small background pill for premium look
+              const tW = ctx.measureText(churchName.toUpperCase()).width + 28
+              ctx.fillStyle = 'rgba(124,58,237,0.95)'
+              const pillH = 28
+              // @ts-ignore rounded rect fallback
+              ctx.fillRect(-tW/2, churchY - pillH/2, tW, pillH)
+              ctx.fillStyle = '#FFD700'
+              ctx.fillText(churchName.toUpperCase(), 0, churchY)
+            }
+            if(selected==='text' && !isSplit){ ctx.strokeStyle='#7c3aed'; ctx.lineWidth=3; ctx.setLineDash([12,8]); ctx.strokeRect(-boxW/2-4, -boxH/2-4, boxW+8, boxH+8); ctx.setLineDash([]) } ctx.restore() }
           if(isLive || ytLive || isRecording){ ctx.fillStyle=isRecording?'#a21caf':'#ef4444'; ctx.beginPath(); ctx.arc(40,40,12,0,Math.PI*2); ctx.fill() }
           if(tickerOn && tickerText){
             const tickerH = tickerSize + 24
@@ -291,7 +308,7 @@ export default function LiveStudio(){
       }
       a=requestAnimationFrame(draw)
     }; draw(); return()=>cancelAnimationFrame(a)
-  },[isCam,verse,isLive,pos,bgMode,fontSize,align,bgImage,ytLive,textColor,boxColor,boxOpacity,logoImage,logoPos,isRecording,selected,showText,tickerOn,tickerText,tickerSize,tickerSpeed])
+  },[isCam,verse,isLive,pos,bgMode,fontSize,align,bgImage,ytLive,textColor,boxColor,boxOpacity,logoImage,logoPos,isRecording,selected,showText,tickerOn,tickerText,tickerSize,tickerSpeed,churchName,showChurchName])
 
   return (
     <div style={{padding:16, maxWidth:480, margin:'0 auto'}}>
@@ -420,6 +437,15 @@ export default function LiveStudio(){
             </div>
           </div>
         )}
+      </div>
+
+      {/* PREMIUM: Church Name Input */}
+      <div style={{marginTop:12, border:'2px solid #7c3aed', borderRadius:16, padding:12, background:'#fff'}}>
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+          <b style={{fontSize:13}}>🏛️ Church Name (Under Text)</b>
+          <button onClick={()=>setShowChurchName(!showChurchName)} style={{padding:'6px 12px', borderRadius:20, border:'none', background:showChurchName?'#7c3aed':'#111', color:'#fff', fontWeight:800, fontSize:11}}>{showChurchName?'✅ ON':'○ OFF'}</button>
+        </div>
+        <input value={churchName} onChange={e=>{setChurchName(e.target.value); localStorage.setItem('taglive_church_name', e.target.value)}} placeholder="THE LAST FIRE GLOBAL MINISTRY" style={{width:'100%', marginTop:8, padding:10, borderRadius:10, border:'2px solid #7c3aed', fontSize:12, fontWeight:800, boxSizing:'border-box'}} />
       </div>
 
       <div style={{display:'flex', gap:6, marginTop:12}}>
