@@ -51,7 +51,6 @@ export default function LiveStudio(){
   const [tickerSpeed, setTickerSpeed] = useState(2)
   const [churchName, setChurchName] = useState('THE LAST FIRE GLOBAL MINISTRY')
   const [showChurchName, setShowChurchName] = useState(true)
-  // PREMIUM: LIVE TIMER
   const [liveSeconds, setLiveSeconds] = useState(0)
   const timerRef = useRef<any>(null)
   const tickerOffsetRef = useRef(720)
@@ -306,17 +305,19 @@ export default function LiveStudio(){
               ctx.fillText(churchName.toUpperCase(), 0, churchY)
             }
             if(selected==='text' && !isSplit){ ctx.strokeStyle='#7c3aed'; ctx.lineWidth=3; ctx.setLineDash([12,8]); ctx.strokeRect(-boxW/2-4, -boxH/2-4, boxW+8, boxH+8); ctx.setLineDash([]) } ctx.restore() }
+          // === UPDATED: RED, BIGGER, BOLDER, NO BACKGROUND ===
           if(isLive || ytLive || isRecording){
             const timeStr = formatTime(liveSeconds)
-            // Premium LIVE timer pill
-            ctx.fillStyle = isRecording ? '#a21caf' : '#ef4444'
-            const pillW = 165
-            ctx.fillRect(16, 16, pillW, 32)
-            ctx.fillStyle = '#fff'
-            ctx.font = 'bold 18px sans-serif'
+            ctx.save()
+            ctx.fillStyle = '#FF0000'
+            ctx.font = '900 28px sans-serif'
             ctx.textAlign = 'left'
-            ctx.textBaseline = 'middle'
-            ctx.fillText(`● LIVE ${timeStr}`, 28, 32)
+            ctx.textBaseline = 'top'
+            ctx.shadowColor = 'rgba(0,0,0,0.9)'
+            ctx.shadowBlur = 6
+            // Big bold red LIVE timer - no background box
+            ctx.fillText(`● LIVE ${timeStr}`, 24, 22)
+            ctx.restore()
           }
           if(tickerOn && tickerText){
             const tickerH = tickerSize + 24
@@ -364,10 +365,9 @@ export default function LiveStudio(){
           </div>
         </div>
         <div><div style={{fontSize:26, fontWeight:900}}>Tag<span style={{color:'#7c3aed'}}>Live</span></div><div style={{fontSize:10, letterSpacing:2, fontWeight:800, color:'#666'}}>TAG YOUR LIVE</div></div>
-        {/* PREMIUM LIVE TIMER BADGE OUTSIDE CANVAS */}
         {(isLive || ytLive || isRecording) && (
-          <div style={{marginLeft:'auto', background: isRecording?'#a21caf':'#ef4444', color:'#fff', padding:'6px 12px', borderRadius:20, fontSize:12, fontWeight:900, display:'flex', alignItems:'center', gap:4}}>
-            <span style={{width:8, height:8, background:'#fff', borderRadius:'50%', display:'inline-block'}}/> LIVE {formatTime(liveSeconds)}
+          <div style={{marginLeft:'auto', color:'#FF0000', padding:'6px 12px', fontSize:16, fontWeight:900, display:'flex', alignItems:'center', gap:4}}>
+            ● LIVE {formatTime(liveSeconds)}
           </div>
         )}
       </div>
@@ -534,7 +534,7 @@ export default function LiveStudio(){
         <button onClick={pasteClipboard} style={{flex:1, background:'#059669', color:'#fff', padding:10, borderRadius:10, fontWeight:800, border:'none', fontSize:12}}>📋 Paste Verse</button>
         <button onClick={saveVerse} style={{flex:1, background:'#f59e0b', color:'#000', padding:10, borderRadius:10, fontWeight:800, border:'none', fontSize:12}}>💾 Save</button>
       </div>
-      <textarea value={verse} onChange={e=>setVerse(e.target.value)} style={{width:'100%', height:90, marginTop:10, padding:12, borderRadius:12, border:'1px solid #ddd'}} placeholder={"Ministering:\nAPOSTLE JAMES AGBEM KAJINYANA"} />
+      <textarea value={verse} onChange={e=>setVerse(e.target.value)} style={{width:'100%', height:90, marginTop:10, padding:12, borderRadius:12, border:'1px solid #ddd'}} placeholder={"Ministering:\nNAME OF PRESENTER"} />
       {saved.length>0 && <div style={{marginTop:8, border:'1px solid #eee', borderRadius:10, padding:8}}><div style={{fontSize:11, fontWeight:800, marginBottom:6}}>📌 Saved (Tap):</div><div style={{display:'flex', flexWrap:'wrap', gap:6}}>{saved.map((s,i)=><span key={i} onClick={()=>setVerse(s)} style={{fontSize:11, background:'#f3f0ff', border:'1px solid #ddd', padding:'6px 8px', borderRadius:20, cursor:'pointer'}}>{s.substring(0,30)}...</span>)}</div></div>}
       <div style={{marginTop:14, border:'2px solid #111', borderRadius:14, padding:12}}>
         <b>Connect Facebook - Intro plays first!</b>
@@ -542,11 +542,11 @@ export default function LiveStudio(){
           <button onClick={loginFacebook} style={{flex:1, background:fbUser?'#16a34a':'#1877F2', color:'#fff', padding:12, borderRadius:8, fontWeight:800, border:'none'}}>{fbUser?`✓ ${fbUser.name}`:'Login Facebook'}</button>
           <button onClick={()=>loadPages()} style={{flex:1, border:'1px solid #000', padding:12, borderRadius:8, fontWeight:800, background:'#fff'}}>Load My Pages</button>
         </div>
-        {pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6, padding:10, background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff', color:selectedPage?.id===p.id?'#fff':'#000', borderRadius:8, fontSize:13, fontWeight:700, cursor:'pointer'}}>{p.name} {selectedPage?.id===p.id?`✓ LIVE ${formatTime(liveSeconds)}`:'(Tap to Go Live with Intro)'}</div>)}
+        {pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6, padding:10, background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff', color:selectedPage?.id===p.id?'#fff':'#000', borderRadius:8, fontSize:13, fontWeight:700, cursor:'pointer'}}>{p.name} {selectedPage?.id===p.id?`✓ LIVE ${formatTime(liveSeconds)}`:'(Go Live with Intro)'}</div>)}
         {fbStreamUrl && <div style={{marginTop:10, padding:10, background:'#dcfce7', borderRadius:8, fontSize:11, wordBreak:'break-all'}}>✅ FB: {fbStreamUrl.substring(0,70)}...</div>}
       </div>
       <div style={{marginTop:14, border:'2px solid #ff0000', borderRadius:14, padding:12}}>
-        <b>🔴 Connect YouTube Live - Intro plays first!</b>
+        <b>🔴 Connect YouTube Live - Intro!</b>
         <input value={ytKey} onChange={e=>{setYtKey(e.target.value); localStorage.setItem('taglive_ytkey', e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%', marginTop:8, padding:10, borderRadius:8, border:'1px solid #ddd', fontSize:12}} />
         <div style={{display:'flex', gap:8, marginTop:8}}>
           <button onClick={()=>{ if(!ytKey) return alert('Paste YouTube key first'); playActiveIntroThen(()=>{ setYtLive(true); setIsLive(true); startTimer(); alert('✅ YouTube LIVE AFTER INTRO') }) }} style={{flex:1, background:ytLive?'#16a34a':'#ff0000', color:'#fff', padding:12, borderRadius:8, fontWeight:800, border:'none'}}>{ytLive?`✓ YouTube LIVE ${formatTime(liveSeconds)}`:'Go Live YouTube + Intro'}</button>
