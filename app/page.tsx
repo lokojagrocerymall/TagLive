@@ -71,6 +71,7 @@ export default function LiveStudio(){
   const [showStudio, setShowStudio] = useState(false)
   const [showTickerStudio, setShowTickerStudio] = useState(false)
   const [showAdmin, setShowAdmin] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
   const [playing, setPlaying] = useState<any>(null)
   const [animTitle, setAnimTitle] = useState('KPAKO NYANKPA')
   const [animSub, setAnimSub] = useState('Welcome to Live Service')
@@ -263,7 +264,6 @@ export default function LiveStudio(){
     setBibleLoading(true)
     setBibleResult('')
     const qLower = queryToUse.toLowerCase().trim()
-
     const getOffline = (q: string)=>{
       try{
         const cache = JSON.parse(localStorage.getItem('taglive_bible_cache')||'{}')
@@ -274,7 +274,6 @@ export default function LiveStudio(){
       if(found) return OFFLINE_KJV[found] + ' [OFFLINE KJV]'
       return null
     }
-
     try{
       const res = await fetch(`https://bible-api.com/${encodeURIComponent(queryToUse)}?translation=${bibleVer}`)
       const data = await res.json()
@@ -490,95 +489,110 @@ export default function LiveStudio(){
         </div>
       )}
 
-      <div style={{marginTop:10, border:'2px solid #FF0000', borderRadius:12, padding:10, background:lowData?'#fef2f2':'#fff', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-        <div><b style={{fontSize:12}}>Data Saver Mode</b><div style={{fontSize:10, opacity:0.7}}>{lowData?'480p - Uses less data':'720p - High Quality'}</div></div>
-        <button onClick={()=>{ const v=!lowData; setLowData(v); localStorage.setItem('taglive_lowdata', v.toString()); if(isCam) setTimeout(()=>startCamera(),300) }} style={{padding:'8px 14px', borderRadius:20, border:'none', background:lowData?'#16a34a':'#111', color:'#fff', fontWeight:900, fontSize:11}}>{lowData?'480p ON':'720p'}</button>
-      </div>
-
-      <div style={{marginTop:12, border:'2px solid #7c3aed', borderRadius:16, padding:12, background:'#f9f5ff'}}>
-        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-          <b style={{fontSize:14}}>Intro / Outro Studio</b>
-          <button onClick={()=>setShowStudio(!showStudio)} style={{padding:'6px 12px', borderRadius:20, border:'none', background:'#111', color:'#fff', fontWeight:800, fontSize:11}}>{showStudio?'Hide':'Open'}</button>
-        </div>
-        {showStudio && (
-          <div style={{marginTop:10}}>
-            <div style={{background:'#fff', padding:8, borderRadius:10, border:'1px solid #ddd'}}>
-              <input value={animTitle} onChange={e=>setAnimTitle(e.target.value)} placeholder="Title e.g. GAGO ECEWU..." style={{width:'100%', padding:8, borderRadius:8, border:'1px solid #ddd', fontSize:12, marginBottom:6}} />
-              <input value={animSub} onChange={e=>setAnimSub(e.target.value)} placeholder="Subtitle e.g. Welcome" style={{width:'100%', padding:8, borderRadius:8, border:'1px solid #ddd', fontSize:12}} />
-            </div>
-            <div style={{display:'flex', gap:6, marginTop:8}}>
-              <button onClick={()=>addAnimatedIntro(false)} style={{flex:1, background:'#7c3aed', color:'#fff', padding:10, borderRadius:10, fontWeight:800, border:'none', fontSize:11}}>Save Animated Intro</button>
-              <button onClick={()=>addAnimatedIntro(true)} style={{flex:1, background:'#111', color:'#fff', padding:10, borderRadius:10, fontWeight:800, border:'none', fontSize:11}}>Save Animated Outro</button>
-            </div>
-            <div style={{display:'flex', gap:6, marginTop:8}}>
-              <label style={{flex:1, background:'#7c3aed', color:'#fff', padding:10, borderRadius:10, fontWeight:800, fontSize:11, textAlign:'center', cursor:'pointer'}}>
-                Upload Intro Image/Video
-                <input ref={introFileRef} type="file" accept="image/*,video/*" onChange={handleIntroFile} style={{display:'none'}} />
-              </label>
-              <label style={{flex:1, background:'#111', color:'#fff', padding:10, borderRadius:10, fontWeight:800, fontSize:11, textAlign:'center', cursor:'pointer'}}>
-                Upload Outro
-                <input ref={outroFileRef} type="file" accept="image/*,video/*" onChange={handleOutroFile} style={{display:'none'}} />
-              </label>
-            </div>
-            <div style={{marginTop:10, display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, minWidth:0}}>
-              <div style={{background:'#fff', borderRadius:10, padding:8, border:'1px solid #ddd', minWidth:0, overflow:'hidden'}}>
-                <div style={{fontSize:11, fontWeight:900, marginBottom:6}}>INTROs ({intros.length}):</div>
-                {intros.map(i=>(
-                  <div key={i.id} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 8px', marginTop:4, background:i.id===activeIntroId?'#7c3aed':'#f3f0ff', color:i.id===activeIntroId?'#fff':'#000', borderRadius:8, fontSize:11, minWidth:0, overflow:'hidden'}}>
-                    <span onClick={()=>{ setActiveIntroId(i.id); localStorage.setItem('taglive_active_intro', i.id) }} style={{flex:1, cursor:'pointer', fontWeight:700, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{i.title?.substring(0,12)} ({Math.round(i.duration)}s)</span>
-                    <button onClick={()=>{ playItem(i) }} style={{marginLeft:4, background:'#000', color:'#fff', border:'none', borderRadius:6, padding:'2px 6px', fontSize:10, flexShrink:0}}>▶</button>
-                    <button onClick={()=>{ const n=intros.filter(x=>x.id!==i.id); saveIntros(n); if(activeIntroId===i.id){ setActiveIntroId(null); localStorage.removeItem('taglive_active_intro') } }} style={{marginLeft:4, background:'#ef4444', color:'#fff', border:'none', borderRadius:6, padding:'2px 6px', fontSize:10, flexShrink:0}}>✕</button>
-                  </div>
-                ))}
-              </div>
-              <div style={{background:'#fff', borderRadius:10, padding:8, border:'1px solid #ddd', minWidth:0, overflow:'hidden'}}>
-                <div style={{fontSize:11, fontWeight:900, marginBottom:6}}>OUTROs ({outros.length}):</div>
-                {outros.map(o=>(
-                  <div key={o.id} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 8px', marginTop:4, background:o.id===activeOutroId?'#16a34a':'#f0fdf4', color:o.id===activeOutroId?'#fff':'#000', borderRadius:8, fontSize:11, minWidth:0, overflow:'hidden'}}>
-                    <span onClick={()=>{ setActiveOutroId(o.id); localStorage.setItem('taglive_active_outro', o.id) }} style={{flex:1, cursor:'pointer', fontWeight:700, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{o.title?.substring(0,12)}</span>
-                    <button onClick={()=>{ playItem(o) }} style={{marginLeft:4, background:'#000', color:'#fff', border:'none', borderRadius:6, padding:'2px 6px', fontSize:10, flexShrink:0}}>▶</button>
-                    <button onClick={()=>{ const n=outros.filter(x=>x.id!==o.id); saveOutros(n); if(activeOutroId===o.id){ setActiveOutroId(null); localStorage.removeItem('taglive_active_outro') } }} style={{marginLeft:4, background:'#ef4444', color:'#fff', border:'none', borderRadius:6, padding:'2px 6px', fontSize:10, flexShrink:0}}>✕</button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
+      {/* NEW SINGLE FOLD FOR YOUR ORANGE MARK - CLEAN SCREEN */}
       <div style={{marginTop:12, border:'2px solid #111', borderRadius:16, padding:12, background:'#ffffff'}}>
-        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8}}>
-          <b style={{fontSize:13, color:'#111', flex:1}}>Scrolling Announcement Ticker</b>
-          <div style={{display:'flex', gap:6}}>
-            <button onClick={()=>setTickerOn(!tickerOn)} style={{padding:'8px 14px', borderRadius:20, border:'none', background:tickerOn?'#16a34a':'#111', color:'#fff', fontWeight:900, fontSize:11}}>{tickerOn?'ON':'OFF'}</button>
-            <button onClick={()=>setShowTickerStudio(!showTickerStudio)} style={{padding:'8px 12px', borderRadius:20, border:'none', background:showTickerStudio?'#111':'#eee', color:showTickerStudio?'#fff':'#000', fontWeight:800, fontSize:11}}>{showTickerStudio?'Hide':'Open'}</button>
-          </div>
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+          <b style={{fontSize:14}}>⚙️ Settings & Studio</b>
+          <button onClick={()=>setShowSettings(!showSettings)} style={{padding:'8px 14px', borderRadius:20, border:'none', background:showSettings?'#111':'#eee', color:showSettings?'#fff':'#000', fontWeight:900, fontSize:11}}>{showSettings?'Hide':'Open'}</button>
         </div>
-        {showTickerStudio && (
-          <div style={{marginTop:10}}>
-            <input value={tickerText} onChange={e=>{setTickerText(e.target.value); localStorage.setItem('taglive_ticker_text', e.target.value); tickerOffsetRef.current=720}} placeholder="Type announcement..." style={{width:'100%', padding:10, borderRadius:10, border:'2px solid #111', fontSize:12, fontWeight:700, background:'#000', color:'#FFFF00', boxSizing:'border-box'}} />
-            <div style={{marginTop:8, display:'flex', flexDirection:'column', gap:8}}>
-              <div style={{background:'#f3f0ff', borderRadius:10, padding:'8px 12px', display:'flex', alignItems:'center', gap:8, minWidth:0}}>
-                <span style={{fontSize:11, fontWeight:900, flexShrink:0}}>Size:</span>
-                <input type="range" min={16} max={48} value={tickerSize} onChange={e=>{setTickerSize(parseInt(e.target.value)); localStorage.setItem('taglive_ticker_size', e.target.value)}} style={{flex:1, minWidth:0}} />
-                <span style={{fontSize:11, fontWeight:900, background:'#111', color:'#FFFF00', padding:'4px 8px', borderRadius:10, flexShrink:0}}>{tickerSize}</span>
+        {showSettings && (
+          <div style={{marginTop:12, display:'flex', flexDirection:'column', gap:12}}>
+            {/* Data Saver */}
+            <div style={{border:'2px solid #FF0000', borderRadius:12, padding:10, background:lowData?'#fef2f2':'#fff', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+              <div><b style={{fontSize:12}}>Data Saver Mode</b><div style={{fontSize:10, opacity:0.7}}>{lowData?'480p - Uses less data':'720p - High Quality'}</div></div>
+              <button onClick={()=>{ const v=!lowData; setLowData(v); localStorage.setItem('taglive_lowdata', v.toString()); if(isCam) setTimeout(()=>startCamera(),300) }} style={{padding:'8px 14px', borderRadius:20, border:'none', background:lowData?'#16a34a':'#111', color:'#fff', fontWeight:900, fontSize:11}}>{lowData?'480p ON':'720p'}</button>
+            </div>
+
+            {/* Intro Outro Studio */}
+            <div style={{border:'2px solid #7c3aed', borderRadius:16, padding:12, background:'#f9f5ff'}}>
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                <b style={{fontSize:14}}>Intro / Outro Studio</b>
+                <button onClick={()=>setShowStudio(!showStudio)} style={{padding:'6px 12px', borderRadius:20, border:'none', background:'#111', color:'#fff', fontWeight:800, fontSize:11}}>{showStudio?'Hide':'Open'}</button>
               </div>
-              <div style={{background:'#f3f0ff', borderRadius:10, padding:'8px 12px', display:'flex', alignItems:'center', gap:8, minWidth:0}}>
-                <span style={{fontSize:11, fontWeight:900, flexShrink:0}}>Speed:</span>
-                <input type="range" min={1} max={6} step={0.5} value={tickerSpeed} onChange={e=>setTickerSpeed(parseFloat(e.target.value))} style={{flex:1, minWidth:0}} />
-                <span style={{fontSize:11, fontWeight:900, background:'#111', color:'#FFFF00', padding:'4px 8px', borderRadius:10, flexShrink:0}}>{tickerSpeed}</span>
+              {showStudio && (
+                <div style={{marginTop:10}}>
+                  <div style={{background:'#fff', padding:8, borderRadius:10, border:'1px solid #ddd'}}>
+                    <input value={animTitle} onChange={e=>setAnimTitle(e.target.value)} placeholder="Title e.g. GAGO ECEWU..." style={{width:'100%', padding:8, borderRadius:8, border:'1px solid #ddd', fontSize:12, marginBottom:6}} />
+                    <input value={animSub} onChange={e=>setAnimSub(e.target.value)} placeholder="Subtitle e.g. Welcome" style={{width:'100%', padding:8, borderRadius:8, border:'1px solid #ddd', fontSize:12}} />
+                  </div>
+                  <div style={{display:'flex', gap:6, marginTop:8}}>
+                    <button onClick={()=>addAnimatedIntro(false)} style={{flex:1, background:'#7c3aed', color:'#fff', padding:10, borderRadius:10, fontWeight:800, border:'none', fontSize:11}}>Save Animated Intro</button>
+                    <button onClick={()=>addAnimatedIntro(true)} style={{flex:1, background:'#111', color:'#fff', padding:10, borderRadius:10, fontWeight:800, border:'none', fontSize:11}}>Save Animated Outro</button>
+                  </div>
+                  <div style={{display:'flex', gap:6, marginTop:8}}>
+                    <label style={{flex:1, background:'#7c3aed', color:'#fff', padding:10, borderRadius:10, fontWeight:800, fontSize:11, textAlign:'center', cursor:'pointer'}}>
+                      Upload Intro Image/Video
+                      <input ref={introFileRef} type="file" accept="image/*,video/*" onChange={handleIntroFile} style={{display:'none'}} />
+                    </label>
+                    <label style={{flex:1, background:'#111', color:'#fff', padding:10, borderRadius:10, fontWeight:800, fontSize:11, textAlign:'center', cursor:'pointer'}}>
+                      Upload Outro
+                      <input ref={outroFileRef} type="file" accept="image/*,video/*" onChange={handleOutroFile} style={{display:'none'}} />
+                    </label>
+                  </div>
+                  <div style={{marginTop:10, display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, minWidth:0}}>
+                    <div style={{background:'#fff', borderRadius:10, padding:8, border:'1px solid #ddd', minWidth:0, overflow:'hidden'}}>
+                      <div style={{fontSize:11, fontWeight:900, marginBottom:6}}>INTROs ({intros.length}):</div>
+                      {intros.map(i=>(
+                        <div key={i.id} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 8px', marginTop:4, background:i.id===activeIntroId?'#7c3aed':'#f3f0ff', color:i.id===activeIntroId?'#fff':'#000', borderRadius:8, fontSize:11, minWidth:0, overflow:'hidden'}}>
+                          <span onClick={()=>{ setActiveIntroId(i.id); localStorage.setItem('taglive_active_intro', i.id) }} style={{flex:1, cursor:'pointer', fontWeight:700, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{i.title?.substring(0,12)} ({Math.round(i.duration)}s)</span>
+                          <button onClick={()=>{ playItem(i) }} style={{marginLeft:4, background:'#000', color:'#fff', border:'none', borderRadius:6, padding:'2px 6px', fontSize:10, flexShrink:0}}>▶</button>
+                          <button onClick={()=>{ const n=intros.filter(x=>x.id!==i.id); saveIntros(n); if(activeIntroId===i.id){ setActiveIntroId(null); localStorage.removeItem('taglive_active_intro') } }} style={{marginLeft:4, background:'#ef4444', color:'#fff', border:'none', borderRadius:6, padding:'2px 6px', fontSize:10, flexShrink:0}}>✕</button>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{background:'#fff', borderRadius:10, padding:8, border:'1px solid #ddd', minWidth:0, overflow:'hidden'}}>
+                      <div style={{fontSize:11, fontWeight:900, marginBottom:6}}>OUTROs ({outros.length}):</div>
+                      {outros.map(o=>(
+                        <div key={o.id} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 8px', marginTop:4, background:o.id===activeOutroId?'#16a34a':'#f0fdf4', color:o.id===activeOutroId?'#fff':'#000', borderRadius:8, fontSize:11, minWidth:0, overflow:'hidden'}}>
+                          <span onClick={()=>{ setActiveOutroId(o.id); localStorage.setItem('taglive_active_outro', o.id) }} style={{flex:1, cursor:'pointer', fontWeight:700, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{o.title?.substring(0,12)}</span>
+                          <button onClick={()=>{ playItem(o) }} style={{marginLeft:4, background:'#000', color:'#fff', border:'none', borderRadius:6, padding:'2px 6px', fontSize:10, flexShrink:0}}>▶</button>
+                          <button onClick={()=>{ const n=outros.filter(x=>x.id!==o.id); saveOutros(n); if(activeOutroId===o.id){ setActiveOutroId(null); localStorage.removeItem('taglive_active_outro') } }} style={{marginLeft:4, background:'#ef4444', color:'#fff', border:'none', borderRadius:6, padding:'2px 6px', fontSize:10, flexShrink:0}}>✕</button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Ticker */}
+            <div style={{border:'2px solid #111', borderRadius:16, padding:12, background:'#ffffff'}}>
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8}}>
+                <b style={{fontSize:13, color:'#111', flex:1}}>Scrolling Announcement Ticker</b>
+                <div style={{display:'flex', gap:6}}>
+                  <button onClick={()=>setTickerOn(!tickerOn)} style={{padding:'8px 14px', borderRadius:20, border:'none', background:tickerOn?'#16a34a':'#111', color:'#fff', fontWeight:900, fontSize:11}}>{tickerOn?'ON':'OFF'}</button>
+                  <button onClick={()=>setShowTickerStudio(!showTickerStudio)} style={{padding:'8px 12px', borderRadius:20, border:'none', background:showTickerStudio?'#111':'#eee', color:showTickerStudio?'#fff':'#000', fontWeight:800, fontSize:11}}>{showTickerStudio?'Hide':'Open'}</button>
+                </div>
               </div>
+              {showTickerStudio && (
+                <div style={{marginTop:10}}>
+                  <input value={tickerText} onChange={e=>{setTickerText(e.target.value); localStorage.setItem('taglive_ticker_text', e.target.value); tickerOffsetRef.current=720}} placeholder="Type announcement..." style={{width:'100%', padding:10, borderRadius:10, border:'2px solid #111', fontSize:12, fontWeight:700, background:'#000', color:'#FFFF00', boxSizing:'border-box'}} />
+                  <div style={{marginTop:8, display:'flex', flexDirection:'column', gap:8}}>
+                    <div style={{background:'#f3f0ff', borderRadius:10, padding:'8px 12px', display:'flex', alignItems:'center', gap:8, minWidth:0}}>
+                      <span style={{fontSize:11, fontWeight:900, flexShrink:0}}>Size:</span>
+                      <input type="range" min={16} max={48} value={tickerSize} onChange={e=>{setTickerSize(parseInt(e.target.value)); localStorage.setItem('taglive_ticker_size', e.target.value)}} style={{flex:1, minWidth:0}} />
+                      <span style={{fontSize:11, fontWeight:900, background:'#111', color:'#FFFF00', padding:'4px 8px', borderRadius:10, flexShrink:0}}>{tickerSize}</span>
+                    </div>
+                    <div style={{background:'#f3f0ff', borderRadius:10, padding:'8px 12px', display:'flex', alignItems:'center', gap:8, minWidth:0}}>
+                      <span style={{fontSize:11, fontWeight:900, flexShrink:0}}>Speed:</span>
+                      <input type="range" min={1} max={6} step={0.5} value={tickerSpeed} onChange={e=>setTickerSpeed(parseFloat(e.target.value))} style={{flex:1, minWidth:0}} />
+                      <span style={{fontSize:11, fontWeight:900, background:'#111', color:'#FFFF00', padding:'4px 8px', borderRadius:10, flexShrink:0}}>{tickerSpeed}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Church Name */}
+            <div style={{border:'2px solid #7c3aed', borderRadius:16, padding:12, background:'#fff'}}>
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                <b style={{fontSize:13}}>Church Name (Under Text)</b>
+                <button onClick={()=>setShowChurchName(!showChurchName)} style={{padding:'6px 12px', borderRadius:20, border:'none', background:showChurchName?'#7c3aed':'#111', color:'#fff', fontWeight:800, fontSize:11}}>{showChurchName?'ON':'OFF'}</button>
+              </div>
+              <input value={churchName} onChange={e=>{setChurchName(e.target.value); localStorage.setItem('taglive_church_name', e.target.value)}} placeholder="SALEM GANAJA CITY" style={{width:'100%', marginTop:8, padding:10, borderRadius:10, border:'2px solid #7c3aed', fontSize:12, fontWeight:800, boxSizing:'border-box'}} />
             </div>
           </div>
         )}
-      </div>
-
-      <div style={{marginTop:12, border:'2px solid #7c3aed', borderRadius:16, padding:12, background:'#fff'}}>
-        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-          <b style={{fontSize:13}}>Church Name (Under Text)</b>
-          <button onClick={()=>setShowChurchName(!showChurchName)} style={{padding:'6px 12px', borderRadius:20, border:'none', background:showChurchName?'#7c3aed':'#111', color:'#fff', fontWeight:800, fontSize:11}}>{showChurchName?'ON':'OFF'}</button>
-        </div>
-        <input value={churchName} onChange={e=>{setChurchName(e.target.value); localStorage.setItem('taglive_church_name', e.target.value)}} placeholder="KPAKO NYANKPA GLOBAL MINISTRY" style={{width:'100%', marginTop:8, padding:10, borderRadius:10, border:'2px solid #7c3aed', fontSize:12, fontWeight:800, boxSizing:'border-box'}} />
       </div>
 
       <div style={{display:'flex', gap:6, marginTop:12}}>
