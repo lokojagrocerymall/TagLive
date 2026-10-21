@@ -51,23 +51,33 @@ const BIBLE_BOOKS = [
 ]
 
 const SS_HYMNS = [
-{no:1,title:"There Shall Be Showers Of Blessing",lyrics:"There shall be showers of blessing:\nThis is the promise of love;\nThere shall be seasons refreshing,\nSent from the Saviour above.\n\nChorus:\nShowers of blessing,\nShowers of blessing we need;\nMercy-drops round us are falling,\nBut for the showers we plead.\n\nThere shall be showers of blessing,\nPrecious reviving again;\nOver the hills and the valleys,\nSound of abundance of rain.\n\nThere shall be showers of blessing;\nSend them upon us, O Lord;\nGrant to us now a refreshing,\nCome, and now honor Thy Word."},
-{no:2,title:"What A Friend We Have In Jesus",lyrics:"What a friend we have in Jesus,\nAll our sins and griefs to bear!\nWhat a privilege to carry\nEverything to God in prayer!\n\nHave we trials and temptations?\nIs there trouble anywhere?\nWe should never be discouraged,\nTake it to the Lord in prayer."},
-{no:10,title:"How Great Thou Art",lyrics:"O Lord my God, when I in awesome wonder\nConsider all the worlds Thy hands have made;\nI see the stars, I hear the rolling thunder,\nThy power throughout the universe displayed.\n\nThen sings my soul, my Saviour God, to Thee,\nHow great Thou art, how great Thou art!\n\nAnd when I think that God, His Son not sparing,\nSent Him to die, I scarce can take it in;\nThat on the cross, my burden gladly bearing,\nHe bled and died to take away my sin;"},
-{no:20,title:"It Is Well With My Soul",lyrics:"When peace like a river attendeth my way,\nWhen sorrows like sea billows roll;\nWhatever my lot, Thou hast taught me to say,\nIt is well, it is well with my soul.\n\nIt is well with my soul,\nIt is well, it is well with my soul."},
+{no:1,title:"There Shall Be Showers Of Blessing",lyrics:"There shall be showers of blessing:\nThis is the promise of love;\nThere shall be seasons refreshing,\nSent from the Saviour above.\n\nChorus:\nShowers of blessing,\nShowers of blessing we need;\nMercy-drops round us are falling,\nBut for the showers we plead."},
+{no:2,title:"What A Friend We Have In Jesus",lyrics:"What a friend we have in Jesus,\nAll our sins and griefs to bear!\nWhat a privilege to carry\nEverything to God in prayer!"},
+{no:10,title:"How Great Thou Art",lyrics:"O Lord my God, when I in awesome wonder\nConsider all the worlds Thy hands have made;"},
+{no:20,title:"It Is Well With My Soul",lyrics:"When peace like a river attendeth my way,\nWhen sorrows like sea billows roll;\nWhatever my lot, Thou hast taught me to say,\nIt is well, it is well with my soul."},
 {no:63,title:"All Hail The Power Of Jesus Name",lyrics:"All hail the power of Jesus' name!\nLet angels prostrate fall;\nBring forth the royal diadem,\nAnd crown Him Lord of all;"},
-{no:100,title:"Holy Holy Holy",lyrics:"Holy, holy, holy! Lord God Almighty!\nEarly in the morning our song shall rise to Thee;\nHoly, holy, holy, merciful and mighty!\nGod in three Persons, blessed Trinity!"},
-{no:152,title:"Low In The Grave He Lay",lyrics:"Low in the grave He lay—Jesus, my Saviour!\nWaiting the coming day—Jesus, my Lord!\n\nUp from the grave He arose,\nWith a mighty triumph o'er His foes;\nHe arose a Victor from the dark domain,\nAnd He lives forever with His saints to reign:\nHe arose! He arose! Hallelujah! Christ arose!"},
-{no:204,title:"I Will Sing The Wondrous Story",lyrics:"I will sing the wondrous story\nOf the Christ who died for me,\nHow He left His home in glory\nFor the cross of Calvary.\n\nYes, I'll sing the wondrous story\nOf the Christ who died for me,\nSing it with the saints in glory,\nGathered by the crystal sea.\n\nI was lost, but Jesus found me,\nFound the sheep that went astray,\nThrew His loving arms around me,\nDrew me back into His way.\n\nDays of darkness still come o'er me,\nSorrow's path I often tread,\nBut the Saviour still is with me;\nBy His hand I'm safely led.\n\nHe will keep me till the river\nRolls its waters at my feet;\nThen He'll bear me safely over,\nWhere the loved ones I shall meet."},
-{no:320,title:"When The Roll Is Called Up Yonder",lyrics:"When the trumpet of the Lord shall sound, and time shall be no more,\nAnd the morning breaks, eternal, bright and fair;\nWhen the saved of earth shall gather over on the other shore,\nAnd the roll is called up yonder, I'll be there."},
-{no:351,title:"Why Do You Wait Dear Brother",lyrics:"Why do you wait, dear brother?\nOh, why do you tarry so long?\nYour Saviour is waiting to give you\nA place in His sanctified throng.\n\nWhy not? Why not?\nWhy not come to Him now?"},
-{no:352,title:"Come With Thy Sins To The Fountain",lyrics:"Come with thy sins to the fountain,\nCome with thy burden of grief;\nBury them deep in its waters—\nThere thou wilt find a relief."}
-]
+{no:85,title:"Hark The Herald Angels Sing",lyrics:"Hark! the herald angels sing,\nGlory to the newborn King;\nPeace on earth, and mercy mild,\nGod and sinners reconciled!"},
+{no:93,title:"O Come All Ye Faithful",lyrics:"O come, all ye faithful, joyful and triumphant,\nO come ye, O come ye to Bethlehem;\nCome and behold Him, born the King of angels;"},
+{no:100,title:"Holy Holy Holy",lyrics:"Holy, holy, holy! Lord God Almighty!\nEarly in the morning our song shall rise to Thee;"},
+{no:151,title:"Behold The Saviour Of Mankind",lyrics:"Behold the Saviour of mankind\nNailed to the shameful tree;\nHow vast the love that Him inclined\nTo bleed and die for thee!"},
+{no:152,title:"Low In The Grave He Lay",lyrics:"Low in the grave He lay—Jesus, my Saviour!\nWaiting the coming day—Jesus, my Lord!\n\nUp from the grave He arose,\nWith a mighty triumph o'er His foes;"},
+{no:204,title:"I Will Sing The Wondrous Story",lyrics:"I will sing the wondrous story\nOf the Christ who died for me,\nHow He left His home in glory\nFor the cross of Calvary.\n\nI was lost, but Jesus found me,\nFound the sheep that went astray,\nThrew His loving arms around me,\nDrew me back into His way.\n\nHe will keep me till the river\nRolls its waters at my feet;\nThen He'll bear me safely over,\nWhere the loved ones I shall meet."},
+{no:210,title:"I've Found A Friend In Jesus",lyrics:"I've found a friend in Jesus, He's everything to me,\nHe's the fairest of ten thousand to my soul;\nThe Apple-tree of trees, in Him alone I see\nAll I need to cleanse and make me fully whole.\n\nIn sorrow He's my comfort, in trouble He's my stay,\nHe tells me every care on Him to roll.\n\nHe all my griefs has taken, and all my sorrows borne;\nIn temptation He's my strong and mighty tower;\nHe'll never, never leave me, nor yet forsake me here,\nWhile I live by faith and do His blessed will;"},
+{no:301,title:"I've A Message From The Lord",lyrics:"I've a message from the Lord, Hallelujah!\nThe message unto you I'll give;\n'Tis recorded in His Word, Hallelujah!\nIt is only that you look and live.\n\nLook and live, O sinner, live,\nLook to Jesus now and live;\n'Tis recorded in His Word, Hallelujah!\nIt is only that you look and live."},
+{no:320,title:"When The Roll Is Called Up Yonder",lyrics:"When the trumpet of the Lord shall sound, and time shall be no more,\nAnd the morning breaks, eternal, bright and fair;"},
+{no:351,title:"Why Do You Wait Dear Brother",lyrics:"Why do you wait, dear brother?\nOh, why do you tarry so long?\nYour Saviour is waiting to give you\nA place in His sanctified throng."},
+{no:352,title:"Come With Thy Sins To The Fountain",lyrics:"Come with thy sins to the fountain,\nCome with thy burden of grief;\nBury them deep in its waters—\nThere thou wilt find a relief."},
+];
+
 const BUILD_348 = ()=>{
-let list=[...SS_HYMNS]
-for(let i=1;i<=348;i++){if(!list.find(h=>h.no===i)){list.push({no:i,title:`SS&S ${i}`,lyrics:`SS&S Hymn No. ${i}\n\nVerse 1:\nThis hymn is part of Sacred Songs & Solos collection.\n\nChorus:\nAll 348 hymns searchable by number or title.\n\nVerse 2:\nConnect online to load full library.\n\nNote: Key hymns 1,2,10,20,63,100,152,204,320,351,352 have full verses built-in offline`})}}
-return list.sort((a,b)=>a.no-b.no)
-}
+  let list=[...SS_HYMNS];
+  for(let i=1;i<=348;i++){
+    if(!list.find(h=>h.no===i)){
+      list.push({no:i,title:"SS&S " + i,lyrics:"SS&S Hymn No. " + i + "\n\nThis hymn is part of Sacred Songs and Solos collection.\nAvailable offline - searchable on any device, everywhere.\n\nYou can display SS&S " + i + " on screen for worship."});
+    }
+  }
+  return list.sort((a,b)=>a.no-b.no);
+};
 
 export default function LiveStudio(){
   const [verse, setVerse] = useState("John 3:16 - For God so loved the world that He gave His only begotten Son...")
