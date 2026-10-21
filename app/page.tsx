@@ -451,8 +451,9 @@ export default function LiveStudio(){
             <div style={{marginTop:10, background:'#f9f5ff', borderRadius:12, padding:12, flex:1, overflowY:'auto', border:'1px solid #ddd'}}>
               {bibleLoading ? <div style={{opacity:0.6, fontSize:12}}>🔍 Searching {bibleVer==='kjv'?'OFFLINE':'ONLINE'}...</div>
               : bibleResult ? <div style={{fontSize:14, lineHeight:1.5, fontWeight:600, whiteSpace:'pre-wrap'}}>{bibleResult}</div>
+              : <div style={{opacity:0.6, fontSize:12}}>KJV = works without internet. NIV/GNB/NKJV = requires internet (2KB). Your live continues while searching. Type John 3:16 and Search.</div>}
             </div>
-            <button onClick={useBibleVerse} disabled={!bibleResult} style={{marginTop:10, background:bibleResult?'#16a34a':'#ccc', color:'#fff', padding:14, borderRadius:12, fontWeight:900, border:'none'}}>🔰 Use This Verse On Screen</button>
+            <button onClick={useBibleVerse} disabled={!bibleResult} style={{marginTop:10, background:bibleResult?'#16a34a':'#ccc', color:'#fff', padding:14, borderRadius:12, fontWeight:900, border:'none'}}>✅ Use This Verse On Screen</button>
             <div style={{display:'flex', gap:6, marginTop:6}}>
               <button onClick={()=>{ setBibleQuery('John 3:16'); fetchBible('John 3:16') }} style={{flex:1, padding:8, borderRadius:8, border:'1px solid #ddd', background:'#fff', fontSize:11, fontWeight:700}}>John 3:16</button>
               <button onClick={()=>{ setBibleQuery('Romans 8:28'); fetchBible('Romans 8:28') }} style={{flex:1, padding:8, borderRadius:8, border:'1px solid #ddd', background:'#fff', fontSize:11, fontWeight:700}}>Rom 8:28</button>
