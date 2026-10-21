@@ -478,11 +478,13 @@ export default function LiveStudio(){
             tickerOffsetRef.current -= tickerSpeed
             if(tickerOffsetRef.current < -w) tickerOffsetRef.current = c.width
             ctx.fillText(tickerText + '   •   ' + tickerText, tickerOffsetRef.current, c.height - tickerH/2)
-          }
-        }
-          a=requestAnimationFrame(draw)
+              }
   }
-  draw()
+  }
+  }
+  a=requestAnimationFrame(draw)
+}
+draw()
   return ()=>cancelAnimationFrame(a)
 },[isCam,verse,isLive,pos,bgMode,fontSize,align,bgImage,ytLive,textColor,boxColor,boxOpacity,logoImage,logoPos,isRecording,selected,showText,tickerOn,tickerText,tickerSize,tickerSpeed,churchName,showChurchName,liveSeconds,lowData])
 
