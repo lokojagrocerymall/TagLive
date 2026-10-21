@@ -373,7 +373,7 @@ export default function LiveStudio(){
             ctx.save();
             const isSplit = bgMode==='split'
             const drawX = isSplit ? c.width*0.5 : pos.x
-            const drawY = isSplit ? c.height*0.25 : pos.y
+            const drawY = isSplit ? c.height*0.28 : pos.y
             const maxW = isSplit ? 600 : 560
             ctx.translate(drawX, drawY); ctx.rotate(pos.rotation*Math.PI/180); ctx.scale(pos.scale, pos.scale); ctx.font=`bold ${fontSize}px sans-serif`; const pad = 24; const boxW = maxW + pad*2; const paragraphs = verse.split('\n'); let allLines:{text:string, isLastInPara:boolean, paraIdx:number}[] = []; paragraphs.forEach((para,pIdx)=>{ if(!para.trim()){ allLines.push({text:'', isLastInPara:true, paraIdx:pIdx}); return } const wrapped = wrapText(ctx, para.trim(), maxW); wrapped.forEach((l,i)=> allLines.push({text:l, isLastInPara:i===wrapped.length-1, paraIdx:pIdx})) }); const realCount = allLines.filter(l=>l.text!=='').length; const lineH = fontSize * 1.38; const boxH = realCount*lineH + (paragraphs.length-1)*10 + pad*2; if(bgMode==='face' || bgMode==='split'){ ctx.fillStyle=hexToRgba(boxColor, boxOpacity); ctx.fillRect(-boxW/2, -boxH/2, boxW, boxH) } else if(bgMode==='image'){ ctx.shadowColor='rgba(0,0,0,0.9)'; ctx.shadowBlur=10; ctx.shadowOffsetX=2; ctx.shadowOffsetY=3 } ctx.fillStyle=textColor; let y = -boxH/2 + pad + lineH/2; allLines.forEach((ln)=>{ if(!ln.text){ y+=10; return } if(paragraphs.length>1 && ln.paraIdx>0){ ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(ln.text, 0, y) } else { if(align==='justify' && !ln.isLastInPara){ const words = ln.text.split(' '); if(words.length===1){ ctx.textAlign='center'; ctx.fillText(ln.text, 0, y) } else { ctx.textAlign='left'; ctx.textBaseline='middle'; const totalWordsWidth = words.reduce((s,w)=>s+ctx.measureText(w).width,0); const gap = (maxW - totalWordsWidth) / (words.length-1); let x = -maxW/2; words.forEach((w)=>{ ctx.fillText(w, x, y); x += ctx.measureText(w).width + gap }) } } else { ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(ln.text, 0, y) } } y+= lineH }); 
             if(isSplit && showChurchName && churchName){
@@ -611,10 +611,18 @@ export default function LiveStudio(){
         <video ref={videoRef} muted playsInline autoPlay style={{width:'100%', height:'100%', objectFit:'cover', display:isCam&&bgMode==='face'?'block':'none'}}/>
         {!isCam && <div style={{color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', height:420}}>Camera off - {lowData?'480p ON':'720p'}</div>}
         <canvas ref={canvasRef} style={{position:'absolute', top:0, left:0, width:'100%', height:'100%'}}/>
-        {isCam && <div style={{position:'absolute', top:12, right:12, display:'flex', gap:8, zIndex:10}}>
-          <button onClick={toggleCamera} style={{background:'rgba(0,0,0,0.7)', color:'#fff', border:'none', borderRadius:20, padding:'8px 12px', fontWeight:800}}>Flip</button>
-          <button onClick={toggleTorch} style={{background:torch?'#fbbf24':'rgba(0,0,0,0.7)', color:torch?'#000':'#fff', border:'none', borderRadius:20, padding:'8px 12px', fontWeight:800}}>{torch?'On':'Torch'}</button>
-        </div>}
+        {isCam && (
+          <div style={{
+            position:'absolute', 
+            top: bgMode==='split' ? 'auto' : 12, 
+            bottom: bgMode==='split' ? 12 : 'auto',
+            right:12, 
+            display:'flex', gap:8, zIndex:10
+          }}>
+            <button onClick={toggleCamera} style={{background:'rgba(0,0,0,0.8)', color:'#fff', border:'1px solid rgba(255,255,255,0.3)', borderRadius:20, padding:'8px 12px', fontWeight:800}}>Flip</button>
+            <button onClick={toggleTorch} style={{background:torch?'#fbbf24':'rgba(0,0,0,0.8)', color:torch?'#000':'#fff', border:'1px solid rgba(255,255,255,0.3)', borderRadius:20, padding:'8px 12px', fontWeight:800}}>{torch?'On':'Torch'}</button>
+          </div>
+        )}
       </div>
       <div style={{display:'flex', gap:8, marginTop:12}}>
         {!isCam? <button onClick={()=>startCamera()} style={{flex:1, background:'#111', color:'#fff', padding:14, borderRadius:12, fontWeight:800, border:'none'}}>Start Camera {lowData?'(480p)':''}</button>
