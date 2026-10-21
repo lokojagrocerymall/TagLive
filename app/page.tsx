@@ -53,6 +53,12 @@ export default function LiveStudio(){
   const [showChurchName, setShowChurchName] = useState(true)
   const [liveSeconds, setLiveSeconds] = useState(0)
   const timerRef = useRef<any>(null)
+  // BIBLE INSIDE APP - FIXES PAUSE ISSUE
+  const [showBible, setShowBible] = useState(false)
+  const [bibleVer, setBibleVer] = useState('kjv')
+  const [bibleQuery, setBibleQuery] = useState('Romans 1:20')
+  const [bibleResult, setBibleResult] = useState('')
+  const [bibleLoading, setBibleLoading] = useState(false)
   const tickerOffsetRef = useRef(720)
   const introFileRef = useRef<HTMLInputElement>(null)
   const outroFileRef = useRef<HTMLInputElement>(null)
@@ -217,7 +223,27 @@ export default function LiveStudio(){
       }catch(e:any){ alert('Auto Live needs approval: '+e.message); setIsLive(true); startTimer() }
     })
   }
-  const openBibleApp = ()=>{ alert('📖 Open Bible app, COPY verse, return here - auto-paste!') }
+  const openBibleApp = ()=>{ setShowBible(true) }
+  const fetchBible = async()=>{
+    if(!bibleQuery.trim()) return
+    setBibleLoading(true)
+    try{
+      const res = await fetch(`https://bible-api.com/${encodeURIComponent(bibleQuery)}?translation=${bibleVer}`)
+      const data = await res.json()
+      if(data.text){
+        const full = `${data.reference} ${data.text}`
+        setBibleResult(full)
+      } else {
+        setBibleResult('Not found. Try John 3:16 or Romans 1:20')
+      }
+    }catch{
+      setBibleResult('Error fetching. Check internet.')
+    }
+    setBibleLoading(false)
+  }
+  const useBibleVerse = ()=>{
+    if(bibleResult){ setVerse(bibleResult); setShowBible(false) }
+  }
   const pasteClipboard = async()=>{ try{ const t = await navigator.clipboard.readText(); if(t) setVerse(t); else alert('Clipboard empty') }catch{ alert('Allow clipboard') } }
   const saveVerse = ()=>{ if(!verse.trim()) return; const ns = [verse, ...saved.filter(s=>s!==verse)].slice(0,20); setSaved(ns); localStorage.setItem('taglive_saved', JSON.stringify(ns)); alert('Saved!') }
   const pickMedia = ()=> fileInputRef.current?.click()
@@ -305,7 +331,6 @@ export default function LiveStudio(){
               ctx.fillText(churchName.toUpperCase(), 0, churchY)
             }
             if(selected==='text' && !isSplit){ ctx.strokeStyle='#7c3aed'; ctx.lineWidth=3; ctx.setLineDash([12,8]); ctx.strokeRect(-boxW/2-4, -boxH/2-4, boxW+8, boxH+8); ctx.setLineDash([]) } ctx.restore() }
-          // === UPDATED: RED, BIGGER, BOLDER, NO BACKGROUND ===
           if(isLive || ytLive || isRecording){
             const timeStr = formatTime(liveSeconds)
             ctx.save()
@@ -315,7 +340,6 @@ export default function LiveStudio(){
             ctx.textBaseline = 'top'
             ctx.shadowColor = 'rgba(0,0,0,0.9)'
             ctx.shadowBlur = 6
-            // Big bold red LIVE timer - no background box
             ctx.fillText(`● LIVE ${timeStr}`, 24, 22)
             ctx.restore()
           }
@@ -353,6 +377,36 @@ export default function LiveStudio(){
             </div>
           )}
           <button onClick={()=>setPlaying(null)} style={{position:'absolute', top:20, right:20, background:'rgba(255,255,255,0.2)', color:'#fff', border:'none', borderRadius:20, padding:'8px 14px', fontWeight:800}}>✕ Skip</button>
+        </div>
+      )}
+      {showBible && (
+        <div style={{position:'fixed', top:0, left:0, right:0, bottom:0, zIndex:9998, background:'rgba(0,0,0,0.92)', padding:12, display:'flex', flexDirection:'column'}}>
+          <div style={{background:'#fff', borderRadius:16, padding:12, flex:1, display:'flex', flexDirection:'column', maxWidth:480, margin:'0 auto', width:'100%'}}>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+              <b style={{fontSize:14}}>📖 Bible Inside — Live Still ON! {isCam && <span style={{color:'#FF0000'}}>● LIVE {formatTime(liveSeconds)}</span>}</b>
+              <button onClick={()=>setShowBible(false)} style={{background:'#111', color:'#fff', border:'none', borderRadius:20, padding:'8px 12px', fontWeight:800}}>✕ Close</button>
+            </div>
+            <div style={{display:'flex', gap:6, marginTop:10}}>
+              <button onClick={()=>setBibleVer('kjv')} style={{flex:1, padding:8, borderRadius:10, border:'none', background:bibleVer==='kjv'?'#111':'#eee', color:bibleVer==='kjv'?'#fff':'#000', fontWeight:800, fontSize:11}}>KJV</button>
+              <button onClick={()=>setBibleVer('web')} style={{flex:1, padding:8, borderRadius:10, border:'none', background:bibleVer==='web'?'#2563eb':'#eee', color:bibleVer==='web'?'#fff':'#000', fontWeight:800, fontSize:11}}>NIV</button>
+              <button onClick={()=>setBibleVer('bbe')} style={{flex:1, padding:8, borderRadius:10, border:'none', background:bibleVer==='bbe'?'#059669':'#eee', color:bibleVer==='bbe'?'#fff':'#000', fontWeight:800, fontSize:11}}>GNB</button>
+              <button onClick={()=>setBibleVer('akjv')} style={{flex:1, padding:8, borderRadius:10, border:'none', background:bibleVer==='akjv'?'#7c3aed':'#eee', color:bibleVer==='akjv'?'#fff':'#000', fontWeight:800, fontSize:11}}>NKJV</button>
+            </div>
+            <div style={{fontSize:9, marginTop:4, opacity:0.6}}>KJV public domain. NIV/GNB/NKJV mapped to free translations (WEB/BBE/AKJV) for online use — upgrade to licensed API later.</div>
+            <div style={{display:'flex', gap:6, marginTop:10}}>
+              <input value={bibleQuery} onChange={e=>setBibleQuery(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') fetchBible() }} placeholder="Romans 1:20 or John 3:16-18" style={{flex:1, padding:12, borderRadius:10, border:'2px solid #7c3aed', fontSize:13, fontWeight:700}} />
+              <button onClick={fetchBible} style={{background:'#7c3aed', color:'#fff', border:'none', borderRadius:10, padding:'0 16px', fontWeight:800}}>{bibleLoading?'...':'Search'}</button>
+            </div>
+            <div style={{marginTop:10, background:'#f9f5ff', borderRadius:12, padding:12, flex:1, overflowY:'auto', border:'1px solid #ddd'}}>
+              {bibleResult ? <div style={{fontSize:14, lineHeight:1.5, fontWeight:600, whiteSpace:'pre-wrap'}}>{bibleResult}</div> : <div style={{opacity:0.6, fontSize:12}}>Type e.g. Romans 1:20 and tap Search. Camera keeps recording — live not paused!</div>}
+            </div>
+            <button onClick={useBibleVerse} disabled={!bibleResult} style={{marginTop:10, background:bibleResult?'#16a34a':'#ccc', color:'#fff', padding:14, borderRadius:12, fontWeight:900, border:'none'}}>✅ Use This Verse On Screen</button>
+            <div style={{display:'flex', gap:6, marginTop:6}}>
+              <button onClick={()=>{ setBibleQuery('John 3:16'); setTimeout(fetchBible,100) }} style={{flex:1, padding:8, borderRadius:8, border:'1px solid #ddd', background:'#fff', fontSize:11, fontWeight:700}}>John 3:16</button>
+              <button onClick={()=>{ setBibleQuery('Romans 8:28'); setTimeout(fetchBible,100) }} style={{flex:1, padding:8, borderRadius:8, border:'1px solid #ddd', background:'#fff', fontSize:11, fontWeight:700}}>Rom 8:28</button>
+              <button onClick={()=>{ setBibleQuery('Psalm 23'); setTimeout(fetchBible,100) }} style={{flex:1, padding:8, borderRadius:8, border:'1px solid #ddd', background:'#fff', fontSize:11, fontWeight:700}}>Psalm 23</button>
+            </div>
+          </div>
         </div>
       )}
       <div style={{display:'flex', alignItems:'center', gap:12}}>
