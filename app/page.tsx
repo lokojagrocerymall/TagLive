@@ -73,7 +73,7 @@ const BUILD_348 = ()=>{
   let list=[...SS_HYMNS];
   for(let i=1;i<=348;i++){
     if(!list.find(h=>h.no===i)){
-      list.push({no:i,title:"SS&S " + i,lyrics:"SS&S Hymn No. " + i + "\n\nThis hymn is part of Sacred Songs and Solos collection.\nAvailable offline - searchable on any device, everywhere.\n\nYou can display SS&S " + i + " on screen for worship."});
+    list.push({no:i,title:"SS&S " + i,lyrics:"SS&S " + i});
     }
   }
   return list.sort((a,b)=>a.no-b.no);
