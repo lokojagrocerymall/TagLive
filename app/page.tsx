@@ -480,12 +480,11 @@ export default function LiveStudio(){
             ctx.fillText(tickerText + '   •   ' + tickerText, tickerOffsetRef.current, c.height - tickerH/2)
           }
         }
-      }
-      a=requestAnimationFrame(draw)
-    }
-    draw()
-    return ()=>cancelAnimationFrame(a)
-  },[isCam,verse,isLive,pos,bgMode,fontSize,align,bgImage,ytLive,textColor,boxColor,boxOpacity,logoImage,logoPos,isRecording,selected,showText,tickerOn,tickerText,tickerSize,tickerSpeed,churchName,showChurchName,liveSeconds,lowData])
+          a=requestAnimationFrame(draw)
+  }
+  draw()
+  return ()=>cancelAnimationFrame(a)
+},[isCam,verse,isLive,pos,bgMode,fontSize,align,bgImage,ytLive,textColor,boxColor,boxOpacity,logoImage,logoPos,isRecording,selected,showText,tickerOn,tickerText,tickerSize,tickerSpeed,churchName,showChurchName,liveSeconds,lowData])
 
   return (
     <div style={{padding:16, maxWidth:480, margin:'0 auto'}}>
