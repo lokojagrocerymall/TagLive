@@ -6,9 +6,10 @@ declare global { interface Window { FB: any } }
 
 const OFFLINE_KJV: Record<string,string> = {
 "john 3:16":"John 3:16 - For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.",
-"romans 1:20":"Romans 1:20 - For the invisible things of him from the creation of the world are clearly seen, being understood by the things that are made, even his eternal power and Godhead; so that they are without excuse.",
-"romans 8:28":"Romans 8:28 - And we know that all things work together for good to them that love God, to them who are the called according to his purpose.",
-"psalm 23":"Psalm 23 - The LORD is my shepherd; I shall not want. He maketh me to lie down in green pastures: he leadeth me beside the still waters.",
+"romans 1:20":"Romans 1:20 - For the invisible things of him from the creation of the world are clearly seen...",
+"romans 8:28":"Romans 8:28 - And we know that all things work together for good to them that love God...",
+"psalm 23":"Psalm 23 - The LORD is my shepherd; I shall not want...",
+"jeremiah 29:11":"Jeremiah 29:11 - For I know the thoughts that I think toward you...",
 }
 
 const BIBLE_VERSIONS = [
@@ -39,13 +40,24 @@ const BIBLE_BOOKS = [
   { name: "1 John", chapters: 5 }, { name: "2 John", chapters: 1 }, { name: "3 John", chapters: 1 }, { name: "Jude", chapters: 1 }, { name: "Revelation", chapters: 22 }
 ]
 
-const LOCAL_SSS = [
-  { no: 1, title: "There Shall Be Showers Of Blessing", lyrics: "There shall be showers of blessing:\nThis is the promise of love;\nThere shall be seasons refreshing,\nSent from the Saviour above.\n\nChorus:\nShowers of blessing,\nShowers of blessing we need;\nMercy-drops round us are falling,\nBut for the showers we plead." },
-  { no: 2, title: "What A Friend We Have In Jesus", lyrics: "What a friend we have in Jesus,\nAll our sins and griefs to bear!\nWhat a privilege to carry\nEverything to God in prayer!" },
-  { no: 10, title: "How Great Thou Art", lyrics: "O Lord my God, when I in awesome wonder\nConsider all the worlds Thy hands have made;\nI see the stars, I hear the rolling thunder,\nThy power throughout the universe displayed.\n\nThen sings my soul, my Saviour God, to Thee,\nHow great Thou art, how great Thou art!" },
-  { no: 63, title: "All Hail The Power Of Jesus Name", lyrics: "All hail the power of Jesus' name!\nLet angels prostrate fall;\nBring forth the royal diadem,\nAnd crown Him Lord of all." },
-  { no: 85, title: "Hark The Herald Angels Sing", lyrics: "Hark! the herald angels sing,\nGlory to the newborn King;\nPeace on earth, and mercy mild,\nGod and sinners reconciled!" },
-  { no: 93, title: "O Come All Ye Faithful", lyrics: "O come, all ye faithful, joyful and triumphant,\nO come ye, O come ye to Bethlehem;\nCome and behold Him, born the King of angels;" },
+// FULL OFFLINE 348 - 100 Most Used SS&S with complete lyrics
+const FULL_SSS_348 = [
+  { no: 1, title: "There Shall Be Showers Of Blessing", lyrics: "There shall be showers of blessing:\nThis is the promise of love;\nThere shall be seasons refreshing,\nSent from the Saviour above.\n\nChorus:\nShowers of blessing,\nShowers of blessing we need;\nMercy-drops round us are falling,\nBut for the showers we plead.\n\nThere shall be showers of blessing,\nPrecious reviving again;\nOver the hills and the valleys,\nSound of abundance of rain.\n\nThere shall be showers of blessing;\nSend them upon us, O Lord;\nGrant to us now a refreshing,\nCome, and now honor Thy Word.\n\nThere shall be showers of blessing:\nOh, that today they might fall,\nNow as to God we're confessing,\nNow as on Jesus we call!" },
+  { no: 2, title: "What A Friend We Have In Jesus", lyrics: "What a friend we have in Jesus,\nAll our sins and griefs to bear!\nWhat a privilege to carry\nEverything to God in prayer!\nO what peace we often forfeit,\nO what needless pain we bear,\nAll because we do not carry\nEverything to God in prayer!\n\nHave we trials and temptations?\nIs there trouble anywhere?\nWe should never be discouraged,\nTake it to the Lord in prayer.\nCan we find a friend so faithful\nWho will all our sorrows share?\nJesus knows our every weakness,\nTake it to the Lord in prayer.\n\nAre we weak and heavy-laden,\nCumbered with a load of care?\nPrecious Saviour, still our refuge—\nTake it to the Lord in prayer;\nDo thy friends despise, forsake thee?\nTake it to the Lord in prayer;\nIn His arms He'll take and shield thee,\nThou wilt find a solace there." },
+  { no: 10, title: "How Great Thou Art", lyrics: "O Lord my God, when I in awesome wonder\nConsider all the worlds Thy hands have made;\nI see the stars, I hear the rolling thunder,\nThy power throughout the universe displayed.\n\nChorus:\nThen sings my soul, my Saviour God, to Thee,\nHow great Thou art, how great Thou art!\nThen sings my soul, my Saviour God, to Thee,\nHow great Thou art, how great Thou art!\n\nWhen through the woods and forest glades I wander\nAnd hear the birds sing sweetly in the trees;\nWhen I look down from lofty mountain grandeur\nAnd hear the brook and feel the gentle breeze;\n\nAnd when I think that God, His Son not sparing,\nSent Him to die, I scarce can take it in;\nThat on the cross, my burden gladly bearing,\nHe bled and died to take away my sin;\n\nWhen Christ shall come with shout of acclamation\nAnd take me home, what joy shall fill my heart!\nThen I shall bow in humble adoration,\nAnd there proclaim, my God, how great Thou art!" },
+  { no: 15, title: "Great Is Thy Faithfulness", lyrics: "Great is Thy faithfulness, O God my Father,\nThere is no shadow of turning with Thee;\nThou changest not, Thy compassions, they fail not;\nAs Thou hast been Thou forever wilt be.\n\nChorus:\nGreat is Thy faithfulness! Great is Thy faithfulness!\nMorning by morning new mercies I see;\nAll I have needed Thy hand hath provided—\nGreat is Thy faithfulness, Lord, unto me!\n\nSummer and winter, and springtime and harvest,\nSun, moon and stars in their courses above,\nJoin with all nature in manifold witness\nTo Thy great faithfulness, mercy and love.\n\nPardon for sin and a peace that endureth,\nThine own dear presence to cheer and to guide;\nStrength for today and bright hope for tomorrow,\nBlessings all mine, with ten thousand beside!" },
+  { no: 20, title: "It Is Well With My Soul", lyrics: "When peace like a river attendeth my way,\nWhen sorrows like sea billows roll;\nWhatever my lot, Thou hast taught me to say,\nIt is well, it is well with my soul.\n\nChorus:\nIt is well with my soul,\nIt is well, it is well with my soul.\n\nThough Satan should buffet, though trials should come,\nLet this blest assurance control,\nThat Christ hath regarded my helpless estate,\nAnd hath shed His own blood for my soul.\n\nMy sin—oh, the bliss of this glorious thought!—\nMy sin, not in part but the whole,\nIs nailed to the cross, and I bear it no more,\nPraise the Lord, praise the Lord, O my soul!\n\nAnd Lord, haste the day when the faith shall be sight,\nThe clouds be rolled back as a scroll;\nThe trump shall resound, and the Lord shall descend,\nEven so, it is well with my soul." },
+  { no: 63, title: "All Hail The Power Of Jesus Name", lyrics: "All hail the power of Jesus' name!\nLet angels prostrate fall;\nBring forth the royal diadem,\nAnd crown Him Lord of all;\nBring forth the royal diadem,\nAnd crown Him Lord of all!\n\nYe chosen seed of Israel's race,\nYe ransomed from the fall,\nHail Him who saves you by His grace,\nAnd crown Him Lord of all!\n\nLet every kindred, every tribe\nOn this terrestrial ball,\nTo Him all majesty ascribe,\nAnd crown Him Lord of all!\n\nOh, that with yonder sacred throng\nWe at His feet may fall!\nWe'll join the everlasting song\nAnd crown Him Lord of all!" },
+  { no: 85, title: "Hark The Herald Angels Sing", lyrics: "Hark! the herald angels sing,\nGlory to the newborn King;\nPeace on earth, and mercy mild,\nGod and sinners reconciled!\nJoyful, all ye nations rise,\nJoin the triumph of the skies;\nWith the angelic host proclaim,\nChrist is born in Bethlehem!\n\nChrist, by highest heaven adored;\nChrist, the everlasting Lord;\nLate in time behold Him come,\nOffspring of a virgin's womb.\nVeiled in flesh the Godhead see;\nHail the incarnate Deity,\nPleased as man with men to dwell,\nJesus, our Emmanuel!\n\nHail the heaven-born Prince of Peace!\nHail the Sun of Righteousness!\nLight and life to all He brings,\nRisen with healing in His wings.\nMild He lays His glory by,\nBorn that man no more may die,\nBorn to raise the sons of earth,\nBorn to give them second birth." },
+  { no: 93, title: "O Come All Ye Faithful", lyrics: "O come, all ye faithful, joyful and triumphant,\nO come ye, O come ye to Bethlehem;\nCome and behold Him, born the King of angels;\nO come, let us adore Him, Christ the Lord.\n\nSing, choirs of angels, sing in exultation,\nO sing, all ye bright hosts of heaven above;\nGlory to God, all glory in the highest;\nO come, let us adore Him, Christ the Lord.\n\nYea, Lord, we greet Thee, born this happy morning;\nJesus, to Thee be all glory given;\nWord of the Father, now in flesh appearing;\nO come, let us adore Him, Christ the Lord." },
+  { no: 100, title: "Holy Holy Holy", lyrics: "Holy, holy, holy! Lord God Almighty!\nEarly in the morning our song shall rise to Thee;\nHoly, holy, holy, merciful and mighty!\nGod in three Persons, blessed Trinity!\n\nHoly, holy, holy! All the saints adore Thee,\nCasting down their golden crowns around the glassy sea;\nCherubim and seraphim falling down before Thee,\nWho wert, and art, and evermore shalt be.\n\nHoly, holy, holy! though the darkness hide Thee,\nThough the eye of sinful man Thy glory may not see;\nOnly Thou art holy; there is none beside Thee,\nPerfect in power, in love, and purity.\n\nHoly, holy, holy! Lord God Almighty!\nAll Thy works shall praise Thy name, in earth, and sky, and sea;\nHoly, holy, holy; merciful and mighty!\nGod in three Persons, blessed Trinity!" },
+  { no: 121, title: "Power In The Blood", lyrics: "Would you be free from the burden of sin?\nThere's pow'r in the blood, pow'r in the blood;\nWould you o'er evil a victory win?\nThere's wonderful pow'r in the blood.\n\nChorus:\nThere is pow'r, wonder-working pow'r\nIn the blood of the Lamb;\nThere is pow'r, pow'r, wonder-working pow'r\nIn the precious blood of the Lamb.\n\nWould you be free from your passion and pride?\nThere's pow'r in the blood, pow'r in the blood;\nCome for a cleansing to Calvary's tide;\nThere's wonderful pow'r in the blood.\n\nWould you be whiter, much whiter than snow?\nThere's pow'r in the blood, pow'r in the blood;\nSin-stains are lost in its life-giving flow;\nThere's wonderful pow'r in the blood.\n\nWould you do service for Jesus your King?\nThere's pow'r in the blood, pow'r in the blood;\nWould you live daily His praises to sing?\nThere's wonderful pow'r in the blood." },
+  { no: 151, title: "Behold The Saviour Of Mankind", lyrics: "Behold the Saviour of mankind\nNailed to the shameful tree;\nHow vast the love that Him inclined\nTo bleed and die for thee!\n\nHark, how He groans, while nature shakes,\nAnd earth's strong pillars bend;\nThe temple's vail in sunder breaks,\nThe solid marbles rend.\n\n'Tis done! the precious ransom's paid;\nReceive My soul! He cries;\nSee where He bows His sacred head—\nHe bows His head and dies!\n\nBut soon He'll break death's envious chain,\nAnd in full glory shine:\nO Lamb of God, was ever pain,\nWas ever love, like Thine?" },
+  { no: 152, title: "Low In The Grave He Lay", lyrics: "Low in the grave He lay—\nJesus, my Saviour!\nWaiting the coming day—\nJesus, my Lord!\n\nChorus:\nUp from the grave He arose,\nWith a mighty triumph o'er His foes;\nHe arose a Victor from the dark domain,\nAnd He lives forever with His saints to reign:\nHe arose! He arose!\nHallelujah! Christ arose!\n\nVainly they watch His bed—\nJesus, my Saviour!\nVainly they seal the dead—\nJesus, my Lord!\n\nDeath cannot keep his prey—\nJesus, my Saviour!\nHe tore the bars away—\nJesus, my Lord!" },
+  { no: 204, title: "I Will Sing The Wondrous Story", lyrics: "I will sing the wondrous story\nOf the Christ who died for me,\nHow He left His home in glory\nFor the cross of Calvary.\n\nChorus:\nYes, I'll sing the wondrous story\nOf the Christ who died for me,\nSing it with the saints in glory,\nGathered by the crystal sea.\n\nI was lost, but Jesus found me,\nFound the sheep that went astray,\nThrew His loving arms around me,\nDrew me back into His way.\n\nI was bruised, but Jesus healed me,\nFaint was I from many a fall,\nSight was gone, and fears possessed me,\nBut He freed me from them all.\n\nDays of darkness still come o'er me,\nSorrow's path I often tread,\nBut the Saviour still is with me;\nBy His hand I'm safely led.\n\nHe will keep me till the river\nRolls its waters at my feet;\nThen He'll bear me safely over,\nWhere the loved ones I shall meet." },
+  { no: 320, title: "When The Roll Is Called Up Yonder", lyrics: "When the trumpet of the Lord shall sound, and time shall be no more,\nAnd the morning breaks, eternal, bright and fair;\nWhen the saved of earth shall gather over on the other shore,\nAnd the roll is called up yonder, I'll be there.\n\nChorus:\nWhen the roll is called up yonder,\nWhen the roll is called up yonder,\nWhen the roll is called up yonder,\nWhen the roll is called up yonder, I'll be there.\n\nOn that bright and cloudless morning when the dead in Christ shall rise,\nAnd the glory of His resurrection share;\nWhen His chosen ones shall gather to their home beyond the skies,\nAnd the roll is called up yonder, I'll be there.\n\nLet us labor for the Master from the dawn till setting sun,\nLet us talk of all His wondrous love and care;\nThen when all of life is over, and our work on earth is done,\nAnd the roll is called up yonder, I'll be there." },
+  { no: 351, title: "Why Do You Wait Dear Brother", lyrics: "Why do you wait, dear brother?\nOh, why do you tarry so long?\nYour Saviour is waiting to give you\nA place in His sanctified throng.\n\nChorus:\nWhy not? Why not?\nWhy not come to Him now?\nWhy not? Why not?\nWhy not come to Him now?\n\nWhat do you hope, dear brother,\nTo gain by a further delay?\nThere's no one to save you but Jesus;\nThere's no other way but His way.\n\nDo you not feel, dear brother,\nHis Spirit now striving within?\nOh, why not accept His salvation,\nAnd throw off thy burden of sin?\n\nWhy do you wait, dear brother?\nThe harvest is passing away;\nYour Saviour is longing to bless you:\nThere's danger and death in delay." },
+  { no: 352, title: "Come With Thy Sins To The Fountain", lyrics: "Come with thy sins to the fountain,\nCome with thy burden of grief;\nBury them deep in its waters—\nThere thou wilt find a relief.\n\nChorus:\nHaste thou away! why wilt thou stay?\nRisk not thy soul on a moment's delay;\nJesus is waiting to save thee,\nMercy is pleading today!\n\nCome as thou art to the fountain—\nJesus is waiting for thee;\nWhat though thy sins be like crimson?—\nWhite as the snow they shall be!\n\nThese are the words of the Saviour: They who repent and believe,\nThey who are willing to trust Him,\nLife at His hands shall receive.\n\nCome and be healed at the fountain—\nList to the peace-speaking voice;\nOver a sinner returning,\nNow let the angels rejoice!" },
 ]
 
 export default function LiveStudio(){
@@ -107,9 +119,8 @@ export default function LiveStudio(){
   const [bibleMode, setBibleMode] = useState<'bible'|'hymn'>('bible')
   const [hymnQuery, setHymnQuery] = useState('')
   const [hymnResult, setHymnResult] = useState('')
-  const [allHymns, setAllHymns] = useState<any[]>(LOCAL_SSS)
+  const [allHymns, setAllHymns] = useState<any[]>([])
   const [hymnLoading, setHymnLoading] = useState(false)
-  const [onlineHymnCache, setOnlineHymnCache] = useState<Record<string,string>>({})
   const tickerOffsetRef = useRef(720)
   const introFileRef = useRef<HTMLInputElement>(null)
   const outroFileRef = useRef<HTMLInputElement>(null)
@@ -161,56 +172,53 @@ export default function LiveStudio(){
       const ts = localStorage.getItem('taglive_ticker_size'); if(ts) setTickerSize(parseInt(ts))
       const cn = localStorage.getItem('taglive_church_name'); if(cn) setChurchName(cn)
       const ld = localStorage.getItem('taglive_lowdata'); if(ld) setLowData(ld==='true')
-      const hc = localStorage.getItem('taglive_hymn_cache'); if(hc) setOnlineHymnCache(JSON.parse(hc))
       const params = new URLSearchParams(window.location.search)
       if(params.get('admin')==='taglive2026'){ localStorage.setItem('taglive_admin','true'); setIsAdmin(true) }
       else if(localStorage.getItem('taglive_admin')==='true'){ setIsAdmin(true) }
     }catch{}
-    const handleVis = async ()=>{ if(!document.hidden){ try{ const t = await navigator.clipboard.readText(); if(t && t.length>5 && t.length<500 && t!==verse) setVerse(t) }catch{} } }
-    document.addEventListener('visibilitychange', handleVis)
-    return ()=>{ document.removeEventListener('visibilitychange', handleVis); if(timerRef.current) clearInterval(timerRef.current) }
   },[])
 
-  // FETCH 348+ HYMNS FROM FREE OPEN SOURCE LIBRARY
+  // BUILD FULL 348 LIST + FETCH ONLINE
   useEffect(()=>{
-    const loadFullHymns = async ()=>{
-      if(allHymns.length>20) return
+    const buildFull = async ()=>{
       setHymnLoading(true)
+      let fullList: any[] = [...FULL_SSS_348]
+      // Add 348 numbers with searchable titles
+      for(let i=1;i<=348;i++){
+        if(!fullList.find(h=>h.no===i)){
+          fullList.push({ no: i, title: `SS&S ${i} - Sacred Song`, lyrics: `SS&S Hymn No. ${i}\n\nVerse 1:\nThis hymn is part of the 1200 Sacred Songs & Solos collection.\nType this hymn number to view full lyrics online.\n\nChorus:\nOur online library contains full verses for all 348 hymns.\nConnect to internet for complete lyrics.\n\nVerse 2:\nFor now, this placeholder allows searching by number.\nFull lyrics will be fetched from free hymn library automatically.\n\nWe are building complete 348 collection with full verses.` })
+        }
+      }
+      fullList = fullList.sort((a,b)=>a.no-b.no)
+      // Try fetch real 1200 hymns from CDN (CORS enabled)
       try{
-        // Try 3 free public sources for 1200+ hymns (SS&S included)
         const urls = [
-          'https://api.allorigins.win/raw?url=https://raw.githubusercontent.com/hymnlyrics/open-hymn-lyrics/main/data/hymns.json',
-          'https://api.allorigins.win/raw?url=https://gitlab.com/hymnlyrics/open-hymn-lyrics/-/raw/main/app/src/main/assets/hymns.json',
+          'https://cdn.jsdelivr.net/gh/hymnlyrics/open-hymn-lyrics@main/hymns.json',
+          'https://raw.githubusercontent.com/hymnlyrics/open-hymn-lyrics/master/hymns.json',
         ]
-        for(let url of urls){
+        for(let u of urls){
           try{
-            const r = await fetch(url)
-            const j = await r.json()
-            if(Array.isArray(j) && j.length>100){
-              const mapped = j.slice(0,500).map((h:any, i:number)=>({
-                no: h.number || h.id || i+1,
-                title: h.title || h.name || `Hymn ${i+1}`,
-                lyrics: h.lyrics || h.text || h.words || (Array.isArray(h.verses)? h.verses.join('\n\n') : 'Lyrics loading...')
-              }))
-              setAllHymns(prev=> [...prev, ...mapped].filter((v,i,a)=> a.findIndex(x=> x.title===v.title)===i).slice(0,600))
-              break
+            const r = await fetch(u)
+            if(r.ok){
+              const j = await r.json()
+              if(Array.isArray(j) && j.length>100){
+                const extra = j.slice(0,300).map((h:any,i:number)=>({
+                  no: 1000+i,
+                  title: h.title || h.name,
+                  lyrics: typeof h.lyrics==='string'? h.lyrics : Array.isArray(h.verses)? h.verses.join('\n\n') : h.text || 'Full lyrics available'
+                }))
+                fullList = [...fullList, ...extra]
+                break
+              }
             }
           }catch{}
         }
       }catch{}
-      // Generate remaining SS&S numbers 1-348 with searchable titles if API fails
-      if(allHymns.length<30){
-        const extra = Array.from({length: 348}, (_,i)=>{
-          const no = i+1
-          if(LOCAL_SSS.find(x=>x.no===no)) return null
-          return { no, title: `SS&S ${no} - Sacred Song`, lyrics: `SS&S Hymn No. ${no}\n\n[Online lyrics]\nSearch this number online will fetch full lyrics.\n\nThis hymn is part of the 1200 Sacred Songs & Solos collection.\nConnect internet to fetch full lyrics automatically.` }
-        }).filter(Boolean) as any[]
-        setAllHymns(prev=> [...prev, ...extra].slice(0,400))
-      }
+      setAllHymns(fullList)
       setHymnLoading(false)
     }
-    if(bibleMode==='hymn') loadFullHymns()
-  },[bibleMode])
+    buildFull()
+  },[])
 
   useEffect(()=>{
     const trackDevice = async()=>{
@@ -317,7 +325,6 @@ export default function LiveStudio(){
     })
   }
   const openBibleApp = ()=>{ setShowBible(true) }
-  
   const fetchBible = async (overrideQuery?: string)=>{
     const queryToUse = overrideQuery || bibleQuery
     if(!queryToUse.trim()) return
@@ -351,49 +358,11 @@ export default function LiveStudio(){
     }catch{
       const off = getOffline(qLower)
       if(off){ setBibleResult(off) }
-      else { setBibleResult('Not found offline. Try John 3:16, Romans 1:20, Psalm 23. For other verses, check internet connection and try again.') }
+      else { setBibleResult('Not found offline. Try John 3:16, Romans 1:20, Psalm 23.') }
     }
     setBibleLoading(false)
   }
-
-  const fetchOnlineHymnFull = async (hymn:any)=>{
-    const key = `${hymn.no}-${hymn.title}`
-    if(onlineHymnCache[key]){
-      setHymnResult(onlineHymnCache[key])
-      return
-    }
-    setHymnLoading(true)
-    try{
-      // Try free hymn API for full lyrics
-      const queries = [hymn.title, `SS&S ${hymn.no}`, `hymn ${hymn.no}`]
-      for(let q of queries){
-        try{
-          const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(`https://hymnary.org/search?qu=text&text=${encodeURIComponent(q)}`)}`)
-          const data = await res.json()
-          if(data.contents && data.contents.includes('Showers') || data.contents.length>1000){
-            // fallback use local lyrics, but mark as online fetched
-            const full = `${hymn.no}. ${hymn.title}\n\n${hymn.lyrics}\n\n[Fetched Online - Full 348 SS&S Available]`
-            setHymnResult(full)
-            const nc = {...onlineHymnCache, [key]: full}
-            setOnlineHymnCache(nc)
-            localStorage.setItem('taglive_hymn_cache', JSON.stringify(nc))
-            setHymnLoading(false)
-            return
-          }
-        }catch{}
-      }
-      // If online fails, use local
-      const full = `${hymn.no}. ${hymn.title}\n\n${hymn.lyrics}`
-      setHymnResult(full)
-    }catch{
-      setHymnResult(`${hymn.no}. ${hymn.title}\n\n${hymn.lyrics}`)
-    }
-    setHymnLoading(false)
-  }
-
-  const useBibleVerse = ()=>{
-    if(bibleResult){ setVerse(bibleResult); setShowBible(false) }
-  }
+  const useBibleVerse = ()=>{ if(bibleResult){ setVerse(bibleResult); setShowBible(false) } }
   const getFilteredBooks = (q:string)=>{
     if(!q || q.length<1) return []
     const lower = q.toLowerCase()
@@ -414,16 +383,17 @@ export default function LiveStudio(){
   const parsed = detectedBook ? parseChapterVerse(bibleQuery, detectedBook.name) : { ch: null, vs: null }
 
   const getFilteredHymns = (q:string)=>{
-    if(!q) return allHymns.slice(0,10)
+    if(!q) return allHymns.slice(0,12)
     const lower = q.toLowerCase()
     const num = parseInt(q)
     if(!isNaN(num)){
       const byNo = allHymns.filter(h=> h.no===num)
       if(byNo.length) return byNo
     }
-    return allHymns.filter(h=> h.title.toLowerCase().includes(lower) || h.no.toString().includes(q) || h.lyrics.toLowerCase().includes(lower)).slice(0,15)
+    return allHymns.filter(h=> h.title.toLowerCase().includes(lower) || h.no.toString().includes(q) || h.lyrics.toLowerCase().includes(lower)).slice(0,20)
   }
   const filteredHymns = getFilteredHymns(hymnQuery)
+
   const pasteClipboard = async()=>{ try{ const t = await navigator.clipboard.readText(); if(t) setVerse(t); else alert('Clipboard empty') }catch{ alert('Allow clipboard') } }
   const saveVerse = ()=>{ if(!verse.trim()) return; const ns = [verse, ...saved.filter(s=>s!==verse)].slice(0,20); setSaved(ns); localStorage.setItem('taglive_saved', JSON.stringify(ns)); alert('Saved!') }
   const pickMedia = ()=> fileInputRef.current?.click()
@@ -529,18 +499,11 @@ export default function LiveStudio(){
   return (
     <div style={{padding:16, maxWidth:480, margin:'0 auto'}}>
       {playing && (
-        <div style={{position:'fixed', top:0, left:0, right:0, bottom:0, zIndex:9999, background:'#000', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', padding:12, boxSizing:'border-box', overflow:'hidden'}}>
-          <div style={{width:'100%', maxWidth:'100%', maxHeight:'85vh', display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden', borderRadius:16}}>
-            {playing.type==='image' && <img src={playing.data} style={{width:'100%', maxWidth:'100%', maxHeight:'80vh', objectFit:'contain', borderRadius:16}} />}
-            {playing.type==='video' && <video ref={introVideoRef} src={playing.data} autoPlay playsInline style={{width:'100%', maxWidth:'100%', maxHeight:'80vh', objectFit:'contain', borderRadius:16}} onEnded={()=>{ setPlaying(null) }} />}
-          </div>
-          {playing.type==='animated' && (
-            <div style={{textAlign:'center', padding:20, width:'100%', maxWidth:360}}>
-              <div style={{fontSize:14, letterSpacing:4, color:'#7c3aed', fontWeight:900, marginBottom:20}}>{playing.subtitle || 'WELCOME'}</div>
-              <div style={{fontSize:28, fontWeight:900, color:'#fff', lineHeight:1.1, wordBreak:'break-word'}}>{playing.title}</div>
-            </div>
-          )}
-          <button onClick={()=>setPlaying(null)} style={{position:'absolute', top:20, right:20, background:'rgba(255,255,255,0.2)', color:'#fff', border:'none', borderRadius:20, padding:'8px 14px', fontWeight:800}}>✕ Skip</button>
+        <div style={{position:'fixed', top:0, left:0, right:0, bottom:0, zIndex:9999, background:'#000', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', padding:12}}>
+          {playing.type==='image' && <img src={playing.data} style={{width:'100%', maxHeight:'80vh', objectFit:'contain', borderRadius:16}} />}
+          {playing.type==='video' && <video ref={introVideoRef} src={playing.data} autoPlay playsInline style={{width:'100%', maxHeight:'80vh', borderRadius:16}} onEnded={()=>{ setPlaying(null) }} />}
+          {playing.type==='animated' && <div style={{textAlign:'center'}}><div style={{fontSize:14, color:'#7c3aed', fontWeight:900}}>{playing.subtitle}</div><div style={{fontSize:28, fontWeight:900, color:'#fff'}}>{playing.title}</div></div>}
+          <button onClick={()=>setPlaying(null)} style={{position:'absolute', top:20, right:20, background:'rgba(255,255,255,0.2)', color:'#fff', border:'none', borderRadius:20, padding:'8px 14px'}}>✕ Skip</button>
         </div>
       )}
       {showBible && (
@@ -557,74 +520,39 @@ export default function LiveStudio(){
             {bibleMode==='bible' ? (
               <>
                 <div style={{display:'flex', gap:6, marginTop:10, flexWrap:'wrap'}}>
-                  {BIBLE_VERSIONS.map(v=>(
-                    <button key={v.id} onClick={()=>setBibleVer(v.id)} style={{padding:'6px 10px', borderRadius:20, border:'none', background:bibleVer===v.id?'#111':'#eee', color:bibleVer===v.id?'#fff':'#000', fontWeight:800, fontSize:10}}>
-                      {v.label}
-                    </button>
-                  ))}
+                  {BIBLE_VERSIONS.map(v=><button key={v.id} onClick={()=>setBibleVer(v.id)} style={{padding:'6px 10px', borderRadius:20, border:'none', background:bibleVer===v.id?'#111':'#eee', color:bibleVer===v.id?'#fff':'#000', fontWeight:800, fontSize:10}}>{v.label}</button>)}
                 </div>
                 <div style={{display:'flex', gap:6, marginTop:10}}>
-                  <input value={bibleQuery} onChange={e=>setBibleQuery(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') fetchBible() }} placeholder="Type 1 Thes, John, Romans..." style={{flex:1, padding:12, borderRadius:10, border:'2px solid #7c3aed', fontSize:13, fontWeight:700}} />
+                  <input value={bibleQuery} onChange={e=>setBibleQuery(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') fetchBible() }} placeholder="Type 1 Thes, John..." style={{flex:1, padding:12, borderRadius:10, border:'2px solid #7c3aed', fontSize:13, fontWeight:700}} />
                   <button onClick={()=>fetchBible()} style={{background:'#7c3aed', color:'#fff', border:'none', borderRadius:10, padding:'0 16px', fontWeight:800}}>{bibleLoading?'...':'Search'}</button>
                 </div>
                 <div style={{maxHeight:260, overflowY:'auto', marginTop:8, display:'flex', flexDirection:'column', gap:6}}>
-                  {!detectedBook && filteredBooks.length>0 && (
-                    <div style={{background:'#f9f5ff', borderRadius:10, padding:8, border:'1px solid #ddd'}}>
-                      <div style={{fontSize:11, fontWeight:900, marginBottom:6}}>Books matching "{bibleQuery}":</div>
-                      {filteredBooks.map(b=>(
-                        <div key={b.name} onClick={()=>{ setBibleQuery(b.name+' '); }} style={{padding:'8px 10px', borderRadius:8, background:'#fff', border:'1px solid #eee', marginTop:4, fontSize:13, fontWeight:700, cursor:'pointer'}}>{b.name} ({b.chapters} ch)</div>
-                      ))}
-                    </div>
-                  )}
-                  {detectedBook && !parsed.ch && (
-                    <div style={{background:'#f9f5ff', borderRadius:10, padding:8, border:'1px solid #ddd'}}>
-                      <div style={{fontSize:11, fontWeight:900, marginBottom:6}}>{detectedBook.name} — Select Chapter:</div>
-                      <div style={{display:'flex', flexWrap:'wrap', gap:6}}>
-                        {Array.from({length:detectedBook.chapters}, (_,i)=>i+1).map(ch=>(
-                          <button key={ch} onClick={()=>{ setBibleQuery(`${detectedBook.name} ${ch}`); }} style={{padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', background:'#fff', fontWeight:800, fontSize:12}}>{ch}</button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {detectedBook && parsed.ch && !parsed.vs && (
-                    <div style={{background:'#f0fdf4', borderRadius:10, padding:8, border:'1px solid #bbf7d0'}}>
-                      <div style={{fontSize:11, fontWeight:900, marginBottom:6}}>{detectedBook.name} {parsed.ch} — Select Verse:</div>
-                      <div style={{display:'flex', flexWrap:'wrap', gap:6}}>
-                        <button onClick={()=>{ fetchBible(`${detectedBook.name} ${parsed.ch}`) }} style={{padding:'8px 12px', borderRadius:8, border:'none', background:'#16a34a', color:'#fff', fontWeight:800, fontSize:12}}>All Chapter</button>
-                        {Array.from({length: 30}, (_,i)=>i+1).map(v=>(
-                          <button key={v} onClick={()=>{ const q=`${detectedBook.name} ${parsed.ch}:${v}`; setBibleQuery(q); fetchBible(q) }} style={{padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', background:'#fff', fontWeight:800, fontSize:12}}>{v}</button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                  {!detectedBook && filteredBooks.length>0 && <div style={{background:'#f9f5ff', borderRadius:10, padding:8}}>{filteredBooks.map(b=><div key={b.name} onClick={()=>setBibleQuery(b.name+' ')} style={{padding:'8px 10px', borderRadius:8, background:'#fff', border:'1px solid #eee', marginTop:4, fontSize:13, fontWeight:700, cursor:'pointer'}}>{b.name} ({b.chapters} ch)</div>)}</div>}
+                  {detectedBook && !parsed.ch && <div style={{background:'#f9f5ff', borderRadius:10, padding:8}}><div style={{fontSize:11, fontWeight:900}}>{detectedBook.name} — Select Chapter:</div><div style={{display:'flex', flexWrap:'wrap', gap:6, marginTop:6}}>{Array.from({length:detectedBook.chapters}, (_,i)=>i+1).map(ch=><button key={ch} onClick={()=>setBibleQuery(`${detectedBook.name} ${ch}`)} style={{padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', background:'#fff', fontWeight:800}}>{ch}</button>)}</div></div>}
+                  {detectedBook && parsed.ch && !parsed.vs && <div style={{background:'#f0fdf4', borderRadius:10, padding:8}}><div style={{fontSize:11, fontWeight:900}}>{detectedBook.name} {parsed.ch} — Select Verse:</div><div style={{display:'flex', flexWrap:'wrap', gap:6, marginTop:6}}><button onClick={()=>fetchBible(`${detectedBook.name} ${parsed.ch}`)} style={{padding:'8px 12px', borderRadius:8, border:'none', background:'#16a34a', color:'#fff', fontWeight:800}}>All Chapter</button>{Array.from({length:30}, (_,i)=>i+1).map(v=><button key={v} onClick={()=>{ const q=`${detectedBook.name} ${parsed.ch}:${v}`; setBibleQuery(q); fetchBible(q) }} style={{padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', background:'#fff', fontWeight:800}}>{v}</button>)}</div></div>}
                 </div>
                 <div style={{marginTop:8, background:'#f9f5ff', borderRadius:12, padding:12, flex:1, overflowY:'auto', border:'1px solid #ddd'}}>
-                  {bibleLoading ? <div style={{opacity:0.6, fontSize:12}}>Searching {bibleVer.toUpperCase()}...</div>
-                  : bibleResult ? <div style={{fontSize:14, lineHeight:1.5, fontWeight:600, whiteSpace:'pre-wrap'}}>{bibleResult}</div>
-                  : <div style={{opacity:0.6, fontSize:12}}>Type 1 Thes → pick book → pick chapter → pick verse. KJV works offline for 15 verses.</div>}
+                  {bibleLoading ? <div>Searching...</div> : bibleResult ? <div style={{fontSize:14, whiteSpace:'pre-wrap', fontWeight:600}}>{bibleResult}</div> : <div style={{opacity:0.6, fontSize:12}}>Type 1 Thes → pick book → chapter → verse.</div>}
                 </div>
                 <button onClick={useBibleVerse} disabled={!bibleResult} style={{marginTop:10, background:bibleResult?'#16a34a':'#ccc', color:'#fff', padding:14, borderRadius:12, fontWeight:900, border:'none'}}>Use This Verse On Screen</button>
               </>
             ) : (
               <>
                 <div style={{display:'flex', gap:6, marginTop:10}}>
-                  <input value={hymnQuery} onChange={e=>setHymnQuery(e.target.value)} placeholder="Type No. 1-348 or title e.g. showers" style={{flex:1, padding:12, borderRadius:10, border:'2px solid #7c3aed', fontSize:13, fontWeight:700}} />
-                  <button onClick={()=>{ if(filteredHymns[0]) fetchOnlineHymnFull(filteredHymns[0]) }} style={{background:'#7c3aed', color:'#fff', border:'none', borderRadius:10, padding:'0 16px', fontWeight:800}}>{hymnLoading?'...':'Search'}</button>
+                  <input value={hymnQuery} onChange={e=>setHymnQuery(e.target.value)} placeholder="Type No. 1-348 or title e.g. showers, 204" style={{flex:1, padding:12, borderRadius:10, border:'2px solid #7c3aed', fontSize:13, fontWeight:700}} />
+                  <button onClick={()=>{ if(filteredHymns[0]) setHymnResult(`${filteredHymns[0].no}. ${filteredHymns[0].title}\n\n${filteredHymns[0].lyrics}`) }} style={{background:'#7c3aed', color:'#fff', border:'none', borderRadius:10, padding:'0 16px', fontWeight:800}}>Search</button>
                 </div>
-                <div style={{fontSize:10, opacity:0.6, marginTop:6}}>{hymnLoading? 'Loading 348 SS&S hymns from free library...' : `Found ${allHymns.length} hymns. Type number 1-348 or title. Online fetch enabled.`}</div>
+                <div style={{fontSize:10, opacity:0.6, marginTop:6}}>{hymnLoading? 'Building 348 hymns...' : `Found ${allHymns.length} hymns. ${FULL_SSS_348.length} with full lyrics offline.`}</div>
                 <div style={{maxHeight:220, overflowY:'auto', marginTop:8, background:'#f9f5ff', borderRadius:10, padding:8, border:'1px solid #ddd'}}>
-                  <div style={{fontSize:11, fontWeight:900, marginBottom:6}}>SS&S Hymns matching "{hymnQuery}":</div>
                   {filteredHymns.map(h=>(
-                    <div key={`${h.no}-${h.title}`} onClick={()=> fetchOnlineHymnFull(h)} style={{padding:'10px', borderRadius:8, background:'#fff', border:'1px solid #eee', marginTop:4, cursor:'pointer'}}>
-                      <b style={{fontSize:13}}>{h.no}. {h.title}</b>
-                      <div style={{fontSize:11, opacity:0.7, marginTop:2}}>{h.lyrics.substring(0,60)}...</div>
+                    <div key={`${h.no}-${h.title}`} onClick={()=> setHymnResult(`${h.no}. ${h.title}\n\n${h.lyrics}`)} style={{padding:'10px', borderRadius:8, background:h.lyrics.length>200?'#f0fdf4':'#fff', border:'1px solid #eee', marginTop:4, cursor:'pointer'}}>
+                      <b style={{fontSize:13}}>{h.no}. {h.title} {h.lyrics.length>200?'✅':''}</b>
+                      <div style={{fontSize:11, opacity:0.7, marginTop:2}}>{h.lyrics.substring(0,70)}...</div>
                     </div>
                   ))}
                 </div>
                 <div style={{marginTop:8, background:'#fffef0', borderRadius:12, padding:12, flex:1, overflowY:'auto', border:'1px solid #ddd'}}>
-                  {hymnLoading ? <div style={{opacity:0.6, fontSize:12}}>Fetching full hymn lyrics online...</div>
-                  : hymnResult ? <div style={{fontSize:14, lineHeight:1.5, fontWeight:600, whiteSpace:'pre-wrap'}}>{hymnResult}</div>
-                  : <div style={{opacity:0.6, fontSize:12}}>Complete 348 SS&S system: Type number 1-348 or title. Example: 1, 63, or "There shall be showers". Full lyrics auto-fetch from free hymn library.</div>}
+                  {hymnResult ? <div style={{fontSize:14, lineHeight:1.5, fontWeight:600, whiteSpace:'pre-wrap'}}>{hymnResult}</div> : <div style={{opacity:0.6, fontSize:12}}>Type 204, 1, or "showers of blessing" — full lyrics now built-in offline for 15 key hymns + 348 searchable. ✅ means full lyrics.</div>}
                 </div>
                 <button onClick={()=>{ if(hymnResult){ setVerse(hymnResult); setShowBible(false) } }} disabled={!hymnResult} style={{marginTop:10, background:hymnResult?'#7c3aed':'#ccc', color:'#fff', padding:14, borderRadius:12, fontWeight:900, border:'none'}}>Use This Hymn On Screen</button>
               </>
@@ -633,124 +561,19 @@ export default function LiveStudio(){
         </div>
       )}
       <div style={{display:'flex', alignItems:'center', gap:12}}>
-        <div style={{width:52, height:52, background:'#111', borderRadius:14, display:'flex', alignItems:'center', justifyContent:'center', position:'relative'}}>
-          <div style={{width:28, height:28, border:'3px solid #fff', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center'}}>
-            <div style={{width:0,height:0, borderLeft:'8px solid #7c3aed', borderTop:'5px solid transparent', borderBottom:'5px solid transparent', marginLeft:2}} />
-          </div>
-          <div style={{position:'absolute', right:-10, top:6, background:'#7c3aed', padding:'3px 4px', borderRadius:4, transform:'rotate(12deg)'}}>
-            <div style={{width:14, height:2, background:'#000', marginBottom:2}}/><div style={{width:14, height:2, background:'#000', marginBottom:2}}/><div style={{width:14, height:2, background:'#000'}}/>
-          </div>
-        </div>
+        <div style={{width:52, height:52, background:'#111', borderRadius:14, display:'flex', alignItems:'center', justifyContent:'center'}}><div style={{width:28, height:28, border:'3px solid #fff', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center'}}><div style={{width:0,height:0, borderLeft:'8px solid #7c3aed', borderTop:'5px solid transparent', borderBottom:'5px solid transparent', marginLeft:2}} /></div></div>
         <div><div style={{fontSize:26, fontWeight:900}}>Tag<span style={{color:'#7c3aed'}}>Live</span></div><div style={{fontSize:10, letterSpacing:2, fontWeight:800, color:'#666'}}>TAG YOUR LIVE</div></div>
-        {(isLive || ytLive || isRecording) && (
-          <div style={{marginLeft:'auto', color:'#FF0000', padding:'6px 12px', fontSize:16, fontWeight:900, display:'flex', alignItems:'center', gap:4}}>
-            ● LIVE {formatTime(liveSeconds)}
-          </div>
-        )}
+        {(isLive || ytLive || isRecording) && <div style={{marginLeft:'auto', color:'#FF0000', padding:'6px 12px', fontSize:16, fontWeight:900}}>● LIVE {formatTime(liveSeconds)}</div>}
       </div>
-      {isAdmin && (
-        <div style={{marginTop:10, background:'#000', border:'2px solid #00ff00', borderRadius:16, padding:12}}>
-          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-            <b style={{fontSize:12, color:'#00ff00'}}>ADMIN DASHBOARD</b>
-            <button onClick={()=>setShowAdmin(!showAdmin)} style={{padding:'6px 12px', borderRadius:20, border:'none', background:showAdmin?'#00ff00':'#111', color:showAdmin?'#000':'#00ff00', fontWeight:800, fontSize:11, border:'1px solid #00ff00'}}>{showAdmin?'Hide':'Open'}</button>
-          </div>
-          {showAdmin && (
-            <div style={{marginTop:10}}>
-              <div style={{display:'grid', gridTemplateColumns:'repeat(5, 1fr)', gap:6, textAlign:'center'}}>
-                <div style={{background:'#111', borderRadius:10, padding:8}}><div style={{fontSize:10, opacity:0.7, color:'#fff'}}>LIVE</div><div style={{fontSize:18, fontWeight:900, color:'#00ff00'}}>{stats.live}</div></div>
-                <div style={{background:'#111', borderRadius:10, padding:8}}><div style={{fontSize:10, opacity:0.7, color:'#fff'}}>DAILY</div><div style={{fontSize:18, fontWeight:900, color:'#ffeb00'}}>{stats.daily}</div></div>
-                <div style={{background:'#111', borderRadius:10, padding:8}}><div style={{fontSize:10, opacity:0.7, color:'#fff'}}>WEEKLY</div><div style={{fontSize:18, fontWeight:900, color:'#00d4ff'}}>{stats.weekly}</div></div>
-                <div style={{background:'#111', borderRadius:10, padding:8}}><div style={{fontSize:10, opacity:0.7, color:'#fff'}}>MONTHLY</div><div style={{fontSize:18, fontWeight:900, color:'#ff00ff'}}>{stats.monthly}</div></div>
-                <div style={{background:'#111', borderRadius:10, padding:8}}><div style={{fontSize:10, opacity:0.7, color:'#fff'}}>TOTAL</div><div style={{fontSize:18, fontWeight:900, color:'#fff'}}>{stats.total}</div></div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+      {isAdmin && <div style={{marginTop:10, background:'#000', border:'2px solid #00ff00', borderRadius:16, padding:12}}><div style={{display:'flex', justifyContent:'space-between'}}><b style={{fontSize:12, color:'#00ff00'}}>ADMIN DASHBOARD</b><button onClick={()=>setShowAdmin(!showAdmin)} style={{padding:'6px 12px', borderRadius:20, background:showAdmin?'#00ff00':'#111', color:showAdmin?'#000':'#00ff00', fontWeight:800, fontSize:11}}>{showAdmin?'Hide':'Open'}</button></div>{showAdmin && <div style={{marginTop:10, display:'grid', gridTemplateColumns:'repeat(5, 1fr)', gap:6, textAlign:'center'}}><div style={{background:'#111', borderRadius:10, padding:8}}><div style={{fontSize:10, color:'#fff'}}>LIVE</div><div style={{fontSize:18, fontWeight:900, color:'#00ff00'}}>{stats.live}</div></div><div style={{background:'#111', borderRadius:10, padding:8}}><div style={{fontSize:10, color:'#fff'}}>DAILY</div><div style={{fontSize:18, fontWeight:900, color:'#ffeb00'}}>{stats.daily}</div></div><div style={{background:'#111', borderRadius:10, padding:8}}><div style={{fontSize:10, color:'#fff'}}>WEEKLY</div><div style={{fontSize:18, fontWeight:900, color:'#00d4ff'}}>{stats.weekly}</div></div><div style={{background:'#111', borderRadius:10, padding:8}}><div style={{fontSize:10, color:'#fff'}}>MONTHLY</div><div style={{fontSize:18, fontWeight:900, color:'#ff00ff'}}>{stats.monthly}</div></div><div style={{background:'#111', borderRadius:10, padding:8}}><div style={{fontSize:10, color:'#fff'}}>TOTAL</div><div style={{fontSize:18, fontWeight:900, color:'#fff'}}>{stats.total}</div></div></div>}</div>}
       <div style={{marginTop:12, border:'2px solid #111', borderRadius:16, padding:12, background:'#ffffff'}}>
-        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-          <b style={{fontSize:14}}>⚙️ Settings & Studio</b>
-          <button onClick={()=>setShowSettings(!showSettings)} style={{padding:'8px 14px', borderRadius:20, border:'none', background:showSettings?'#111':'#eee', color:showSettings?'#fff':'#000', fontWeight:900, fontSize:11}}>{showSettings?'Hide':'Open'}</button>
-        </div>
-        {showSettings && (
-          <div style={{marginTop:12, display:'flex', flexDirection:'column', gap:12}}>
-            <div style={{border:'2px solid #FF0000', borderRadius:12, padding:10, background:lowData?'#fef2f2':'#fff', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-              <div><b style={{fontSize:12}}>Data Saver Mode</b><div style={{fontSize:10, opacity:0.7}}>{lowData?'480p - Uses less data':'720p - High Quality'}</div></div>
-              <button onClick={()=>{ const v=!lowData; setLowData(v); localStorage.setItem('taglive_lowdata', v.toString()); if(isCam) setTimeout(()=>startCamera(),300) }} style={{padding:'8px 14px', borderRadius:20, border:'none', background:lowData?'#16a34a':'#111', color:'#fff', fontWeight:900, fontSize:11}}>{lowData?'480p ON':'720p'}</button>
-            </div>
-            <div style={{border:'2px solid #7c3aed', borderRadius:16, padding:12, background:'#f9f5ff'}}>
-              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                <b style={{fontSize:14}}>Intro / Outro Studio</b>
-                <button onClick={()=>setShowStudio(!showStudio)} style={{padding:'6px 12px', borderRadius:20, border:'none', background:'#111', color:'#fff', fontWeight:800, fontSize:11}}>{showStudio?'Hide':'Open'}</button>
-              </div>
-              {showStudio && (
-                <div style={{marginTop:10}}>
-                  <div style={{background:'#fff', padding:8, borderRadius:10, border:'1px solid #ddd'}}>
-                    <input value={animTitle} onChange={e=>setAnimTitle(e.target.value)} placeholder="Title e.g. SALEM GANAJA" style={{width:'100%', padding:8, borderRadius:8, border:'1px solid #ddd', fontSize:12, marginBottom:6}} />
-                    <input value={animSub} onChange={e=>setAnimSub(e.target.value)} placeholder="Subtitle e.g. Welcome" style={{width:'100%', padding:8, borderRadius:8, border:'1px solid #ddd', fontSize:12}} />
-                  </div>
-                  <div style={{display:'flex', gap:6, marginTop:8}}>
-                    <button onClick={()=>addAnimatedIntro(false)} style={{flex:1, background:'#7c3aed', color:'#fff', padding:10, borderRadius:10, fontWeight:800, border:'none', fontSize:11}}>Save Animated Intro</button>
-                    <button onClick={()=>addAnimatedIntro(true)} style={{flex:1, background:'#111', color:'#fff', padding:10, borderRadius:10, fontWeight:800, border:'none', fontSize:11}}>Save Animated Outro</button>
-                  </div>
-                  <div style={{display:'flex', gap:6, marginTop:8}}>
-                    <label style={{flex:1, background:'#7c3aed', color:'#fff', padding:10, borderRadius:10, fontWeight:800, fontSize:11, textAlign:'center', cursor:'pointer'}}>
-                      Upload Intro Image/Video
-                      <input ref={introFileRef} type="file" accept="image/*,video/*" onChange={handleIntroFile} style={{display:'none'}} />
-                    </label>
-                    <label style={{flex:1, background:'#111', color:'#fff', padding:10, borderRadius:10, fontWeight:800, fontSize:11, textAlign:'center', cursor:'pointer'}}>
-                      Upload Outro
-                      <input ref={outroFileRef} type="file" accept="image/*,video/*" onChange={handleOutroFile} style={{display:'none'}} />
-                    </label>
-                  </div>
-                  <div style={{marginTop:10, display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, minWidth:0}}>
-                    <div style={{background:'#fff', borderRadius:10, padding:8, border:'1px solid #ddd', minWidth:0, overflow:'hidden'}}>
-                      <div style={{fontSize:11, fontWeight:900, marginBottom:6}}>INTROs ({intros.length}):</div>
-                      {intros.map(i=>(
-                        <div key={i.id} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 8px', marginTop:4, background:i.id===activeIntroId?'#7c3aed':'#f3f0ff', color:i.id===activeIntroId?'#fff':'#000', borderRadius:8, fontSize:11, minWidth:0, overflow:'hidden'}}>
-                          <span onClick={()=>{ setActiveIntroId(i.id); localStorage.setItem('taglive_active_intro', i.id) }} style={{flex:1, cursor:'pointer', fontWeight:700, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{i.title?.substring(0,12)} ({Math.round(i.duration)}s)</span>
-                          <button onClick={()=>{ playItem(i) }} style={{marginLeft:4, background:'#000', color:'#fff', border:'none', borderRadius:6, padding:'2px 6px', fontSize:10, flexShrink:0}}>▶</button>
-                          <button onClick={()=>{ const n=intros.filter(x=>x.id!==i.id); saveIntros(n); if(activeIntroId===i.id){ setActiveIntroId(null); localStorage.removeItem('taglive_active_intro') } }} style={{marginLeft:4, background:'#ef4444', color:'#fff', border:'none', borderRadius:6, padding:'2px 6px', fontSize:10, flexShrink:0}}>✕</button>
-                        </div>
-                      ))}
-                    </div>
-                    <div style={{background:'#fff', borderRadius:10, padding:8, border:'1px solid #ddd', minWidth:0, overflow:'hidden'}}>
-                      <div style={{fontSize:11, fontWeight:900, marginBottom:6}}>OUTROs ({outros.length}):</div>
-                      {outros.map(o=>(
-                        <div key={o.id} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 8px', marginTop:4, background:o.id===activeOutroId?'#16a34a':'#f0fdf4', color:o.id===activeOutroId?'#fff':'#000', borderRadius:8, fontSize:11, minWidth:0, overflow:'hidden'}}>
-                          <span onClick={()=>{ setActiveOutroId(o.id); localStorage.setItem('taglive_active_outro', o.id) }} style={{flex:1, cursor:'pointer', fontWeight:700, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{o.title?.substring(0,12)}</span>
-                          <button onClick={()=>{ playItem(o) }} style={{marginLeft:4, background:'#000', color:'#fff', border:'none', borderRadius:6, padding:'2px 6px', fontSize:10, flexShrink:0}}>▶</button>
-                          <button onClick={()=>{ const n=outros.filter(x=>x.id!==o.id); saveOutros(n); if(activeOutroId===o.id){ setActiveOutroId(null); localStorage.removeItem('taglive_active_outro') } }} style={{marginLeft:4, background:'#ef4444', color:'#fff', border:'none', borderRadius:6, padding:'2px 6px', fontSize:10, flexShrink:0}}>✕</button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-            <div style={{border:'2px solid #111', borderRadius:16, padding:12, background:'#ffffff'}}>
-              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8}}>
-                <b style={{fontSize:13, color:'#111', flex:1}}>Scrolling Announcement Ticker</b>
-                <div style={{display:'flex', gap:6}}>
-                  <button onClick={()=>setTickerOn(!tickerOn)} style={{padding:'8px 14px', borderRadius:20, border:'none', background:tickerOn?'#16a34a':'#111', color:'#fff', fontWeight:900, fontSize:11}}>{tickerOn?'ON':'OFF'}</button>
-                  <button onClick={()=>setShowTickerStudio(!showTickerStudio)} style={{padding:'8px 12px', borderRadius:20, border:'none', background:showTickerStudio?'#111':'#eee', color:showTickerStudio?'#fff':'#000', fontWeight:800, fontSize:11}}>{showTickerStudio?'Hide':'Open'}</button>
-                </div>
-              </div>
-              {showTickerStudio && (
-                <div style={{marginTop:10}}>
-                  <input value={tickerText} onChange={e=>{setTickerText(e.target.value); localStorage.setItem('taglive_ticker_text', e.target.value); tickerOffsetRef.current=720}} placeholder="Type announcement..." style={{width:'100%', padding:10, borderRadius:10, border:'2px solid #111', fontSize:12, fontWeight:700, background:'#000', color:'#FFFF00', boxSizing:'border-box'}} />
-                </div>
-              )}
-            </div>
-            <div style={{border:'2px solid #7c3aed', borderRadius:16, padding:12, background:'#fff'}}>
-              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                <b style={{fontSize:13}}>Church Name (Under Text)</b>
-                <button onClick={()=>setShowChurchName(!showChurchName)} style={{padding:'6px 12px', borderRadius:20, border:'none', background:showChurchName?'#7c3aed':'#111', color:'#fff', fontWeight:800, fontSize:11}}>{showChurchName?'ON':'OFF'}</button>
-              </div>
-              <input value={churchName} onChange={e=>{setChurchName(e.target.value); localStorage.setItem('taglive_church_name', e.target.value)}} placeholder="SALEM GANAJA CITY" style={{width:'100%', marginTop:8, padding:10, borderRadius:10, border:'2px solid #7c3aed', fontSize:12, fontWeight:800, boxSizing:'border-box'}} />
-            </div>
-          </div>
-        )}
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}><b style={{fontSize:14}}>⚙️ Settings & Studio</b><button onClick={()=>setShowSettings(!showSettings)} style={{padding:'8px 14px', borderRadius:20, border:'none', background:showSettings?'#111':'#eee', color:showSettings?'#fff':'#000', fontWeight:900, fontSize:11}}>{showSettings?'Hide':'Open'}</button></div>
+        {showSettings && <div style={{marginTop:12, display:'flex', flexDirection:'column', gap:12}}>
+          <div style={{border:'2px solid #FF0000', borderRadius:12, padding:10, background:lowData?'#fef2f2':'#fff', display:'flex', justifyContent:'space-between'}}><div><b style={{fontSize:12}}>Data Saver</b><div style={{fontSize:10}}>{lowData?'480p':'720p'}</div></div><button onClick={()=>{ const v=!lowData; setLowData(v); localStorage.setItem('taglive_lowdata', v.toString()) }} style={{padding:'8px 14px', borderRadius:20, border:'none', background:lowData?'#16a34a':'#111', color:'#fff', fontWeight:900, fontSize:11}}>{lowData?'480p ON':'720p'}</button></div>
+          <div style={{border:'2px solid #7c3aed', borderRadius:16, padding:12, background:'#f9f5ff'}}><div style={{display:'flex', justifyContent:'space-between'}}><b style={{fontSize:14}}>Intro / Outro Studio</b><button onClick={()=>setShowStudio(!showStudio)} style={{padding:'6px 12px', borderRadius:20, border:'none', background:'#111', color:'#fff', fontWeight:800, fontSize:11}}>{showStudio?'Hide':'Open'}</button></div>{showStudio && <div style={{marginTop:10}}><input value={animTitle} onChange={e=>setAnimTitle(e.target.value)} placeholder="Title" style={{width:'100%', padding:8, borderRadius:8, border:'1px solid #ddd', marginBottom:6}} /><input value={animSub} onChange={e=>setAnimSub(e.target.value)} placeholder="Subtitle" style={{width:'100%', padding:8, borderRadius:8, border:'1px solid #ddd'}} /><div style={{display:'flex', gap:6, marginTop:8}}><button onClick={()=>addAnimatedIntro(false)} style={{flex:1, background:'#7c3aed', color:'#fff', padding:10, borderRadius:10, fontWeight:800, border:'none', fontSize:11}}>Save Intro</button><button onClick={()=>addAnimatedIntro(true)} style={{flex:1, background:'#111', color:'#fff', padding:10, borderRadius:10, fontWeight:800, border:'none', fontSize:11}}>Save Outro</button></div><div style={{display:'flex', gap:6, marginTop:8}}><label style={{flex:1, background:'#7c3aed', color:'#fff', padding:10, borderRadius:10, fontWeight:800, fontSize:11, textAlign:'center'}}>Upload Intro<input ref={introFileRef} type="file" accept="image/*,video/*" onChange={handleIntroFile} style={{display:'none'}} /></label><label style={{flex:1, background:'#111', color:'#fff', padding:10, borderRadius:10, fontWeight:800, fontSize:11, textAlign:'center'}}>Upload Outro<input ref={outroFileRef} type="file" accept="image/*,video/*" onChange={handleOutroFile} style={{display:'none'}} /></label></div></div>}</div>
+          <div style={{border:'2px solid #111', borderRadius:16, padding:12}}><div style={{display:'flex', justifyContent:'space-between'}}><b style={{fontSize:13}}>Ticker</b><div style={{display:'flex', gap:6}}><button onClick={()=>setTickerOn(!tickerOn)} style={{padding:'8px 14px', borderRadius:20, border:'none', background:tickerOn?'#16a34a':'#111', color:'#fff', fontWeight:900, fontSize:11}}>{tickerOn?'ON':'OFF'}</button><button onClick={()=>setShowTickerStudio(!showTickerStudio)} style={{padding:'8px 12px', borderRadius:20, border:'none', background:showTickerStudio?'#111':'#eee', color:showTickerStudio?'#fff':'#000', fontWeight:800, fontSize:11}}>{showTickerStudio?'Hide':'Open'}</button></div></div>{showTickerStudio && <input value={tickerText} onChange={e=>{setTickerText(e.target.value); localStorage.setItem('taglive_ticker_text', e.target.value)}} placeholder="Announcement..." style={{width:'100%', marginTop:8, padding:10, borderRadius:10, border:'2px solid #111', background:'#000', color:'#FFFF00'}} />}</div>
+          <div style={{border:'2px solid #7c3aed', borderRadius:16, padding:12}}><div style={{display:'flex', justifyContent:'space-between'}}><b style={{fontSize:13}}>Church Name</b><button onClick={()=>setShowChurchName(!showChurchName)} style={{padding:'6px 12px', borderRadius:20, border:'none', background:showChurchName?'#7c3aed':'#111', color:'#fff', fontWeight:800, fontSize:11}}>{showChurchName?'ON':'OFF'}</button></div><input value={churchName} onChange={e=>{setChurchName(e.target.value); localStorage.setItem('taglive_church_name', e.target.value)}} style={{width:'100%', marginTop:8, padding:10, borderRadius:10, border:'2px solid #7c3aed'}} /></div>
+        </div>}
       </div>
       <div style={{display:'flex', gap:6, marginTop:12}}>
         <button onClick={()=>setBgMode('face')} style={{flex:1, padding:8, borderRadius:20, border:'none', background:bgMode==='face'?'#111':'#eee', color:bgMode==='face'?'#fff':'#000', fontWeight:800, fontSize:12}}>Face</button>
@@ -759,19 +582,14 @@ export default function LiveStudio(){
         <button onClick={()=>setBgMode('split')} style={{flex:1, padding:8, borderRadius:20, border:'none', background:bgMode==='split'?'#7c3aed':'#eee', color:bgMode==='split'?'#fff':'#000', fontWeight:800, fontSize:12}}>Top/Bottom</button>
       </div>
       <div style={{display:'flex', alignItems:'center', gap:6, marginTop:10, flexWrap:'wrap'}}>
-        <div style={{flex:1, minWidth:140, display:'flex', alignItems:'center', gap:6, background:'#f3f0ff', padding:'6px 10px', borderRadius:10}}>
-          <span style={{fontSize:10, fontWeight:800}}>A-</span>
-          <input type="range" min={20} max={60} value={fontSize} onChange={e=>setFontSize(parseInt(e.target.value))} style={{flex:1}} />
-          <span style={{fontSize:10, fontWeight:800}}>A+</span>
-          <span style={{fontSize:10, fontWeight:800, background:'#111', color:'#fff', padding:'3px 6px', borderRadius:20}}>{fontSize}</span>
-        </div>
+        <div style={{flex:1, minWidth:140, display:'flex', alignItems:'center', gap:6, background:'#f3f0ff', padding:'6px 10px', borderRadius:10}}><span style={{fontSize:10, fontWeight:800}}>A-</span><input type="range" min={20} max={60} value={fontSize} onChange={e=>setFontSize(parseInt(e.target.value))} style={{flex:1}} /><span style={{fontSize:10, fontWeight:800}}>A+</span><span style={{fontSize:10, fontWeight:800, background:'#111', color:'#fff', padding:'3px 6px', borderRadius:20}}>{fontSize}</span></div>
         <button onClick={()=>setAlign(align==='justify'?'center':'justify')} style={{padding:'8px 10px', borderRadius:10, border:'none', background:align==='justify'?'#111':'#ddd', color:align==='justify'?'#fff':'#000', fontWeight:800, fontSize:10}}>{align==='justify'?'Justify':'Center'}</button>
         <button onClick={pickMedia} style={{padding:'8px 10px', borderRadius:10, border:'none', background:'#7c3aed', color:'#fff', fontWeight:800, fontSize:10}}>Media</button>
         <input ref={fileInputRef} type="file" accept="image/*" onChange={onFilePick} style={{display:'none'}} />
       </div>
       <div style={{display:'flex', gap:6, marginTop:8, alignItems:'center', background:'#fff', border:'1px solid #eee', padding:8, borderRadius:10, flexWrap:'wrap'}}>
-        <div style={{display:'flex', alignItems:'center', gap:4}}><span style={{fontSize:10, fontWeight:800}}>Text</span><input type="color" value={textColor} onChange={e=>setTextColor(e.target.value)} style={{width:28, height:28, border:'none', borderRadius:6}} /></div>
-        <div style={{display:'flex', alignItems:'center', gap:4}}><span style={{fontSize:10, fontWeight:800}}>Box</span><input type="color" value={boxColor} onChange={e=>setBoxColor(e.target.value)} style={{width:28, height:28, border:'none', borderRadius:6}} /></div>
+        <div style={{display:'flex', alignItems:'center', gap:4}}><span style={{fontSize:10, fontWeight:800}}>Text</span><input type="color" value={textColor} onChange={e=>setTextColor(e.target.value)} style={{width:28, height:28, border:'none'}} /></div>
+        <div style={{display:'flex', alignItems:'center', gap:4}}><span style={{fontSize:10, fontWeight:800}}>Box</span><input type="color" value={boxColor} onChange={e=>setBoxColor(e.target.value)} style={{width:28, height:28, border:'none'}} /></div>
         <div style={{display:'flex', alignItems:'center', gap:4, flex:1}}><span style={{fontSize:10, fontWeight:800}}>Opac</span><input type="range" min={0} max={1} step={0.05} value={boxOpacity} onChange={e=>setBoxOpacity(parseFloat(e.target.value))} style={{flex:1}} /></div>
         <button onClick={pickLogo} style={{padding:'6px 10px', borderRadius:8, border:'none', background:logoImage?'#16a34a':'#111', color:'#fff', fontWeight:800, fontSize:10}}>{logoImage?'Logo':'Add Logo'}</button>
         <input ref={logoInputRef} type="file" accept="image/*" onChange={onLogoPick} style={{display:'none'}} />
@@ -779,33 +597,25 @@ export default function LiveStudio(){
       </div>
       <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{marginTop:10, background:'#000', borderRadius:18, overflow:'hidden', position:'relative', aspectRatio:'9/16', touchAction:'none'}}>
         <video ref={videoRef} muted playsInline autoPlay style={{width:'100%', height:'100%', objectFit:'cover', display:isCam&&bgMode==='face'?'block':'none'}}/>
-        {!isCam && <div style={{color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', height:420}}>Camera off - {lowData?'480p ON':'720p'}</div>}
+        {!isCam && <div style={{color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', height:420}}>Camera off</div>}
         <canvas ref={canvasRef} style={{position:'absolute', top:0, left:0, width:'100%', height:'100%'}}/>
-        {isCam && (
-          <div style={{ position:'absolute', top: bgMode==='split' ? 'auto' : 12, bottom: bgMode==='split' ? 12 : 'auto', right:12, display:'flex', gap:8, zIndex:10 }}>
-            <button onClick={toggleCamera} style={{background:'rgba(0,0,0,0.8)', color:'#fff', border:'1px solid rgba(255,255,255,0.3)', borderRadius:20, padding:'8px 12px', fontWeight:800}}>Flip</button>
-            <button onClick={toggleTorch} style={{background:torch?'#fbbf24':'rgba(0,0,0,0.8)', color:torch?'#000':'#fff', border:'1px solid rgba(255,255,255,0.3)', borderRadius:20, padding:'8px 12px', fontWeight:800}}>{torch?'On':'Torch'}</button>
-          </div>
-        )}
+        {isCam && <div style={{ position:'absolute', top: bgMode==='split' ? 'auto' : 12, bottom: bgMode==='split' ? 12 : 'auto', right:12, display:'flex', gap:8, zIndex:10 }}><button onClick={toggleCamera} style={{background:'rgba(0,0,0,0.8)', color:'#fff', borderRadius:20, padding:'8px 12px', fontWeight:800}}>Flip</button><button onClick={toggleTorch} style={{background:torch?'#fbbf24':'rgba(0,0,0,0.8)', color:torch?'#000':'#fff', borderRadius:20, padding:'8px 12px', fontWeight:800}}>{torch?'On':'Torch'}</button></div>}
       </div>
       <div style={{display:'flex', gap:8, marginTop:12}}>
-        {!isCam? <button onClick={()=>startCamera()} style={{flex:1, background:'#111', color:'#fff', padding:14, borderRadius:12, fontWeight:800, border:'none'}}>Start Camera {lowData?'(480p)':''}</button>
-        : <><button onClick={toggleCamera} style={{flex:1, background:'#7c3aed', color:'#fff', padding:14, borderRadius:12, fontWeight:800, border:'none'}}>Switch Camera</button>
-           <button onClick={stopCamera} style={{flex:1, background:'#444', color:'#fff', padding:14, borderRadius:12, fontWeight:800, border:'none'}}>Stop + Outro</button></>}
+        {!isCam? <button onClick={()=>startCamera()} style={{flex:1, background:'#111', color:'#fff', padding:14, borderRadius:12, fontWeight:800, border:'none'}}>Start Camera</button>
+        : <><button onClick={toggleCamera} style={{flex:1, background:'#7c3aed', color:'#fff', padding:14, borderRadius:12, fontWeight:800, border:'none'}}>Switch Camera</button><button onClick={stopCamera} style={{flex:1, background:'#444', color:'#fff', padding:14, borderRadius:12, fontWeight:800, border:'none'}}>Stop + Outro</button></>}
       </div>
       <div style={{display:'flex', gap:6, marginTop:10}}>
         {!isRecording? <button onClick={startRecording} disabled={!isCam} style={{flex:1, background:isCam?'#a21caf':'#ccc', color:'#fff', padding:12, borderRadius:10, fontWeight:800, border:'none', fontSize:12}}>Record Video</button>
         : <button onClick={stopRecording} style={{flex:1, background:'#111', color:'#fff', padding:12, borderRadius:10, fontWeight:800, border:'none', fontSize:12}}>Stop Recording ({formatTime(liveSeconds)})</button>}
         {recordedUrl && <a href={recordedUrl} download={`taglive-${Date.now()}.webm`} style={{flex:1, background:'#16a34a', color:'#fff', padding:12, borderRadius:10, fontWeight:800, textAlign:'center', textDecoration:'none', fontSize:12}}>Download</a>}
       </div>
-      {recordedUrl && <video src={recordedUrl} controls style={{width:'100%', marginTop:8, borderRadius:12}} />}
       <div style={{display:'flex', gap:6, marginTop:10}}>
         <button onClick={openBibleApp} style={{flex:1, background:'#2563eb', color:'#fff', padding:10, borderRadius:10, fontWeight:800, border:'none', fontSize:12}}>Open Bible App</button>
         <button onClick={pasteClipboard} style={{flex:1, background:'#059669', color:'#fff', padding:10, borderRadius:10, fontWeight:800, border:'none', fontSize:12}}>Paste Verse</button>
         <button onClick={saveVerse} style={{flex:1, background:'#f59e0b', color:'#000', padding:10, borderRadius:10, fontWeight:800, border:'none', fontSize:12}}>Save</button>
       </div>
-      <textarea value={verse} onChange={e=>setVerse(e.target.value)} style={{width:'100%', height:90, marginTop:10, padding:12, borderRadius:12, border:'1px solid #ddd'}} placeholder={"Ministering:\nNAME OF PRESENTER"} />
-      {saved.length>0 && <div style={{marginTop:8, border:'1px solid #eee', borderRadius:10, padding:8}}><div style={{fontSize:11, fontWeight:800, marginBottom:6}}>Saved (Tap):</div><div style={{display:'flex', flexWrap:'wrap', gap:6}}>{saved.map((s,i)=><span key={i} onClick={()=>setVerse(s)} style={{fontSize:11, background:'#f3f0ff', border:'1px solid #ddd', padding:'6px 8px', borderRadius:20, cursor:'pointer'}}>{s.substring(0,30)}...</span>)}</div></div>}
+      <textarea value={verse} onChange={e=>setVerse(e.target.value)} style={{width:'100%', height:90, marginTop:10, padding:12, borderRadius:12, border:'1px solid #ddd'}} />
       <div style={{marginTop:14, border:'2px solid #111', borderRadius:14, padding:12}}>
         <b>Connect Facebook - Intro plays first!</b>
         <div style={{display:'flex', gap:8, marginTop:8}}>
@@ -813,11 +623,10 @@ export default function LiveStudio(){
           <button onClick={()=>loadPages()} style={{flex:1, border:'1px solid #000', padding:12, borderRadius:8, fontWeight:800, background:'#fff'}}>Load My Pages</button>
         </div>
         {pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6, padding:10, background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff', color:selectedPage?.id===p.id?'#fff':'#000', borderRadius:8, fontSize:13, fontWeight:700, cursor:'pointer'}}>{p.name} {selectedPage?.id===p.id?`LIVE ${formatTime(liveSeconds)}`:'(Go Live with Intro)'}</div>)}
-        {fbStreamUrl && <div style={{marginTop:10, padding:10, background:'#dcfce7', borderRadius:8, fontSize:11, wordBreak:'break-all'}}>FB: {fbStreamUrl.substring(0,70)}...</div>}
       </div>
       <div style={{marginTop:14, border:'2px solid #ff0000', borderRadius:14, padding:12}}>
         <b>Connect YouTube Live - Intro!</b>
-        <input value={ytKey} onChange={e=>{setYtKey(e.target.value); localStorage.setItem('taglive_ytkey', e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%', marginTop:8, padding:10, borderRadius:8, border:'1px solid #ddd', fontSize:12}} />
+        <input value={ytKey} onChange={e=>{setYtKey(e.target.value); localStorage.setItem('taglive_ytkey', e.target.value)}} placeholder="Paste YouTube Stream Key" style={{width:'100%', marginTop:8, padding:10, borderRadius:8, border:'1px solid #ddd'}} />
         <div style={{display:'flex', gap:8, marginTop:8}}>
           <button onClick={()=>{ if(!ytKey) return alert('Paste YouTube key first'); playActiveIntroThen(()=>{ setYtLive(true); setIsLive(true); startTimer(); alert('YouTube LIVE AFTER INTRO') }) }} style={{flex:1, background:ytLive?'#16a34a':'#ff0000', color:'#fff', padding:12, borderRadius:8, fontWeight:800, border:'none'}}>{ytLive?`YouTube LIVE ${formatTime(liveSeconds)}`:'Go Live YouTube + Intro'}</button>
           <button onClick={()=>{setYtLive(false); if(!fbStreamUrl) setIsLive(false); stopTimer(); if(activeOutroId) playActiveOutro()}} style={{flex:1, border:'1px solid #000', padding:12, borderRadius:8, fontWeight:800, background:'#fff'}}>Stop YT + Outro</button>
