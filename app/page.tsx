@@ -68,7 +68,7 @@ export default function LiveStudio(){
   const [tickerOn, setTickerOn] = useState(false)
   const [tickerSize, setTickerSize] = useState(26)
   const [tickerSpeed, setTickerSpeed] = useState(2)
-  const [churchName, setChurchName] = useState('KPAKO NYANKPA INT'L MINISTRY')
+  const [churchName, setChurchName] = useState("KPAKO NYANKPA INT'L MINISTRY")
   const [showChurchName, setShowChurchName] = useState(true)
   const [liveSeconds, setLiveSeconds] = useState(0)
   const timerRef = useRef<any>(null)
