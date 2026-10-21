@@ -138,6 +138,8 @@ export default function LiveStudio(){
   const [bibleMode, setBibleMode] = useState<'bible'|'hymn'>('bible')
   const [hymnQuery, setHymnQuery] = useState('')
   const [hymnResult, setHymnResult] = useState('')
+  const [remoteCache, setRemoteCache] = useState<Record<number,string>>({})
+  const [hymnLoading, setHymnLoading] = useState(false)
   const tickerOffsetRef = useRef(720)
   const introFileRef = useRef<HTMLInputElement>(null)
   const outroFileRef = useRef<HTMLInputElement>(null)
