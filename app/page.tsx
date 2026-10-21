@@ -360,7 +360,7 @@ export default function LiveStudio(){
   const detectedBook = detectBookFromQuery(bibleQuery)
   const parsed = detectedBook ? parseChapterVerse(bibleQuery, detectedBook.name) : { ch: null, vs: null }
 
-  const getFilteredHymns = (q:string)=>{
+    const getFilteredHymns = (q:string)=>{
     if(!q) return BUILD_348().slice(0,6)
     const lower = q.toLowerCase()
     const num = parseInt(q)
@@ -368,7 +368,7 @@ export default function LiveStudio(){
       const byNo = BUILD_348().filter(h=> h.no===num)
       if(byNo.length) return byNo
     }
-    return BUILD_348().filter(h=> h.title.toLowerCase().includes(lower
+    return BUILD_348().filter(h=> h.title.toLowerCase().includes(lower))
   }
   const filteredHymns = getFilteredHymns(hymnQuery)
 
