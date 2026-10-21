@@ -4,7 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 const supabase = createClient('https://gqifluvkrjzsebfdjcio.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdxaWZsdXZrcmp6c2ViZmRqY2lvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIzNzY4NDgsImV4cCI6MjEwNzk1Mjg0OH0.zonQMk22nXN0VsbHyI88hT27ntl-VxEEi8k2G8-k5lc')
 declare global { interface Window { FB: any } }
 
-// OFFLINE KJV - MTN PROOF! Works with ZERO data
+// OFFLINE KJV
 const OFFLINE_KJV: Record<string,string> = {
 "john 3:16":"John 3:16 - For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.",
 "romans 1:20":"Romans 1:20 - For the invisible things of him from the creation of the world are clearly seen, being understood by the things that are made, even his eternal power and Godhead; so that they are without excuse.",
@@ -24,7 +24,7 @@ const OFFLINE_KJV: Record<string,string> = {
 }
 
 export default function LiveStudio(){
-  const [verse, setVerse] = useState("John 3:16 - For God so loved the world...")
+  const [verse, setVerse] = useState("John 3:16 - For God so loved the world that He gave His only begotten Son...")
   const [isCam, setIsCam] = useState(false)
   const [isLive, setIsLive] = useState(false)
   const [facing, setFacing] = useState<'user'|'environment'>('user')
@@ -62,13 +62,13 @@ export default function LiveStudio(){
   const [showTickerStudio, setShowTickerStudio] = useState(false)
   const [showAdmin, setShowAdmin] = useState(false)
   const [playing, setPlaying] = useState<any>(null)
-  const [animTitle, setAnimTitle] = useState('APOSTLE JAMES AGBEM KAJINYANA')
+  const [animTitle, setAnimTitle] = useState('KPAKO NYANKPA')
   const [animSub, setAnimSub] = useState('Welcome to Live Service')
   const [tickerText, setTickerText] = useState('📢 ANNOUNCEMENT: Sunday Service 9AM | Midweek Service Wednesday 6PM | Invite Someone!')
   const [tickerOn, setTickerOn] = useState(false)
   const [tickerSize, setTickerSize] = useState(26)
   const [tickerSpeed, setTickerSpeed] = useState(2)
-  const [churchName, setChurchName] = useState('THE LAST FIRE GLOBAL MINISTRY')
+  const [churchName, setChurchName] = useState('KPAKO NYANKPA INT'L MINISTRY')
   const [showChurchName, setShowChurchName] = useState(true)
   const [liveSeconds, setLiveSeconds] = useState(0)
   const timerRef = useRef<any>(null)
@@ -175,7 +175,7 @@ export default function LiveStudio(){
     let dur = 5
     if(file.type.startsWith('video')){ dur = await getVideoDuration(base64) }
     const item = { id: `id_${Date.now()}`, type: file.type.startsWith('video')? 'video' : 'image', data: base64, duration: dur, title: file.name }
-    const n=[...intros, item]; saveIntros(n); e.target.value=''; alert(`✅ Intro Saved! Duration: ${Math.round(dur)}s`)
+    const n=[...intros, item]; saveIntros(n); e.target.value=''; alert(`Intro Saved! Duration: ${Math.round(dur)}s`)
   }
   const handleOutroFile = async (e:any)=>{
     const file = e.target.files?.[0]; if(!file) return
@@ -183,13 +183,13 @@ export default function LiveStudio(){
     let dur = 5
     if(file.type.startsWith('video')){ dur = await getVideoDuration(base64) }
     const item = { id: `id_${Date.now()}`, type: file.type.startsWith('video')? 'video' : 'image', data: base64, duration: dur, title: file.name }
-    const n=[...outros, item]; saveOutros(n); e.target.value=''; alert(`✅ Outro Saved! Duration: ${Math.round(dur)}s`)
+    const n=[...outros, item]; saveOutros(n); e.target.value=''; alert(`Outro Saved! Duration: ${Math.round(dur)}s`)
   }
   const addAnimatedIntro = (isOutro=false)=>{
     if(!animTitle.trim()) return alert('Add title')
     const item = { id: `id_${Date.now()}`, type: 'animated', data: null, duration: 5, title: animTitle, subtitle: animSub }
     if(isOutro){ const n=[...outros, item]; saveOutros(n) } else { const n=[...intros, item]; saveIntros(n) }
-    alert('✅ Animated Saved! (5s)')
+    alert('Animated Saved! (5s)')
   }
   const playItem = (item:any, onEnd?:()=>void)=>{
     setPlaying(item)
@@ -241,7 +241,7 @@ export default function LiveStudio(){
       setSelectedPage(page)
       try{
         const res = await fetch(`https://graph.facebook.com/v19.0/${page.id}/live_videos`,{ method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({ access_token: page.access_token, title: verse.substring(0,60), description: 'TagLive - '+verse, status: 'UNPUBLISHED' }) })
-        const data = await res.json(); if(data.error) throw new Error(JSON.stringify(data.error)); setFbStreamUrl(data.stream_url); setLiveId(data.id); setIsLive(true); startTimer(); alert('✅ FB LIVE AFTER INTRO!')
+        const data = await res.json(); if(data.error) throw new Error(JSON.stringify(data.error)); setFbStreamUrl(data.stream_url); setLiveId(data.id); setIsLive(true); startTimer(); alert('FB LIVE AFTER INTRO!')
       }catch(e:any){ alert('Auto Live needs approval: '+e.message); setIsLive(true); startTimer() }
     })
   }
@@ -417,7 +417,7 @@ export default function LiveStudio(){
         <div style={{position:'fixed', top:0, left:0, right:0, bottom:0, zIndex:9998, background:'rgba(0,0,0,0.92)', padding:12, display:'flex', flexDirection:'column'}}>
           <div style={{background:'#fff', borderRadius:16, padding:12, flex:1, display:'flex', flexDirection:'column', maxWidth:480, margin:'0 auto', width:'100%'}}>
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-              <b style={{fontSize:13}}>📖 Bible {lowData?'[MTN SAVER ON]':''} {isCam && <span style={{color:'#FF0000'}}>● LIVE {formatTime(liveSeconds)}</span>}</b>
+              <b style={{fontSize:13}}>📖 Bible {lowData?'[OFFLINE VERSION':''} {isCam && <span style={{color:'#FF0000'}}>● LIVE {formatTime(liveSeconds)}</span>}</b>
               <button onClick={()=>setShowBible(false)} style={{background:'#111', color:'#fff', border:'none', borderRadius:20, padding:'8px 12px', fontWeight:800}}>✕ Close</button>
             </div>
             <div style={{display:'flex', gap:6, marginTop:10}}>
@@ -426,15 +426,13 @@ export default function LiveStudio(){
               <button onClick={()=>setBibleVer('bbe')} style={{flex:1, padding:8, borderRadius:10, border:'none', background:bibleVer==='bbe'?'#059669':'#eee', color:bibleVer==='bbe'?'#fff':'#000', fontWeight:800, fontSize:11}}>GNB Online</button>
               <button onClick={()=>setBibleVer('akjv')} style={{flex:1, padding:8, borderRadius:10, border:'none', background:bibleVer==='akjv'?'#7c3aed':'#eee', color:bibleVer==='akjv'?'#fff':'#000', fontWeight:800, fontSize:11}}>NKJV Online</button>
             </div>
-            <div style={{fontSize:10, marginTop:4, opacity:0.7, background:'#fef3c7', padding:6, borderRadius:8}}>💡 MTN bad? App auto uses OFFLINE KJV from phone memory. No data needed!</div>
             <div style={{display:'flex', gap:6, marginTop:10}}>
               <input value={bibleQuery} onChange={e=>setBibleQuery(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') fetchBible() }} placeholder="Romans 1:20 or John 3:16" style={{flex:1, padding:12, borderRadius:10, border:'2px solid #7c3aed', fontSize:13, fontWeight:700}} />
               <button onClick={fetchBible} style={{background:'#7c3aed', color:'#fff', border:'none', borderRadius:10, padding:'0 16px', fontWeight:800}}>{bibleLoading?'...':'Search'}</button>
             </div>
             <div style={{marginTop:10, background:'#f9f5ff', borderRadius:12, padding:12, flex:1, overflowY:'auto', border:'1px solid #ddd'}}>
-              {bibleResult ? <div style={{fontSize:14, lineHeight:1.5, fontWeight:600, whiteSpace:'pre-wrap'}}>{bibleResult}</div> : <div style={{opacity:0.6, fontSize:12}}>MTN-proof Bible! Try John 3:16 — works online + offline. Camera keeps recording, LIVE never pauses!</div>}
             </div>
-            <button onClick={useBibleVerse} disabled={!bibleResult} style={{marginTop:10, background:bibleResult?'#16a34a':'#ccc', color:'#fff', padding:14, borderRadius:12, fontWeight:900, border:'none'}}>✅ Use This Verse On Screen</button>
+            <button onClick={useBibleVerse} disabled={!bibleResult} style={{marginTop:10, background:bibleResult?'#16a34a':'#ccc', color:'#fff', padding:14, borderRadius:12, fontWeight:900, border:'none'}}>Use This Verse On Screen</button>
             <div style={{display:'flex', gap:6, marginTop:6}}>
               <button onClick={()=>{ setBibleQuery('John 3:16'); setTimeout(fetchBible,100) }} style={{flex:1, padding:8, borderRadius:8, border:'1px solid #ddd', background:'#fff', fontSize:11, fontWeight:700}}>John 3:16</button>
               <button onClick={()=>{ setBibleQuery('Romans 8:28'); setTimeout(fetchBible,100) }} style={{flex:1, padding:8, borderRadius:8, border:'1px solid #ddd', background:'#fff', fontSize:11, fontWeight:700}}>Rom 8:28</button>
@@ -481,8 +479,8 @@ export default function LiveStudio(){
       )}
 
       <div style={{marginTop:10, border:'2px solid #FF0000', borderRadius:12, padding:10, background:lowData?'#fef2f2':'#fff', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-        <div><b style={{fontSize:12}}>📶 MTN SAVER MODE</b><div style={{fontSize:10, opacity:0.7}}>{lowData?'480p - Uses 60% less data':'720p - High Quality'}</div></div>
-        <button onClick={()=>{ const v=!lowData; setLowData(v); localStorage.setItem('taglive_lowdata', v.toString()); if(isCam) setTimeout(()=>startCamera(),300) }} style={{padding:'8px 14px', borderRadius:20, border:'none', background:lowData?'#16a34a':'#111', color:'#fff', fontWeight:900, fontSize:11}}>{lowData?'✅ 480p SAVER ON':'○ 720p'}</button>
+        <div><b style={{fontSize:12}}>📶 Safe Mode</b><div style={{fontSize:10, opacity:0.7}}>{lowData?'480p - Uses 60% less data':'720p - High Quality'}</div></div>
+        <button onClick={()=>{ const v=!lowData; setLowData(v); localStorage.setItem('taglive_lowdata', v.toString()); if(isCam) setTimeout(()=>startCamera(),300) }} style={{padding:'8px 14px', borderRadius:20, border:'none', background:lowData?'#16a34a':'#111', color:'#fff', fontWeight:900, fontSize:11}}>{lowData?'480p SAVER ON':'○ 720p'}</button>
       </div>
 
       <div style={{marginTop:12, border:'2px solid #7c3aed', borderRadius:16, padding:12, background:'#f9f5ff'}}>
@@ -493,7 +491,7 @@ export default function LiveStudio(){
         {showStudio && (
           <div style={{marginTop:10}}>
             <div style={{background:'#fff', padding:8, borderRadius:10, border:'1px solid #ddd'}}>
-              <input value={animTitle} onChange={e=>setAnimTitle(e.target.value)} placeholder="Title e.g. APOSTLE JAMES..." style={{width:'100%', padding:8, borderRadius:8, border:'1px solid #ddd', fontSize:12, marginBottom:6}} />
+              <input value={animTitle} onChange={e=>setAnimTitle(e.target.value)} placeholder="Title e.g. GAGO ECEWU..." style={{width:'100%', padding:8, borderRadius:8, border:'1px solid #ddd', fontSize:12, marginBottom:6}} />
               <input value={animSub} onChange={e=>setAnimSub(e.target.value)} placeholder="Subtitle e.g. Welcome" style={{width:'100%', padding:8, borderRadius:8, border:'1px solid #ddd', fontSize:12}} />
             </div>
             <div style={{display:'flex', gap:6, marginTop:8}}>
@@ -515,7 +513,7 @@ export default function LiveStudio(){
                 <div style={{fontSize:11, fontWeight:900, marginBottom:6}}>INTROs ({intros.length}):</div>
                 {intros.map(i=>(
                   <div key={i.id} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 8px', marginTop:4, background:i.id===activeIntroId?'#7c3aed':'#f3f0ff', color:i.id===activeIntroId?'#fff':'#000', borderRadius:8, fontSize:11, minWidth:0, overflow:'hidden'}}>
-                    <span onClick={()=>{ setActiveIntroId(i.id); localStorage.setItem('taglive_active_intro', i.id) }} style={{flex:1, cursor:'pointer', fontWeight:700, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{i.type==='animated'?'✨':i.type==='video'?'🎥':'🖼️'} {i.title?.substring(0,10)} ({Math.round(i.duration)}s) {i.id===activeIntroId?'✅':''}</span>
+                    <span onClick={()=>{ setActiveIntroId(i.id); localStorage.setItem('taglive_active_intro', i.id) }} style={{flex:1, cursor:'pointer', fontWeight:700, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{i.type==='animated'?'✨':i.type==='video'?'🎥':'🖼️'} {i.title?.substring(0,10)} ({Math.round(i.duration)}s) {i.id===activeIntroId?'☑️':''}</span>
                     <button onClick={()=>{ playItem(i) }} style={{marginLeft:4, background:'#000', color:'#fff', border:'none', borderRadius:6, padding:'2px 6px', fontSize:10, flexShrink:0}}>▶</button>
                     <button onClick={()=>{ const n=intros.filter(x=>x.id!==i.id); saveIntros(n); if(activeIntroId===i.id){ setActiveIntroId(null); localStorage.removeItem('taglive_active_intro') } }} style={{marginLeft:4, background:'#ef4444', color:'#fff', border:'none', borderRadius:6, padding:'2px 6px', fontSize:10, flexShrink:0}}>✕</button>
                   </div>
@@ -526,12 +524,12 @@ export default function LiveStudio(){
                 <div style={{fontSize:11, fontWeight:900, marginBottom:6}}>OUTROs ({outros.length}):</div>
                 {outros.map(o=>(
                   <div key={o.id} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 8px', marginTop:4, background:o.id===activeOutroId?'#16a34a':'#f0fdf4', color:o.id===activeOutroId?'#fff':'#000', borderRadius:8, fontSize:11, minWidth:0, overflow:'hidden'}}>
-                    <span onClick={()=>{ setActiveOutroId(o.id); localStorage.setItem('taglive_active_outro', o.id) }} style={{flex:1, cursor:'pointer', fontWeight:700, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{o.type==='animated'?'✨':o.type==='video'?'🎥':'🖼️'} {o.title?.substring(0,10)} {o.id===activeOutroId?'✅':''}</span>
+                    <span onClick={()=>{ setActiveOutroId(o.id); localStorage.setItem('taglive_active_outro', o.id) }} style={{flex:1, cursor:'pointer', fontWeight:700, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{o.type==='animated'?'✨':o.type==='video'?'🎥':'🖼️'} {o.title?.substring(0,10)} {o.id===activeOutroId?'☑️':''}</span>
                     <button onClick={()=>{ playItem(o) }} style={{marginLeft:4, background:'#000', color:'#fff', border:'none', borderRadius:6, padding:'2px 6px', fontSize:10, flexShrink:0}}>▶</button>
                     <button onClick={()=>{ const n=outros.filter(x=>x.id!==o.id); saveOutros(n); if(activeOutroId===o.id){ setActiveOutroId(null); localStorage.removeItem('taglive_active_outro') } }} style={{marginLeft:4, background:'#ef4444', color:'#fff', border:'none', borderRadius:6, padding:'2px 6px', fontSize:10, flexShrink:0}}>✕</button>
                   </div>
                 ))}
-                {outros.length===0 && <div style={{fontSize:11, opacity:0.6}}>No outros yet.</div>}
+                {outros.length===0 && <div style={{fontSize:11, opacity:0.6}}>Insert outro.</div>}
               </div>
             </div>
           </div>
@@ -542,7 +540,7 @@ export default function LiveStudio(){
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8}}>
           <b style={{fontSize:13, color:'#111', flex:1}}>📢 Scrolling Announcement Ticker</b>
           <div style={{display:'flex', gap:6}}>
-            <button onClick={()=>setTickerOn(!tickerOn)} style={{padding:'8px 14px', borderRadius:20, border:'none', background:tickerOn?'#16a34a':'#111', color:'#fff', fontWeight:900, fontSize:11}}>{tickerOn?'✅ ON':'○ OFF'}</button>
+            <button onClick={()=>setTickerOn(!tickerOn)} style={{padding:'8px 14px', borderRadius:20, border:'none', background:tickerOn?'#16a34a':'#111', color:'#fff', fontWeight:900, fontSize:11}}>{tickerOn?'🟢 ON':'○ OFF'}</button>
             <button onClick={()=>setShowTickerStudio(!showTickerStudio)} style={{padding:'8px 12px', borderRadius:20, border:'none', background:showTickerStudio?'#111':'#eee', color:showTickerStudio?'#fff':'#000', fontWeight:800, fontSize:11}}>{showTickerStudio?'Hide':'Open'}</button>
           </div>
         </div>
@@ -570,7 +568,7 @@ export default function LiveStudio(){
           <b style={{fontSize:13}}>🏛️ Church Name (Under Text)</b>
           <button onClick={()=>setShowChurchName(!showChurchName)} style={{padding:'6px 12px', borderRadius:20, border:'none', background:showChurchName?'#7c3aed':'#111', color:'#fff', fontWeight:800, fontSize:11}}>{showChurchName?'ON':'○ OFF'}</button>
         </div>
-        <input value={churchName} onChange={e=>{setChurchName(e.target.value); localStorage.setItem('taglive_church_name', e.target.value)}} placeholder="THE LAST FIRE GLOBAL MINISTRY" style={{width:'100%', marginTop:8, padding:10, borderRadius:10, border:'2px solid #7c3aed', fontSize:12, fontWeight:800, boxSizing:'border-box'}} />
+        <input value={churchName} onChange={e=>{setChurchName(e.target.value); localStorage.setItem('taglive_church_name', e.target.value)}} placeholder="KPAKO NYANKPA GLOBAL MINISTRY" style={{width:'100%', marginTop:8, padding:10, borderRadius:10, border:'2px solid #7c3aed', fontSize:12, fontWeight:800, boxSizing:'border-box'}} />
       </div>
 
       <div style={{display:'flex', gap:6, marginTop:12}}>
@@ -636,13 +634,13 @@ export default function LiveStudio(){
           <button onClick={()=>loadPages()} style={{flex:1, border:'1px solid #000', padding:12, borderRadius:8, fontWeight:800, background:'#fff'}}>Load My Pages</button>
         </div>
         {pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6, padding:10, background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff', color:selectedPage?.id===p.id?'#fff':'#000', borderRadius:8, fontSize:13, fontWeight:700, cursor:'pointer'}}>{p.name} {selectedPage?.id===p.id?`✓ LIVE ${formatTime(liveSeconds)}`:'(Go Live with Intro)'}</div>)}
-        {fbStreamUrl && <div style={{marginTop:10, padding:10, background:'#dcfce7', borderRadius:8, fontSize:11, wordBreak:'break-all'}}>✅ FB: {fbStreamUrl.substring(0,70)}...</div>}
+        {fbStreamUrl && <div style={{marginTop:10, padding:10, background:'#dcfce7', borderRadius:8, fontSize:11, wordBreak:'break-all'}}>🟦 FB: {fbStreamUrl.substring(0,70)}...</div>}
       </div>
       <div style={{marginTop:14, border:'2px solid #ff0000', borderRadius:14, padding:12}}>
         <b>🔴 Connect YouTube Live - Intro!</b>
         <input value={ytKey} onChange={e=>{setYtKey(e.target.value); localStorage.setItem('taglive_ytkey', e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%', marginTop:8, padding:10, borderRadius:8, border:'1px solid #ddd', fontSize:12}} />
         <div style={{display:'flex', gap:8, marginTop:8}}>
-          <button onClick={()=>{ if(!ytKey) return alert('Paste YouTube key first'); playActiveIntroThen(()=>{ setYtLive(true); setIsLive(true); startTimer(); alert('✅ YouTube LIVE AFTER INTRO') }) }} style={{flex:1, background:ytLive?'#16a34a':'#ff0000', color:'#fff', padding:12, borderRadius:8, fontWeight:800, border:'none'}}>{ytLive?`✓ YouTube LIVE ${formatTime(liveSeconds)}`:'Go Live YouTube + Intro'}</button>
+          <button onClick={()=>{ if(!ytKey) return alert('Paste YouTube key first'); playActiveIntroThen(()=>{ setYtLive(true); setIsLive(true); startTimer(); alert('🌆 YouTube LIVE AFTER INTRO') }) }} style={{flex:1, background:ytLive?'#16a34a':'#ff0000', color:'#fff', padding:12, borderRadius:8, fontWeight:800, border:'none'}}>{ytLive?`✓ YouTube LIVE ${formatTime(liveSeconds)}`:'Go Live YouTube + Intro'}</button>
           <button onClick={()=>{setYtLive(false); if(!fbStreamUrl) setIsLive(false); stopTimer(); if(activeOutroId) playActiveOutro()}} style={{flex:1, border:'1px solid #000', padding:12, borderRadius:8, fontWeight:800, background:'#fff'}}>Stop YT + Outro</button>
         </div>
       </div>
