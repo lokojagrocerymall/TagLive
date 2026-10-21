@@ -246,12 +246,35 @@ export default function LiveStudio(){
     })
   }
   const openBibleApp = ()=>{ setShowBible(true) }
-  const fetchBible = async()=>{
-    if(!bibleQuery.trim()) return
+  
+  const fetchBible = async (overrideQuery?: string)=>{
+    const queryToUse = overrideQuery || bibleQuery
+    if(!queryToUse.trim()) return
     setBibleLoading(true)
-    const qLower = bibleQuery.toLowerCase().trim()
+    setBibleResult('')
+    const qLower = queryToUse.toLowerCase().trim()
+
+    const getOffline = (q: string)=>{
+      const cache = JSON.parse(localStorage.getItem('taglive_bible_cache')||'{}')
+      if(cache[q]) return cache[q] + ' [CACHED]'
+      if(OFFLINE_KJV[q]) return OFFLINE_KJV[q] + ' [OFFLINE KJV]'
+      const found = Object.keys(OFFLINE_KJV).find(k=> q.includes(k) || k.includes(q))
+      if(found) return OFFLINE_KJV[found] + ' [OFFLINE KJV]'
+      return null
+    }
+
+    if(bibleVer === 'kjv'){
+      const off = getOffline(qLower)
+      if(off){ setBibleResult(off) }
+      else { setBibleResult('Offline KJV: Only these are built-in - John 3:16, Romans 1:20, Romans 8:28, Psalm 23, Jeremiah 29:11, Philippians 4:13, Isaiah 41:10, John 14:6, 2 Timothy 1:7, Psalm 91:1, Matthew 28:19, Genesis 1:1, Proverbs 3:5, John 1:1, Romans 10:9. For full Bible, switch to NIV/GNB/NKJV Online.') }
+      setBibleLoading(false)
+      return
+    }
+
     try{
-      const res = await fetch(`https://bible-api.com/${encodeURIComponent(bibleQuery)}?translation=${bibleVer}`)
+      const translationMap: any = { 'web':'web', 'bbe':'bbe', 'akjv':'kjv' }
+      const trans = translationMap[bibleVer] || 'web'
+      const res = await fetch(`https://bible-api.com/${encodeURIComponent(queryToUse)}?translation=${trans}`)
       const data = await res.json()
       if(data.text){
         const full = `${data.reference} - ${data.text}`
@@ -263,18 +286,13 @@ export default function LiveStudio(){
         throw new Error('not found')
       }
     }catch{
-      // OFFLINE FALLBACK - MTN PROOF
-      const cache = JSON.parse(localStorage.getItem('taglive_bible_cache')||'{}')
-      if(cache[qLower]){ setBibleResult(cache[qLower] + ' [CACHED OFFLINE]') }
-      else if(OFFLINE_KJV[qLower]){ setBibleResult(OFFLINE_KJV[qLower] + ' [OFFLINE KJV]') }
-      else {
-        const found = Object.keys(OFFLINE_KJV).find(k=> qLower.includes(k) || k.includes(qLower))
-        if(found){ setBibleResult(OFFLINE_KJV[found]) }
-        else { setBibleResult('MTN offline? No internet. But you have these offline: John 3:16, Romans 1:20, Romans 8:28, Psalm 23, Jeremiah 29:11, Philippians 4:13. Try one of those or type full verse like John 3:16') }
-      }
+      const off = getOffline(qLower)
+      if(off){ setBibleResult(off + ' [OFFLINE MODE]') }
+      else { setBibleResult('No internet connection. Switch to KJV Offline button to use built-in verses, or try John 3:16, Romans 1:20.') }
     }
     setBibleLoading(false)
   }
+
   const useBibleVerse = ()=>{
     if(bibleResult){ setVerse(bibleResult); setShowBible(false) }
   }
@@ -374,7 +392,7 @@ export default function LiveStudio(){
             ctx.textBaseline = 'top'
             ctx.shadowColor = 'rgba(0,0,0,0.9)'
             ctx.shadowBlur = 6
-            ctx.fillText(`● LIVE ${timeStr}${lowData?' [MTN SAVER 480p]':''}`, 24, 22)
+            ctx.fillText(`● LIVE ${timeStr}${lowData?' [480p]':''}`, 24, 22)
             ctx.restore()
           }
           if(tickerOn && tickerText){
@@ -417,7 +435,7 @@ export default function LiveStudio(){
         <div style={{position:'fixed', top:0, left:0, right:0, bottom:0, zIndex:9998, background:'rgba(0,0,0,0.92)', padding:12, display:'flex', flexDirection:'column'}}>
           <div style={{background:'#fff', borderRadius:16, padding:12, flex:1, display:'flex', flexDirection:'column', maxWidth:480, margin:'0 auto', width:'100%'}}>
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-              <b style={{fontSize:13}}>📖 Bible {lowData?'[OFFLINE VERSION':''} {isCam && <span style={{color:'#FF0000'}}>● LIVE {formatTime(liveSeconds)}</span>}</b>
+              <b style={{fontSize:13}}>📖 Bible {bibleVer==='kjv'?'[OFFLINE KJV]':'[ONLINE]'} {isCam && <span style={{color:'#FF0000'}}>● LIVE {formatTime(liveSeconds)}</span>}</b>
               <button onClick={()=>setShowBible(false)} style={{background:'#111', color:'#fff', border:'none', borderRadius:20, padding:'8px 12px', fontWeight:800}}>✕ Close</button>
             </div>
             <div style={{display:'flex', gap:6, marginTop:10}}>
@@ -428,15 +446,17 @@ export default function LiveStudio(){
             </div>
             <div style={{display:'flex', gap:6, marginTop:10}}>
               <input value={bibleQuery} onChange={e=>setBibleQuery(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') fetchBible() }} placeholder="Romans 1:20 or John 3:16" style={{flex:1, padding:12, borderRadius:10, border:'2px solid #7c3aed', fontSize:13, fontWeight:700}} />
-              <button onClick={fetchBible} style={{background:'#7c3aed', color:'#fff', border:'none', borderRadius:10, padding:'0 16px', fontWeight:800}}>{bibleLoading?'...':'Search'}</button>
+              <button onClick={()=>fetchBible()} style={{background:'#7c3aed', color:'#fff', border:'none', borderRadius:10, padding:'0 16px', fontWeight:800}}>{bibleLoading?'...':'Search'}</button>
             </div>
             <div style={{marginTop:10, background:'#f9f5ff', borderRadius:12, padding:12, flex:1, overflowY:'auto', border:'1px solid #ddd'}}>
+              {bibleLoading ? <div style={{opacity:0.6, fontSize:12}}>🔍 Searching {bibleVer==='kjv'?'OFFLINE':'ONLINE'}...</div>
+              : bibleResult ? <div style={{fontSize:14, lineHeight:1.5, fontWeight:600, whiteSpace:'pre-wrap'}}>{bibleResult}</div>
             </div>
-            <button onClick={useBibleVerse} disabled={!bibleResult} style={{marginTop:10, background:bibleResult?'#16a34a':'#ccc', color:'#fff', padding:14, borderRadius:12, fontWeight:900, border:'none'}}>Use This Verse On Screen</button>
+            <button onClick={useBibleVerse} disabled={!bibleResult} style={{marginTop:10, background:bibleResult?'#16a34a':'#ccc', color:'#fff', padding:14, borderRadius:12, fontWeight:900, border:'none'}}>🔰 Use This Verse On Screen</button>
             <div style={{display:'flex', gap:6, marginTop:6}}>
-              <button onClick={()=>{ setBibleQuery('John 3:16'); setTimeout(fetchBible,100) }} style={{flex:1, padding:8, borderRadius:8, border:'1px solid #ddd', background:'#fff', fontSize:11, fontWeight:700}}>John 3:16</button>
-              <button onClick={()=>{ setBibleQuery('Romans 8:28'); setTimeout(fetchBible,100) }} style={{flex:1, padding:8, borderRadius:8, border:'1px solid #ddd', background:'#fff', fontSize:11, fontWeight:700}}>Rom 8:28</button>
-              <button onClick={()=>{ setBibleQuery('Psalm 23'); setTimeout(fetchBible,100) }} style={{flex:1, padding:8, borderRadius:8, border:'1px solid #ddd', background:'#fff', fontSize:11, fontWeight:700}}>Psalm 23</button>
+              <button onClick={()=>{ setBibleQuery('John 3:16'); fetchBible('John 3:16') }} style={{flex:1, padding:8, borderRadius:8, border:'1px solid #ddd', background:'#fff', fontSize:11, fontWeight:700}}>John 3:16</button>
+              <button onClick={()=>{ setBibleQuery('Romans 8:28'); fetchBible('Romans 8:28') }} style={{flex:1, padding:8, borderRadius:8, border:'1px solid #ddd', background:'#fff', fontSize:11, fontWeight:700}}>Rom 8:28</button>
+              <button onClick={()=>{ setBibleQuery('Psalm 23'); fetchBible('Psalm 23') }} style={{flex:1, padding:8, borderRadius:8, border:'1px solid #ddd', background:'#fff', fontSize:11, fontWeight:700}}>Psalm 23</button>
             </div>
           </div>
         </div>
@@ -479,8 +499,8 @@ export default function LiveStudio(){
       )}
 
       <div style={{marginTop:10, border:'2px solid #FF0000', borderRadius:12, padding:10, background:lowData?'#fef2f2':'#fff', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-        <div><b style={{fontSize:12}}>📶 Safe Mode</b><div style={{fontSize:10, opacity:0.7}}>{lowData?'480p - Uses 60% less data':'720p - High Quality'}</div></div>
-        <button onClick={()=>{ const v=!lowData; setLowData(v); localStorage.setItem('taglive_lowdata', v.toString()); if(isCam) setTimeout(()=>startCamera(),300) }} style={{padding:'8px 14px', borderRadius:20, border:'none', background:lowData?'#16a34a':'#111', color:'#fff', fontWeight:900, fontSize:11}}>{lowData?'480p SAVER ON':'○ 720p'}</button>
+        <div><b style={{fontSize:12}}>📶 Data Saver Mode</b><div style={{fontSize:10, opacity:0.7}}>{lowData?'480p - Uses less data':'720p - High Quality'}</div></div>
+        <button onClick={()=>{ const v=!lowData; setLowData(v); localStorage.setItem('taglive_lowdata', v.toString()); if(isCam) setTimeout(()=>startCamera(),300) }} style={{padding:'8px 14px', borderRadius:20, border:'none', background:lowData?'#16a34a':'#111', color:'#fff', fontWeight:900, fontSize:11}}>{lowData?'480p ON':'720p'}</button>
       </div>
 
       <div style={{marginTop:12, border:'2px solid #7c3aed', borderRadius:16, padding:12, background:'#f9f5ff'}}>
@@ -602,7 +622,7 @@ export default function LiveStudio(){
       </div>
       <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onMouseDown={onTouchStart as any} style={{marginTop:10, background:'#000', borderRadius:18, overflow:'hidden', position:'relative', aspectRatio:'9/16', touchAction:'none'}}>
         <video ref={videoRef} muted playsInline autoPlay style={{width:'100%', height:'100%', objectFit:'cover', display:isCam&&bgMode==='face'?'block':'none'}}/>
-        {!isCam && <div style={{color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', height:420}}>Camera off - {lowData?'MTN SAVER 480p ON':'720p'}</div>}
+        {!isCam && <div style={{color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', height:420}}>Camera off - {lowData?'480p ON':'720p'}</div>}
         <canvas ref={canvasRef} style={{position:'absolute', top:0, left:0, width:'100%', height:'100%'}}/>
         {isCam && <div style={{position:'absolute', top:12, right:12, display:'flex', gap:8, zIndex:10}}>
           <button onClick={toggleCamera} style={{background:'rgba(0,0,0,0.7)', color:'#fff', border:'none', borderRadius:20, padding:'8px 12px', fontWeight:800}}>🔄 Flip</button>
@@ -610,7 +630,7 @@ export default function LiveStudio(){
         </div>}
       </div>
       <div style={{display:'flex', gap:8, marginTop:12}}>
-        {!isCam? <button onClick={()=>startCamera()} style={{flex:1, background:'#111', color:'#fff', padding:14, borderRadius:12, fontWeight:800, border:'none'}}>📷 Start Camera {lowData?'(480p MTN Saver)':''}</button>
+        {!isCam? <button onClick={()=>startCamera()} style={{flex:1, background:'#111', color:'#fff', padding:14, borderRadius:12, fontWeight:800, border:'none'}}>📷 Start Camera {lowData?'(480p)':''}</button>
         : <><button onClick={toggleCamera} style={{flex:1, background:'#7c3aed', color:'#fff', padding:14, borderRadius:12, fontWeight:800, border:'none'}}>🔄 Switch Camera</button>
            <button onClick={stopCamera} style={{flex:1, background:'#444', color:'#fff', padding:14, borderRadius:12, fontWeight:800, border:'none'}}>Stop + Outro</button></>}
       </div>
@@ -621,7 +641,7 @@ export default function LiveStudio(){
       </div>
       {recordedUrl && <video src={recordedUrl} controls style={{width:'100%', marginTop:8, borderRadius:12}} />}
       <div style={{display:'flex', gap:6, marginTop:10}}>
-        <button onClick={openBibleApp} style={{flex:1, background:'#2563eb', color:'#fff', padding:10, borderRadius:10, fontWeight:800, border:'none', fontSize:12}}>📖 Open Bible App {lowData?'[Offline OK]':''}</button>
+        <button onClick={openBibleApp} style={{flex:1, background:'#2563eb', color:'#fff', padding:10, borderRadius:10, fontWeight:800, border:'none', fontSize:12}}>📖 Open Bible App</button>
         <button onClick={pasteClipboard} style={{flex:1, background:'#059669', color:'#fff', padding:10, borderRadius:10, fontWeight:800, border:'none', fontSize:12}}>📋 Paste Verse</button>
         <button onClick={saveVerse} style={{flex:1, background:'#f59e0b', color:'#000', padding:10, borderRadius:10, fontWeight:800, border:'none', fontSize:12}}>💾 Save</button>
       </div>
@@ -640,7 +660,7 @@ export default function LiveStudio(){
         <b>🔴 Connect YouTube Live - Intro!</b>
         <input value={ytKey} onChange={e=>{setYtKey(e.target.value); localStorage.setItem('taglive_ytkey', e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%', marginTop:8, padding:10, borderRadius:8, border:'1px solid #ddd', fontSize:12}} />
         <div style={{display:'flex', gap:8, marginTop:8}}>
-          <button onClick={()=>{ if(!ytKey) return alert('Paste YouTube key first'); playActiveIntroThen(()=>{ setYtLive(true); setIsLive(true); startTimer(); alert('🌆 YouTube LIVE AFTER INTRO') }) }} style={{flex:1, background:ytLive?'#16a34a':'#ff0000', color:'#fff', padding:12, borderRadius:8, fontWeight:800, border:'none'}}>{ytLive?`✓ YouTube LIVE ${formatTime(liveSeconds)}`:'Go Live YouTube + Intro'}</button>
+          <button onClick={()=>{ if(!ytKey) return alert('Paste YouTube key first'); playActiveIntroThen(()=>{ setYtLive(true); setIsLive(true); startTimer(); alert('YouTube LIVE AFTER INTRO') }) }} style={{flex:1, background:ytLive?'#16a34a':'#ff0000', color:'#fff', padding:12, borderRadius:8, fontWeight:800, border:'none'}}>{ytLive?`✓ YouTube LIVE ${formatTime(liveSeconds)}`:'Go Live YouTube + Intro'}</button>
           <button onClick={()=>{setYtLive(false); if(!fbStreamUrl) setIsLive(false); stopTimer(); if(activeOutroId) playActiveOutro()}} style={{flex:1, border:'1px solid #000', padding:12, borderRadius:8, fontWeight:800, background:'#fff'}}>Stop YT + Outro</button>
         </div>
       </div>
