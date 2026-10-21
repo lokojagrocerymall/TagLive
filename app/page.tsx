@@ -359,12 +359,11 @@ export default function LiveStudio(){
           if(bgMode==='split'){
             ctx.fillStyle='#000'; ctx.fillRect(0,0,c.width,c.height)
             const vw = v.videoWidth || 1280; const vh = v.videoHeight || 720
-            const targetW = c.width; const targetH = c.height * 0.5
+            const targetW = c.width; const targetH = c.height * 0.52
             const scale = Math.max(targetW / vw, targetH / vh)
             const sW = targetW / scale; const sH = targetH / scale
             const sX = (vw - sW) / 2; const sY = (vh - sH) / 2
-            ctx.drawImage(v, sX, sY, sW, sH, 0, c.height*0.5, targetW, targetH)
-            ctx.fillStyle=hexToRgba(boxColor, 1); ctx.fillRect(0,0,c.width,c.height*0.5)
+            ctx.drawImage(v, sX, sY, sW, sH, 0, c.height*0.48, targetW, targetH)
           } else if(bgMode==='black'){ ctx.fillStyle='#000'; ctx.fillRect(0,0,c.width,c.height) }
           else if(bgMode==='image'){ if(bgImageRef.current) ctx.drawImage(bgImageRef.current,0,0,c.width,c.height); else { const g=ctx.createLinearGradient(0,0,c.width,c.height); g.addColorStop(0,'#1e3a8a'); g.addColorStop(1,'#581c87'); ctx.fillStyle=g; ctx.fillRect(0,0,c.width,c.height) } }
           else ctx.drawImage(v,0,0,c.width,c.height)
@@ -373,7 +372,7 @@ export default function LiveStudio(){
             ctx.save();
             const isSplit = bgMode==='split'
             const drawX = isSplit ? c.width*0.5 : pos.x
-            const drawY = isSplit ? c.height*0.28 : pos.y
+            const drawY = isSplit ? c.height*0.24 : pos.y
             const maxW = isSplit ? 600 : 560
             ctx.translate(drawX, drawY); ctx.rotate(pos.rotation*Math.PI/180); ctx.scale(pos.scale, pos.scale); ctx.font=`bold ${fontSize}px sans-serif`; const pad = 24; const boxW = maxW + pad*2; const paragraphs = verse.split('\n'); let allLines:{text:string, isLastInPara:boolean, paraIdx:number}[] = []; paragraphs.forEach((para,pIdx)=>{ if(!para.trim()){ allLines.push({text:'', isLastInPara:true, paraIdx:pIdx}); return } const wrapped = wrapText(ctx, para.trim(), maxW); wrapped.forEach((l,i)=> allLines.push({text:l, isLastInPara:i===wrapped.length-1, paraIdx:pIdx})) }); const realCount = allLines.filter(l=>l.text!=='').length; const lineH = fontSize * 1.38; const boxH = realCount*lineH + (paragraphs.length-1)*10 + pad*2; if(bgMode==='face' || bgMode==='split'){ ctx.fillStyle=hexToRgba(boxColor, boxOpacity); ctx.fillRect(-boxW/2, -boxH/2, boxW, boxH) } else if(bgMode==='image'){ ctx.shadowColor='rgba(0,0,0,0.9)'; ctx.shadowBlur=10; ctx.shadowOffsetX=2; ctx.shadowOffsetY=3 } ctx.fillStyle=textColor; let y = -boxH/2 + pad + lineH/2; allLines.forEach((ln)=>{ if(!ln.text){ y+=10; return } if(paragraphs.length>1 && ln.paraIdx>0){ ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(ln.text, 0, y) } else { if(align==='justify' && !ln.isLastInPara){ const words = ln.text.split(' '); if(words.length===1){ ctx.textAlign='center'; ctx.fillText(ln.text, 0, y) } else { ctx.textAlign='left'; ctx.textBaseline='middle'; const totalWordsWidth = words.reduce((s,w)=>s+ctx.measureText(w).width,0); const gap = (maxW - totalWordsWidth) / (words.length-1); let x = -maxW/2; words.forEach((w)=>{ ctx.fillText(w, x, y); x += ctx.measureText(w).width + gap }) } } else { ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(ln.text, 0, y) } } y+= lineH }); 
             if(isSplit && showChurchName && churchName){
