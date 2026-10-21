@@ -576,15 +576,7 @@ export default function LiveStudio(){
               <>
                 <div style={{display:'flex', gap:6, marginTop:10}}>
                   <input value={hymnQuery} onChange={e=>setHymnQuery(e.target.value)} placeholder="Type Hymn No. or title e.g. 1 or showers" style={{flex:1, padding:12, borderRadius:10, border:'2px solid #7c3aed', fontSize:13, fontWeight:700}} />
-                <button onClick={async()=>{ 
-  const h=filteredHymns[0]; if(!h) return; 
-  setHymnLoading(true);
-  const res=await fetch(`/api/sss?no=${h.no}`); 
-  const d=await res.json(); 
-  setHymnResult(`${d.no}. ${d.title}\n\n${d.lyrics}`); 
-  setHymnLoading(false);
-}} style=
-                </div>
+                  <button onClick={async()=>{ const h:any=filteredHymns[0]; if(!h) return; setHymnLoading(true); try{ const res=await fetch(`/api/sss?no=${h.no}`); const d=await res.json(); setHymnResult(`${d.no}. ${d.title}\n\n${d.lyrics}`);}catch{} setHymnLoading(false); }} style={{background:'#7c3aed', color:'#fff', padding:'10px 16px', borderRadius:10, border:0, fontWeight:700}}>Search</button>
                 <div style={{maxHeight:200, overflowY:'auto', marginTop:8, background:'#f9f5ff', borderRadius:10, padding:8, border:'1px solid #ddd'}}>
                   <div style={{fontSize:11, fontWeight:900, marginBottom:6}}>SS&S Hymns matching:</div>
                   {filteredHymns.map(h=>(
