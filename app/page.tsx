@@ -470,24 +470,29 @@ export default function LiveStudio(){
             const timeStr = formatTime(liveSeconds)
             ctx.save(); ctx.fillStyle='#FF0000'; ctx.font='900 28px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top'; ctx.shadowColor='rgba(0,0,0,0.9)'; ctx.shadowBlur=6; ctx.fillText(`● LIVE ${timeStr}${lowData?' [480p]':''}`, 24, 22); ctx.restore()
           }
-          if(tickerOn && tickerText){
-  const tickerH = tickerSize + 24
-  ctx.fillStyle='#000000'; ctx.fillRect(0, c.height - tickerH, c.width, tickerH)
-  ctx.fillStyle='#FFFF00'; ctx.font=`bold ${tickerSize}px sans-serif`; ctx.textAlign='left'; ctx.textBaseline='middle'
-  const w = ctx.measureText(tickerText + '   •   ').width
-  tickerOffsetRef.current -= tickerSpeed
-  if(tickerOffsetRef.current < -w) tickerOffsetRef.current = c.width
-  ctx.fillText(tickerText + '   •   ' + tickerText, tickerOffsetRef.current, c.height - tickerH/2)
+if(tickerOn && tickerText){
+const tickerH = tickerSize + 24
+ctx.fillStyle='#000000'
+ctx.fillRect(0, c.height - tickerH, c.width, tickerH)
+ctx.fillStyle='#FFFF00'
+ctx.font='bold '+tickerSize+'px sans-serif'
+ctx.textAlign='left'
+ctx.textBaseline='middle'
+const txt = tickerText + '   •   ' + tickerText
+const w = ctx.measureText(txt).width
+tickerOffsetRef.current -= tickerSpeed
+if(tickerOffsetRef.current < 0 - w){ tickerOffsetRef.current = c.width }
+ctx.fillText(txt, tickerOffsetRef.current, c.height - tickerH/2)
 }
-  }
-  }
-  }
-  a=requestAnimationFrame(draw)
+}
+}
+}
+a=requestAnimationFrame(draw)
 }
 draw()
-  return ()=>cancelAnimationFrame(a)
+return ()=>cancelAnimationFrame(a)
 },[isCam,verse,isLive,pos,bgMode,fontSize,align,bgImage,ytLive,textColor,boxColor,boxOpacity,logoImage,logoPos,isRecording,selected,showText,tickerOn,tickerText,tickerSize,tickerSpeed,churchName,showChurchName,liveSeconds,lowData])
-  return (
+return (
     <div style={{padding:16, maxWidth:480, margin:'0 auto'}}>
       {playing && (
         <div style={{position:'fixed', top:0, left:0, right:0, bottom:0, zIndex:9999, background:'#000', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', padding:12, boxSizing:'border-box', overflow:'hidden'}}>
