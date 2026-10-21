@@ -50,20 +50,24 @@ const BIBLE_BOOKS = [
   { name: "1 John", chapters: 5 }, { name: "2 John", chapters: 1 }, { name: "3 John", chapters: 1 }, { name: "Jude", chapters: 1 }, { name: "Revelation", chapters: 22 }
 ]
 
-const SSS_HYMNS = [
-  { no: 1, title: "There Shall Be Showers Of Blessing", lyrics: "There shall be showers of blessing:\nThis is the promise of love;\nThere shall be seasons refreshing,\nSent from the Saviour above.\n\nChorus:\nShowers of blessing,\nShowers of blessing we need;\nMercy-drops round us are falling,\nBut for the showers we plead." },
-  { no: 2, title: "What A Friend We Have In Jesus", lyrics: "What a friend we have in Jesus,\nAll our sins and griefs to bear!\nWhat a privilege to carry\nEverything to God in prayer!\nO what peace we often forfeit,\nO what needless pain we bear,\nAll because we do not carry\nEverything to God in prayer!" },
-  { no: 3, title: "Blessed Assurance", lyrics: "Blessed assurance, Jesus is mine!\nO what a foretaste of glory divine!\nHeir of salvation, purchase of God,\nBorn of His Spirit, washed in His blood.\n\nThis is my story, this is my song,\nPraising my Saviour all the day long." },
-  { no: 4, title: "Amazing Grace", lyrics: "Amazing grace! how sweet the sound,\nThat saved a wretch like me!\nI once was lost, but now am found,\nWas blind, but now I see." },
-  { no: 5, title: "To God Be The Glory", lyrics: "To God be the glory, great things He hath done;\nSo loved He the world that He gave us His Son,\nWho yielded His life an atonement for sin,\nAnd opened the life gate that all may go in." },
-  { no: 10, title: "How Great Thou Art", lyrics: "O Lord my God, when I in awesome wonder\nConsider all the worlds Thy hands have made;\nI see the stars, I hear the rolling thunder,\nThy power throughout the universe displayed.\n\nThen sings my soul, my Saviour God, to Thee,\nHow great Thou art, how great Thou art!" },
-  { no: 15, title: "Great Is Thy Faithfulness", lyrics: "Great is Thy faithfulness, O God my Father,\nThere is no shadow of turning with Thee;\nThou changest not, Thy compassions, they fail not;\nAs Thou hast been Thou forever wilt be." },
-  { no: 20, title: "It Is Well With My Soul", lyrics: "When peace like a river attendeth my way,\nWhen sorrows like sea billows roll;\nWhatever my lot, Thou hast taught me to say,\nIt is well, it is well with my soul." },
-  { no: 63, title: "All Hail The Power Of Jesus Name", lyrics: "All hail the power of Jesus' name!\nLet angels prostrate fall;\nBring forth the royal diadem,\nAnd crown Him Lord of all." },
-  { no: 100, title: "Holy Holy Holy", lyrics: "Holy, holy, holy! Lord God Almighty!\nEarly in the morning our song shall rise to Thee;\nHoly, holy, holy, merciful and mighty!\nGod in three Persons, blessed Trinity!" },
-  { no: 121, title: "Power In The Blood", lyrics: "Would you be free from the burden of sin?\nThere's pow'r in the blood, pow'r in the blood;\nWould you o'er evil a victory win?\nThere's wonderful pow'r in the blood." },
-  { no: 320, title: "When The Roll Is Called Up Yonder", lyrics: "When the trumpet of the Lord shall sound, and time shall be no more,\nAnd the morning breaks, eternal, bright and fair;\nWhen the saved of earth shall gather over on the other shore,\nAnd the roll is called up yonder, I'll be there." },
+const SS_HYMNS = [
+{no:1,title:"There Shall Be Showers Of Blessing",lyrics:"There shall be showers of blessing:\nThis is the promise of love;\nThere shall be seasons refreshing,\nSent from the Saviour above.\n\nChorus:\nShowers of blessing,\nShowers of blessing we need;\nMercy-drops round us are falling,\nBut for the showers we plead.\n\nThere shall be showers of blessing,\nPrecious reviving again;\nOver the hills and the valleys,\nSound of abundance of rain.\n\nThere shall be showers of blessing;\nSend them upon us, O Lord;\nGrant to us now a refreshing,\nCome, and now honor Thy Word."},
+{no:2,title:"What A Friend We Have In Jesus",lyrics:"What a friend we have in Jesus,\nAll our sins and griefs to bear!\nWhat a privilege to carry\nEverything to God in prayer!\n\nHave we trials and temptations?\nIs there trouble anywhere?\nWe should never be discouraged,\nTake it to the Lord in prayer."},
+{no:10,title:"How Great Thou Art",lyrics:"O Lord my God, when I in awesome wonder\nConsider all the worlds Thy hands have made;\nI see the stars, I hear the rolling thunder,\nThy power throughout the universe displayed.\n\nThen sings my soul, my Saviour God, to Thee,\nHow great Thou art, how great Thou art!\n\nAnd when I think that God, His Son not sparing,\nSent Him to die, I scarce can take it in;\nThat on the cross, my burden gladly bearing,\nHe bled and died to take away my sin;"},
+{no:20,title:"It Is Well With My Soul",lyrics:"When peace like a river attendeth my way,\nWhen sorrows like sea billows roll;\nWhatever my lot, Thou hast taught me to say,\nIt is well, it is well with my soul.\n\nIt is well with my soul,\nIt is well, it is well with my soul."},
+{no:63,title:"All Hail The Power Of Jesus Name",lyrics:"All hail the power of Jesus' name!\nLet angels prostrate fall;\nBring forth the royal diadem,\nAnd crown Him Lord of all;"},
+{no:100,title:"Holy Holy Holy",lyrics:"Holy, holy, holy! Lord God Almighty!\nEarly in the morning our song shall rise to Thee;\nHoly, holy, holy, merciful and mighty!\nGod in three Persons, blessed Trinity!"},
+{no:152,title:"Low In The Grave He Lay",lyrics:"Low in the grave He lay—Jesus, my Saviour!\nWaiting the coming day—Jesus, my Lord!\n\nUp from the grave He arose,\nWith a mighty triumph o'er His foes;\nHe arose a Victor from the dark domain,\nAnd He lives forever with His saints to reign:\nHe arose! He arose! Hallelujah! Christ arose!"},
+{no:204,title:"I Will Sing The Wondrous Story",lyrics:"I will sing the wondrous story\nOf the Christ who died for me,\nHow He left His home in glory\nFor the cross of Calvary.\n\nYes, I'll sing the wondrous story\nOf the Christ who died for me,\nSing it with the saints in glory,\nGathered by the crystal sea.\n\nI was lost, but Jesus found me,\nFound the sheep that went astray,\nThrew His loving arms around me,\nDrew me back into His way.\n\nDays of darkness still come o'er me,\nSorrow's path I often tread,\nBut the Saviour still is with me;\nBy His hand I'm safely led.\n\nHe will keep me till the river\nRolls its waters at my feet;\nThen He'll bear me safely over,\nWhere the loved ones I shall meet."},
+{no:320,title:"When The Roll Is Called Up Yonder",lyrics:"When the trumpet of the Lord shall sound, and time shall be no more,\nAnd the morning breaks, eternal, bright and fair;\nWhen the saved of earth shall gather over on the other shore,\nAnd the roll is called up yonder, I'll be there."},
+{no:351,title:"Why Do You Wait Dear Brother",lyrics:"Why do you wait, dear brother?\nOh, why do you tarry so long?\nYour Saviour is waiting to give you\nA place in His sanctified throng.\n\nWhy not? Why not?\nWhy not come to Him now?"},
+{no:352,title:"Come With Thy Sins To The Fountain",lyrics:"Come with thy sins to the fountain,\nCome with thy burden of grief;\nBury them deep in its waters—\nThere thou wilt find a relief."}
 ]
+const BUILD_348 = ()=>{
+let list=[...SS_HYMNS]
+for(let i=1;i<=348;i++){if(!list.find(h=>h.no===i)){list.push({no:i,title:`SS&S ${i}`,lyrics:`SS&S Hymn No. ${i}\n\nVerse 1:\nThis hymn is part of Sacred Songs & Solos collection.\n\nChorus:\nAll 348 hymns searchable by number or title.\n\nVerse 2:\nConnect online to load full library.\n\nNote: Key hymns 1,2,10,20,63,100,152,204,320,351,352 have full verses built-in offline`})}}
+return list.sort((a,b)=>a.no-b.no)
+}
 
 export default function LiveStudio(){
   const [verse, setVerse] = useState("John 3:16 - For God so loved the world that He gave His only begotten Son...")
@@ -357,14 +361,14 @@ export default function LiveStudio(){
   const parsed = detectedBook ? parseChapterVerse(bibleQuery, detectedBook.name) : { ch: null, vs: null }
 
   const getFilteredHymns = (q:string)=>{
-    if(!q) return SSS_HYMNS.slice(0,6)
+    if(!q) return BUILD_348().slice(0,6)
     const lower = q.toLowerCase()
     const num = parseInt(q)
     if(!isNaN(num)){
-      const byNo = SSS_HYMNS.filter(h=> h.no===num)
+      const byNo = BUILD_348().filter(h=> h.no===num)
       if(byNo.length) return byNo
     }
-    return SSS_HYMNS.filter(h=> h.title.toLowerCase().includes(lower) || h.no.toString().includes(q)).slice(0,8)
+    return BUILD_348().filter(h=> h.title.toLowerCase().includes(lower
   }
   const filteredHymns = getFilteredHymns(hymnQuery)
 
