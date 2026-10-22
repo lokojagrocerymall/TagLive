@@ -43,22 +43,25 @@ const BIBLE_BOOKS = [
 const SS_HYMNS = [
 {no:1,title:"There Shall Be Showers Of Blessing",lyrics:"There shall be showers of blessing:\nThis is the promise of love;"},
 {no:2,title:"What A Friend We Have In Jesus",lyrics:"What a friend we have in Jesus, All our sins and griefs to bear!"},
-{no:10,title:"How Great Thou Art",lyrics:"O Lord my God, when I in awesome wonder"},
-{no:20,title:"It Is Well With My Soul",lyrics:"When peace like a river attendeth my way"},
-{no:63,title:"All Hail The Power Of Jesus Name",lyrics:"All hail the power of Jesus' name!"},
-{no:85,title:"Hark The Herald Angels Sing",lyrics:"Hark! the herald angels sing"},
-{no:93,title:"O Come All Ye Faithful",lyrics:"O come, all ye faithful"},
-{no:100,title:"Holy Holy Holy",lyrics:"Holy, holy, holy! Lord God Almighty!"},
-{no:151,title:"Behold The Saviour Of Mankind",lyrics:"Behold the Saviour of mankind"},
-{no:152,title:"Low In The Grave He Lay",lyrics:"Low in the grave He lay—Jesus, my Saviour!"},
-{no:204,title:"I Will Sing The Wondrous Story",lyrics:"I will sing the wondrous story"},
-{no:210,title:"I've Found A Friend In Jesus",lyrics:"I've found a friend in Jesus, He's everything to me"},
-{no:301,title:"I've A Message From The Lord",lyrics:"I've a message from the Lord, Hallelujah!"},
-{no:320,title:"When The Roll Is Called Up Yonder",lyrics:"When the trumpet of the Lord shall sound"},
-{no:351,title:"Why Do You Wait Dear Brother",lyrics:"Why do you wait, dear brother?"},
-{no:352,title:"Come With Thy Sins To The Fountain",lyrics:"Come with thy sins to the fountain"},
+{no:10,title:"How Great Thou Art",lyrics:"O Lord my God, when I in awesome wonder\nConsider all the worlds Thy hands have made;"},
+{no:20,title:"It Is Well With My Soul",lyrics:"When peace like a river attendeth my way,\nWhen sorrows like sea billows roll;\nWhatever my lot, Thou hast taught me to say,\nIt is well, it is well with my soul."},
+{no:40,title:"To God Be The Glory",lyrics:"To God be the glory, great things He hath done;\nSo loved He the world that He gave us His Son;\nWho yielded His life an atonement for sin,\nAnd opened the life-gate that all may go in."},
+{no:41,title:"The Old Rugged Cross",lyrics:"On a hill far away stood an old rugged cross,\nThe emblem of suffering and shame;"},
+{no:42,title:"Blessed Assurance",lyrics:"Blessed assurance, Jesus is mine!\nOh, what a foretaste of glory divine!"},
+{no:63,title:"All Hail The Power Of Jesus Name",lyrics:"All hail the power of Jesus' name!\nLet angels prostrate fall;"},
+{no:85,title:"Hark The Herald Angels Sing",lyrics:"Hark! the herald angels sing\nGlory to the newborn King;"},
+{no:93,title:"O Come All Ye Faithful",lyrics:"O come, all ye faithful,\nJoyful and triumphant!"},
+{no:100,title:"Holy Holy Holy",lyrics:"Holy, holy, holy! Lord God Almighty!\nEarly in the morning our song shall rise to Thee;"},
+{no:151,title:"Behold The Saviour Of Mankind",lyrics:"Behold the Saviour of mankind\nNailed to the shameful tree;"},
+{no:152,title:"Low In The Grave He Lay",lyrics:"Low in the grave He lay—Jesus, my Saviour!\nWaiting the coming day—Jesus, my Lord!"},
+{no:204,title:"I Will Sing The Wondrous Story",lyrics:"I will sing the wondrous story\nOf the Christ Who died for me."},
+{no:210,title:"I've Found A Friend In Jesus",lyrics:"I've found a friend in Jesus, He's everything to me,\nHe's the fairest of ten thousand to my soul;"},
+{no:301,title:"I've A Message From The Lord",lyrics:"I've a message from the Lord, Hallelujah!\nThis message unto you I'll give;"},
+{no:320,title:"When The Roll Is Called Up Yonder",lyrics:"When the trumpet of the Lord shall sound, and time shall be no more,\nAnd the morning breaks, eternal, bright and fair;"},
+{no:351,title:"Why Do You Wait Dear Brother",lyrics:"Why do you wait, dear brother?\nOh, why do you tarry so long?"},
+{no:352,title:"Come With Thy Sins To The Fountain",lyrics:"Come with thy sins to the fountain,\nCome with thy burden of grief;"},
 ];
-const BUILD_348 = ()=>{ let list=[...SS_HYMNS]; for(let i=1;i<=348;i++){ if(!list.find(h=>h.no===i)){ list.push({no:i,title:"SS&S "+i,lyrics:"SS&S "+i}); } } return list.sort((a,b)=>a.no-b.no); };
+const BUILD_348 = ()=>{ let list=[...SS_HYMNS]; for(let i=1;i<=348;i++){ if(!list.find(h=>h.no===i)){ list.push({no:i,title:`SS&S ${i}`,lyrics:`SS&S ${i} - (Tap Search to fetch online)`}); } } return list.sort((a,b)=>a.no-b.no); };
 
 export default function LiveStudio(){
 const [verse,setVerse]=useState("John 3:16 - For God so loved the world that He gave His only begotten Son...")
@@ -298,29 +301,45 @@ setBibleLoading(false)
 }
 const useBibleVerse=()=>{ if(bibleResult){ setVerse(bibleResult); setShowBible(false) } }
 
-// AUTO DETECT + HYMN FIX
 const getFilteredBooks=(q:string)=>{ if(!q||q.length<1) return []; const lower=q.toLowerCase(); return BIBLE_BOOKS.filter(b=>b.name.toLowerCase().includes(lower)||lower.includes(b.name.toLowerCase().split(' ').pop()||'')).slice(0,8) }
 const detectBookFromQuery=(q:string)=>{ const lower=q.toLowerCase(); return BIBLE_BOOKS.find(b=>lower.startsWith(b.name.toLowerCase()))||BIBLE_BOOKS.find(b=>lower.includes(b.name.toLowerCase())) }
 const parseChapterVerse=(q:string,bookName:string)=>{ const rest=q.substring(bookName.length).trim(); const match=rest.match(/(\d+)(?:[:\s]+(\d+))?/); if(!match) return { ch: null, vs: null }; return { ch: parseInt(match[1]), vs: match[2]?parseInt(match[2]):null } }
 const filteredBooks=getFilteredBooks(bibleQuery)
 const detectedBook=detectBookFromQuery(bibleQuery)
 const parsed=detectedBook?parseChapterVerse(bibleQuery,detectedBook.name):{ ch: null, vs: null }
-const getFilteredHymns=(q:string)=>{ if(!q) return BUILD_348().slice(0,6); const lower=q.toLowerCase(); const num=parseInt(q); if(!isNaN(num)){ const byNo=BUILD_348().filter(h=>h.no===num); if(byNo.length) return byNo } return BUILD_348().filter(h=>h.title.toLowerCase().includes(lower)) }
+const getFilteredHymns=(q:string)=>{ if(!q) return BUILD_348().slice(0,6); const lower=q.toLowerCase(); const num=parseInt(q); if(!isNaN(num)){ const byNo=BUILD_348().filter(h=>h.no===num); if(byNo.length) return byNo } return BUILD_348().filter(h=>h.title.toLowerCase().includes(lower)).slice(0,8) }
 const filteredHymns=getFilteredHymns(hymnQuery)
 
-// --- NEW HYMN ONLINE FETCH ---
 const fetchHymnOnline = async (no: number) => {
   setHymnLoading(true)
+  // 1. Try real local DB first (no dummy)
+  const realLocal = SS_HYMNS.find(h=>h.no===no)
+  if(realLocal){
+    setHymnResult(`${realLocal.no}. ${realLocal.title}\n\n${realLocal.lyrics}`)
+    setHymnLoading(false)
+    // still try online to update
+    try{
+      const res=await fetch(`/api/sss?no=${no}`)
+      const d=await res.json()
+      if(d && d.lyrics && !d.lyrics.includes(`SS&S ${no} - (Tap`)){
+        setHymnResult(`${d.no}. ${d.title}\n\n${d.lyrics}`)
+      }
+    }catch{}
+    return
+  }
+  // 2. Try API online
   try {
     const res = await fetch(`/api/sss?no=${no}`)
     const d = await res.json()
-    if (d && d.lyrics) {
+    if (d && d.lyrics && d.lyrics.length>10 && !d.lyrics.startsWith(`SS&S ${no} -`)) {
       setHymnResult(`${d.no}. ${d.title}\n\n${d.lyrics}`)
-    } else throw new Error('no lyrics')
+      setHymnLoading(false)
+      return
+    }
+    throw new Error('dummy')
   } catch {
-    const local = SS_HYMNS.find(h=>h.no===no) || BUILD_348().find(h=>h.no===no)
-    if(local) setHymnResult(`${local.no}. ${local.title}\n\n${local.lyrics}`)
-    else setHymnResult(`Hymn ${no} not found offline. Check internet.`)
+    // 3. Final fallback - tell user API missing
+    setHymnResult(`${no}. SS&S ${no}\n\nHymn ${no} not in local DB yet.\nAdd it in SS_HYMNS array or in /api/sss/route.ts\n\nBut you can still use number ${no} on screen.`)
   }
   setHymnLoading(false)
 }
@@ -395,8 +414,37 @@ const sW=targetW/scale; const sH=targetH/scale
 const sX=(vw-sW)/2; const sY=(vh-sH)/2
 ctx.drawImage(v,sX,sY,sW,sH,0,c.height*0.48,targetW,targetH)
 } else if(bgMode==='black'){ ctx.fillStyle='#000'; ctx.fillRect(0,0,c.width,c.height) }
-else if(bgMode==='image'){ if(bgImageRef.current) ctx.drawImage(bgImageRef.current,0,0,c.width,c.height); else { const g=ctx.createLinearGradient(0,0,c.width,c.height); g.addColorStop(0,'#1e3a8a'); g.addColorStop(1,'#581c87'); ctx.fillStyle=g; ctx.fillRect(0,0,c.width,c.height) } }
-else ctx.drawImage(v,0,0,c.width,c.height)
+else if(bgMode==='image'){ 
+  if(bgImageRef.current){
+    // cover crop for bg image too
+    const iw=bgImageRef.current.width, ih=bgImageRef.current.height
+    const rCanvas=c.width/c.height, rImg=iw/ih
+    let sx,sy,sw,sh
+    if(rImg>rCanvas){ sh=ih; sw=ih*rCanvas; sx=(iw-sw)/2; sy=0 }
+    else { sw=iw; sh=iw/rCanvas; sx=0; sy=(ih-sh)/2 }
+    ctx.drawImage(bgImageRef.current,sx,sy,sw,sh,0,0,c.width,c.height)
+  } else { const g=ctx.createLinearGradient(0,0,c.width,c.height); g.addColorStop(0,'#1e3a8a'); g.addColorStop(1,'#581c87'); ctx.fillStyle=g; ctx.fillRect(0,0,c.width,c.height) }
+}
+else {
+  // FACE MODE - FIXED NO STRETCH (cover crop)
+  const vw=v.videoWidth||1280
+  const vh=v.videoHeight||720
+  const rCanvas=c.width/c.height
+  const rVideo=vw/vh
+  let sx,sy,sw,sh
+  if(rVideo>rCanvas){
+    sh=vh
+    sw=vh*rCanvas
+    sx=(vw-sw)/2
+    sy=0
+  }else{
+    sw=vw
+    sh=vw/rCanvas
+    sx=0
+    sy=(vh-sh)/2
+  }
+  ctx.drawImage(v,sx,sy,sw,sh,0,0,c.width,c.height)
+}
 if(logoImageRef.current){ ctx.save(); ctx.translate(logoPos.x,logoPos.y); ctx.rotate(logoPos.rotation*Math.PI/180); ctx.scale(logoPos.scale,logoPos.scale); const iw=logoImageRef.current.width, ih=logoImageRef.current.height; const maxLogoW=180; const sc=Math.min(1,maxLogoW/iw); ctx.drawImage(logoImageRef.current,-iw*sc/2,-ih*sc/2,iw*sc,ih*sc); if(selected==='logo'){ ctx.strokeStyle='#00ff00'; ctx.lineWidth=4; ctx.setLineDash([10,10]); ctx.strokeRect(-iw*sc/2-6,-ih*sc/2-6,iw*sc+12,ih*sc+12); ctx.setLineDash([]) } ctx.restore() }
 if(showText){
 ctx.save();
@@ -460,13 +508,13 @@ return (
 </>
 ):(
 <>
-<div style={{display:'flex',gap:6,marginTop:10}}><input value={hymnQuery} onChange={e=>setHymnQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){const num=parseInt(hymnQuery);if(!isNaN(num))fetchHymnOnline(num)}}} placeholder="Type Hymn No. e.g. 56" style={{flex:1,padding:12,borderRadius:10,border:'2px solid #7c3aed',fontSize:13,fontWeight:700}}/><button onClick={()=>{const num=parseInt(hymnQuery);if(!isNaN(num))fetchHymnOnline(num)}} style={{background:'#7c3aed',color:'#fff',padding:'10px 16px',borderRadius:10,border:0,fontWeight:700}}>{hymnLoading?'...':'Search'}</button></div>
+<div style={{display:'flex',gap:6,marginTop:10}}><input value={hymnQuery} onChange={e=>setHymnQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){const num=parseInt(hymnQuery);if(!isNaN(num))fetchHymnOnline(num)}}} placeholder="Type Hymn No. e.g. 40" style={{flex:1,padding:12,borderRadius:10,border:'2px solid #7c3aed',fontSize:13,fontWeight:700}}/><button onClick={()=>{const num=parseInt(hymnQuery);if(!isNaN(num))fetchHymnOnline(num)}} style={{background:'#7c3aed',color:'#fff',padding:'10px 16px',borderRadius:10,border:0,fontWeight:700}}>{hymnLoading?'...':'Search'}</button></div>
 <div style={{maxHeight:200,overflowY:'auto',marginTop:8,background:'#f9f5ff',borderRadius:10,padding:8,border:'1px solid #ddd'}}><div style={{fontSize:11,fontWeight:900,marginBottom:6}}>SS&S Hymns (Tap to fetch online):</div>{filteredHymns.map(h=>(
 <div key={h.no} onClick={()=>fetchHymnOnline(h.no)} style={{padding:'8px 10px',background:'#fff',border:'1px solid #eee',borderRadius:8,marginTop:4,cursor:'pointer'}}>
 <b style={{fontSize:13}}>{h.no}. {h.title}</b><div style={{fontSize:11,opacity:.7,marginTop:2}}>{h.lyrics.substring(0,60)}...</div>
 </div>
 ))}</div>
-<div style={{marginTop:8,background:'#fffef0',borderRadius:12,padding:12,flex:1,overflowY:'auto',border:'1px solid #ddd'}}>{hymnLoading?<div style={{opacity:.6,fontSize:12}}>Fetching hymn online...</div>:hymnResult?<div style={{fontSize:14,lineHeight:1.5,fontWeight:600,whiteSpace:'pre-wrap'}}>{hymnResult}</div>:<div style={{opacity:.6,fontSize:12}}>Type 56 and Search — will fetch from online.</div>}</div>
+<div style={{marginTop:8,background:'#fffef0',borderRadius:12,padding:12,flex:1,overflowY:'auto',border:'1px solid #ddd'}}>{hymnLoading?<div style={{opacity:.6,fontSize:12}}>Fetching hymn online...</div>:hymnResult?<div style={{fontSize:14,lineHeight:1.5,fontWeight:600,whiteSpace:'pre-wrap'}}>{hymnResult}</div>:<div style={{opacity:.6,fontSize:12}}>Type 40 and Search — will fetch real lyrics (To God Be The Glory).</div>}</div>
 <button onClick={()=>{if(hymnResult){setVerse(hymnResult);setShowBible(false)}}} disabled={!hymnResult} style={{marginTop:10,background:hymnResult?'#7c3aed':'#ccc',color:'#fff',padding:14,borderRadius:12,fontWeight:900,border:'none'}}>Use This Hymn On Screen</button>
 </>
 )}
