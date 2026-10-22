@@ -63,6 +63,16 @@ const SS_HYMNS = [
 ];
 const BUILD_348 = ()=>{ let list=[...SS_HYMNS]; for(let i=1;i<=348;i++){ if(!list.find(h=>h.no===i)){ list.push({no:i,title:`SS&S ${i}`,lyrics:`SS&S ${i}`}); } } return list.sort((a,b)=>a.no-b.no); };
 
+// --- INDEXEDDB FOR REAL LOCAL STORAGE ---
+const openDB=()=>new Promise<IDBDatabase>((res,rej)=>{
+  const r=indexedDB.open('TagLiveDB',1)
+  r.onupgradeneeded=()=>{ const db=r.result; if(!db.objectStoreNames.contains('intros')) db.createObjectStore('intros',{keyPath:'id'}); if(!db.objectStoreNames.contains('outros')) db.createObjectStore('outros',{keyPath:'id'}) }
+  r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error)
+})
+const saveToDB=async(store:string, item:any)=>{ const db=await openDB(); return new Promise<void>((res,rej)=>{ const tx=db.transaction(store,'readwrite'); tx.objectStore(store).put(item); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error) }) }
+const getAllFromDB=async(store:string)=>{ const db=await openDB(); return new Promise<any[]>((res,rej)=>{ const tx=db.transaction(store,'readonly'); const req=tx.objectStore(store).getAll(); req.onsuccess=()=>res(req.result); req.onerror=()=>rej(req.error) }) }
+const deleteFromDB=async(store:string, id:string)=>{ const db=await openDB(); return new Promise<void>((res,rej)=>{ const tx=db.transaction(store,'readwrite'); tx.objectStore(store).delete(id); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error) }) }
+
 export default function LiveStudio(){
 const [verse,setVerse]=useState("John 3:16 - For God so loved the world that He gave His only begotten Son...")
 const [isCam,setIsCam]=useState(false)
@@ -152,8 +162,6 @@ document.body.appendChild(s)
 try{
 const sv=localStorage.getItem('taglive_saved'); if(sv) setSaved(JSON.parse(sv))
 const yk=localStorage.getItem('taglive_ytkey'); if(yk) setYtKey(yk)
-const si=localStorage.getItem('taglive_intros'); if(si) setIntros(JSON.parse(si).filter((x:any)=>x.type!=='animated'))
-const so=localStorage.getItem('taglive_outros'); if(so) setOutros(JSON.parse(so).filter((x:any)=>x.type!=='animated'))
 const ai=localStorage.getItem('taglive_active_intro'); if(ai) setActiveIntroId(ai)
 const ao=localStorage.getItem('taglive_active_outro'); if(ao) setActiveOutroId(ao)
 const tk=localStorage.getItem('taglive_ticker_text'); if(tk) setTickerText(tk)
@@ -165,6 +173,13 @@ const params=new URLSearchParams(window.location.search)
 if(params.get('admin')==='taglive2026'){ localStorage.setItem('taglive_admin','true'); setIsAdmin(true) }
 else if(localStorage.getItem('taglive_admin')==='true'){ setIsAdmin(true) }
 }catch{}
+const loadIDB=async()=>{
+  try{
+    const i=await getAllFromDB('intros'); const o=await getAllFromDB('outros')
+    if(i.length) setIntros(i); if(o.length) setOutros(o)
+  }catch{}
+}
+loadIDB()
 const handleVis=async()=>{ if(!document.hidden){ try{ const t=await navigator.clipboard.readText(); if(t && t.length>5 && t.length<500 && t!==verse) setVerse(t) }catch{} } }
 document.addEventListener('visibilitychange', handleVis)
 return()=>{ document.removeEventListener('visibilitychange', handleVis); if(timerRef.current) clearInterval(timerRef.current) }
@@ -195,8 +210,6 @@ setStats({ live: live||0, daily: daily||0, weekly: weekly||0, monthly: monthly||
 trackDevice(); const interval=setInterval(trackDevice,60000); return()=>clearInterval(interval)
 },[isAdmin])
 
-const saveIntros=(arr:any[])=>{ const filtered=arr.filter((x:any)=>x.type!=='animated'); setIntros(filtered); localStorage.setItem('taglive_intros', JSON.stringify(filtered)) }
-const saveOutros=(arr:any[])=>{ const filtered=arr.filter((x:any)=>x.type!=='animated'); setOutros(filtered); localStorage.setItem('taglive_outros', JSON.stringify(filtered)) }
 const fileToBase64=(file:File)=>new Promise<string>((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result as string); r.onerror=rej; r.readAsDataURL(file) })
 const getVideoDuration=(base64:string)=>new Promise<number>((res)=>{ const v=document.createElement('video'); v.src=base64; v.onloadedmetadata=()=>res(v.duration); setTimeout(()=>res(10),2000) })
 const handleIntroFile=async(e:any)=>{
@@ -205,7 +218,9 @@ const base64=await fileToBase64(file)
 let dur=5
 if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }
 const item={ id:`id_${Date.now()}`, type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }
-const n=[...intros,item]; saveIntros(n); setActiveIntroId(item.id); localStorage.setItem('taglive_active_intro', item.id); e.target.value=''; alert(`Intro Saved! ${Math.round(dur)}s - will play inside with original ratio`)
+await saveToDB('intros', item)
+const all=await getAllFromDB('intros'); setIntros(all)
+setActiveIntroId(item.id); localStorage.setItem('taglive_active_intro', item.id); e.target.value=''; alert(`Intro Saved to Local Storage! ${Math.round(dur)}s - Permanent`)
 }
 const handleOutroFile=async(e:any)=>{
 const file=e.target.files?.[0]; if(!file) return
@@ -213,7 +228,9 @@ const base64=await fileToBase64(file)
 let dur=5
 if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }
 const item={ id:`id_${Date.now()}`, type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }
-const n=[...outros,item]; saveOutros(n); setActiveOutroId(item.id); localStorage.setItem('taglive_active_outro', item.id); e.target.value=''; alert(`Outro Saved! ${Math.round(dur)}s - will play inside with original ratio`)
+await saveToDB('outros', item)
+const all=await getAllFromDB('outros'); setOutros(all)
+setActiveOutroId(item.id); localStorage.setItem('taglive_active_outro', item.id); e.target.value=''; alert(`Outro Saved to Local Storage! ${Math.round(dur)}s - Permanent`)
 }
 const startCamera=async(newFacing=facing)=>{
 try{
@@ -486,7 +503,6 @@ const c=canvasRef.current, v=videoRef.current
 if(c&&v&&isCam&&v.readyState>=2){
 const ctx=c.getContext('2d')
 if(ctx){
-// FIX: DO NOT RESET WIDTH EVERY FRAME - CAUSES SKIPPING
 if(c.width!==720 || c.height!==1280){ c.width=720; c.height=1280 }
 if(broadcastPlaying){
 ctx.fillStyle='#000'; ctx.fillRect(0,0,c.width,c.height)
@@ -620,12 +636,13 @@ return (
 {showSettings&&(
 <div style={{marginTop:12,display:'flex',flexDirection:'column',gap:12}}>
 <div style={{border:'2px solid #FF0000',borderRadius:12,padding:10,background:lowData?'#fef2f2':'#fff',display:'flex',justifyContent:'space-between',alignItems:'center'}}><div><b style={{fontSize:12}}>Data Saver Mode</b><div style={{fontSize:10,opacity:.7}}>{lowData?'480p - Uses less data':'720p - High Quality'}</div></div><button onClick={()=>{const v=!lowData;setLowData(v);localStorage.setItem('taglive_lowdata',v.toString());if(isCam)setTimeout(()=>startCamera(),300)}} style={{padding:'8px 14px',borderRadius:20,border:'none',background:lowData?'#16a34a':'#111',color:'#fff',fontWeight:900,fontSize:11}}>{lowData?'480p ON':'720p'}</button></div>
-<div style={{border:'2px solid #7c3aed',borderRadius:16,padding:12,background:'#f9f5ff'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:14}}>Intro / Outro Studio</b><button onClick={()=>setShowStudio(!showStudio)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:'#111',color:'#fff',fontWeight:800,fontSize:11}}>{showStudio?'Hide':'Open'}</button></div>
+<div style={{border:'2px solid #7c3aed',borderRadius:16,padding:12,background:'#f9f5ff'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:14}}>Intro / Outro Studio - SAVED TO LOCAL STORAGE</b><button onClick={()=>setShowStudio(!showStudio)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:'#111',color:'#fff',fontWeight:800,fontSize:11}}>{showStudio?'Hide':'Open'}</button></div>
 {showStudio&&(<div style={{marginTop:10}}>
 <div style={{display:'flex',gap:6,marginTop:8}}><label style={{flex:1,background:'#7c3aed',color:'#fff',padding:12,borderRadius:10,fontWeight:800,fontSize:12,textAlign:'center',cursor:'pointer'}}>Upload Intro Video<input ref={introFileRef} type="file" accept="video/*,image/*" onChange={handleIntroFile} style={{display:'none'}}/></label><label style={{flex:1,background:'#111',color:'#fff',padding:12,borderRadius:10,fontWeight:800,fontSize:12,textAlign:'center',cursor:'pointer'}}>Upload Outro Video<input ref={outroFileRef} type="file" accept="video/*,image/*" onChange={handleOutroFile} style={{display:'none'}}/></label></div>
 <div style={{marginTop:12}}>
-{intros.length>0&&<div style={{marginBottom:10}}><b style={{fontSize:12}}>Active Intro:</b><div style={{display:'flex',flexDirection:'column',gap:4,marginTop:6}}>{intros.map((it:any)=><div key={it.id} style={{display:'flex',gap:4}}><button onClick={()=>{setActiveIntroId(it.id);localStorage.setItem('taglive_active_intro',it.id)}} style={{flex:1,padding:8,borderRadius:8,border:'none',background:activeIntroId===it.id?'#16a34a':'#eee',color:activeIntroId===it.id?'#fff':'#000',fontWeight:700,fontSize:11,textAlign:'left'}}>{activeIntroId===it.id?'✓ ':''}{it.title} ({Math.round(it.duration)}s)</button><button onClick={()=>{const n=intros.filter((x:any)=>x.id!==it.id);saveIntros(n); if(activeIntroId===it.id){setActiveIntroId(null);localStorage.removeItem('taglive_active_intro')}}} style={{padding:8,borderRadius:8,border:'none',background:'#ff0000',color:'#fff',fontSize:11}}>X</button></div>)}</div></div>}
-{outros.length>0&&<div><b style={{fontSize:12}}>Active Outro:</b><div style={{display:'flex',flexDirection:'column',gap:4,marginTop:6}}>{outros.map((ot:any)=><div key={ot.id} style={{display:'flex',gap:4}}><button onClick={()=>{setActiveOutroId(ot.id);localStorage.setItem('taglive_active_outro',ot.id)}} style={{flex:1,padding:8,borderRadius:8,border:'none',background:activeOutroId===ot.id?'#16a34a':'#eee',color:activeOutroId===ot.id?'#fff':'#000',fontWeight:700,fontSize:11,textAlign:'left'}}>{activeOutroId===ot.id?'✓ ':''}{ot.title} ({Math.round(ot.duration)}s)</button><button onClick={()=>{const n=outros.filter((x:any)=>x.id!==ot.id);saveOutros(n); if(activeOutroId===ot.id){setActiveOutroId(null);localStorage.removeItem('taglive_active_outro')}}} style={{padding:8,borderRadius:8,border:'none',background:'#ff0000',color:'#fff',fontSize:11}}>X</button></div>)}</div></div>}
+{intros.length>0&&<div style={{marginBottom:10}}><b style={{fontSize:12}}>Active Intro (Permanent):</b><div style={{display:'flex',flexDirection:'column',gap:4,marginTop:6}}>{intros.map((it:any)=><div key={it.id} style={{display:'flex',gap:4}}><button onClick={()=>{setActiveIntroId(it.id);localStorage.setItem('taglive_active_intro',it.id)}} style={{flex:1,padding:8,borderRadius:8,border:'none',background:activeIntroId===it.id?'#16a34a':'#eee',color:activeIntroId===it.id?'#fff':'#000',fontWeight:700,fontSize:11,textAlign:'left'}}>{activeIntroId===it.id?'✓ ':''}{it.title} ({Math.round(it.duration)}s)</button><button onClick={async()=>{await deleteFromDB('intros', it.id); const all=await getAllFromDB('intros'); setIntros(all); if(activeIntroId===it.id){setActiveIntroId(null);localStorage.removeItem('taglive_active_intro')}}} style={{padding:8,borderRadius:8,border:'none',background:'#ff0000',color:'#fff',fontSize:11}}>X</button></div>)}</div></div>}
+{outros.length>0&&<div><b style={{fontSize:12}}>Active Outro (Permanent):</b><div style={{display:'flex',flexDirection:'column',gap:4,marginTop:6}}>{outros.map((ot:any)=><div key={ot.id} style={{display:'flex',gap:4}}><button onClick={()=>{setActiveOutroId(ot.id);localStorage.setItem('taglive_active_outro',ot.id)}} style={{flex:1,padding:8,borderRadius:8,border:'none',background:activeOutroId===ot.id?'#16a34a':'#eee',color:activeOutroId===ot.id?'#fff':'#000',fontWeight:700,fontSize:11,textAlign:'left'}}>{activeOutroId===ot.id?'✓ ':''}{ot.title} ({Math.round(ot.duration)}s)</button><button onClick={async()=>{await deleteFromDB('outros', ot.id); const all=await getAllFromDB('outros'); setOutros(all); if(activeOutroId===ot.id){setActiveOutroId(null);localStorage.removeItem('taglive_active_outro')}}} style={{padding:8,borderRadius:8,border:'none',background:'#ff0000',color:'#fff',fontSize:11}}>X</button></div>)}</div></div>}
+{intros.length===0&&outros.length===0&&<div style={{fontSize:11,opacity:0.6,marginTop:10}}>No intro/outro saved yet. Upload videos - they will be saved permanently to local storage (IndexedDB) and will not disappear after refresh.</div>}
 </div>
 </div>)}
 </div>
