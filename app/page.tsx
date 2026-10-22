@@ -298,7 +298,7 @@ setBibleLoading(false)
 }
 const useBibleVerse=()=>{ if(bibleResult){ setVerse(bibleResult); setShowBible(false) } }
 
-// AUTO DETECT
+// AUTO DETECT + HYMN FIX
 const getFilteredBooks=(q:string)=>{ if(!q||q.length<1) return []; const lower=q.toLowerCase(); return BIBLE_BOOKS.filter(b=>b.name.toLowerCase().includes(lower)||lower.includes(b.name.toLowerCase().split(' ').pop()||'')).slice(0,8) }
 const detectBookFromQuery=(q:string)=>{ const lower=q.toLowerCase(); return BIBLE_BOOKS.find(b=>lower.startsWith(b.name.toLowerCase()))||BIBLE_BOOKS.find(b=>lower.includes(b.name.toLowerCase())) }
 const parseChapterVerse=(q:string,bookName:string)=>{ const rest=q.substring(bookName.length).trim(); const match=rest.match(/(\d+)(?:[:\s]+(\d+))?/); if(!match) return { ch: null, vs: null }; return { ch: parseInt(match[1]), vs: match[2]?parseInt(match[2]):null } }
@@ -307,6 +307,24 @@ const detectedBook=detectBookFromQuery(bibleQuery)
 const parsed=detectedBook?parseChapterVerse(bibleQuery,detectedBook.name):{ ch: null, vs: null }
 const getFilteredHymns=(q:string)=>{ if(!q) return BUILD_348().slice(0,6); const lower=q.toLowerCase(); const num=parseInt(q); if(!isNaN(num)){ const byNo=BUILD_348().filter(h=>h.no===num); if(byNo.length) return byNo } return BUILD_348().filter(h=>h.title.toLowerCase().includes(lower)) }
 const filteredHymns=getFilteredHymns(hymnQuery)
+
+// --- NEW HYMN ONLINE FETCH ---
+const fetchHymnOnline = async (no: number) => {
+  setHymnLoading(true)
+  try {
+    const res = await fetch(`/api/sss?no=${no}`)
+    const d = await res.json()
+    if (d && d.lyrics) {
+      setHymnResult(`${d.no}. ${d.title}\n\n${d.lyrics}`)
+    } else throw new Error('no lyrics')
+  } catch {
+    const local = SS_HYMNS.find(h=>h.no===no) || BUILD_348().find(h=>h.no===no)
+    if(local) setHymnResult(`${local.no}. ${local.title}\n\n${local.lyrics}`)
+    else setHymnResult(`Hymn ${no} not found offline. Check internet.`)
+  }
+  setHymnLoading(false)
+}
+
 const pasteClipboard=async()=>{ try{ const t=await navigator.clipboard.readText(); if(t) setVerse(t); else alert('Clipboard empty') }catch{ alert('Allow clipboard') } }
 const saveVerse=()=>{ if(!verse.trim()) return; const ns=[verse,...saved.filter(s=>s!==verse)].slice(0,20); setSaved(ns); localStorage.setItem('taglive_saved', JSON.stringify(ns)); alert('Saved!') }
 const pickMedia=()=>fileInputRef.current?.click()
@@ -314,7 +332,6 @@ const pickLogo=()=>logoInputRef.current?.click()
 const onFilePick=(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const url=URL.createObjectURL(f); setBgImage(url); setBgMode('image'); const img=new Image(); img.src=url; img.onload=()=>{ bgImageRef.current=img } }
 const onLogoPick=(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const url=URL.createObjectURL(f); setLogoImage(url); const img=new Image(); img.src=url; img.onload=()=>{ logoImageRef.current=img }; setSelected('logo') }
 
-// *** EXCLUSIVE MP4 ***
 const startRecording=()=>{
   const canvas=canvasRef.current; if(!canvas) return alert('Start camera first')
   const canvasStream=(canvas as any).captureStream(30) as MediaStream
@@ -443,13 +460,13 @@ return (
 </>
 ):(
 <>
-<div style={{display:'flex',gap:6,marginTop:10}}><input value={hymnQuery} onChange={e=>setHymnQuery(e.target.value)} placeholder="Type Hymn No. or title e.g. 1 or showers" style={{flex:1,padding:12,borderRadius:10,border:'2px solid #7c3aed',fontSize:13,fontWeight:700}}/><button onClick={async()=>{const h:any=filteredHymns[0];if(!h)return;setHymnLoading(true);try{const res=await fetch(`/api/sss?no=${h.no}`);const d=await res.json();setHymnResult(`${d.no}. ${d.title}\n\n${d.lyrics}`)}catch{}setHymnLoading(false)}} style={{background:'#7c3aed',color:'#fff',padding:'10px 16px',borderRadius:10,border:0,fontWeight:700}}>Search</button></div>
-<div style={{maxHeight:200,overflowY:'auto',marginTop:8,background:'#f9f5ff',borderRadius:10,padding:8,border:'1px solid #ddd'}}><div style={{fontSize:11,fontWeight:900,marginBottom:6}}>SS&S Hymns:</div>{filteredHymns.map(h=>(
-<div key={h.no} onClick={async()=>{ const r=await fetch(`/api/sss?no=${h.no}`); const d=await r.json(); setHymnResult(`${d.no}. ${d.title}\n\n${d.lyrics}`); }} style={{padding:'6px 8px',background:'#fff',border:'1px solid #eee',borderRadius:8,marginTop:4,cursor:'pointer'}}>
+<div style={{display:'flex',gap:6,marginTop:10}}><input value={hymnQuery} onChange={e=>setHymnQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){const num=parseInt(hymnQuery);if(!isNaN(num))fetchHymnOnline(num)}}} placeholder="Type Hymn No. e.g. 56" style={{flex:1,padding:12,borderRadius:10,border:'2px solid #7c3aed',fontSize:13,fontWeight:700}}/><button onClick={()=>{const num=parseInt(hymnQuery);if(!isNaN(num))fetchHymnOnline(num)}} style={{background:'#7c3aed',color:'#fff',padding:'10px 16px',borderRadius:10,border:0,fontWeight:700}}>{hymnLoading?'...':'Search'}</button></div>
+<div style={{maxHeight:200,overflowY:'auto',marginTop:8,background:'#f9f5ff',borderRadius:10,padding:8,border:'1px solid #ddd'}}><div style={{fontSize:11,fontWeight:900,marginBottom:6}}>SS&S Hymns (Tap to fetch online):</div>{filteredHymns.map(h=>(
+<div key={h.no} onClick={()=>fetchHymnOnline(h.no)} style={{padding:'8px 10px',background:'#fff',border:'1px solid #eee',borderRadius:8,marginTop:4,cursor:'pointer'}}>
 <b style={{fontSize:13}}>{h.no}. {h.title}</b><div style={{fontSize:11,opacity:.7,marginTop:2}}>{h.lyrics.substring(0,60)}...</div>
 </div>
 ))}</div>
-<div style={{marginTop:8,background:'#fffef0',borderRadius:12,padding:12,flex:1,overflowY:'auto',border:'1px solid #ddd'}}>{hymnResult?<div style={{fontSize:14,lineHeight:1.5,fontWeight:600,whiteSpace:'pre-wrap'}}>{hymnResult}</div>:<div style={{opacity:.6,fontSize:12}}>Search by number or title.</div>}</div>
+<div style={{marginTop:8,background:'#fffef0',borderRadius:12,padding:12,flex:1,overflowY:'auto',border:'1px solid #ddd'}}>{hymnLoading?<div style={{opacity:.6,fontSize:12}}>Fetching hymn online...</div>:hymnResult?<div style={{fontSize:14,lineHeight:1.5,fontWeight:600,whiteSpace:'pre-wrap'}}>{hymnResult}</div>:<div style={{opacity:.6,fontSize:12}}>Type 56 and Search — will fetch from online.</div>}</div>
 <button onClick={()=>{if(hymnResult){setVerse(hymnResult);setShowBible(false)}}} disabled={!hymnResult} style={{marginTop:10,background:hymnResult?'#7c3aed':'#ccc',color:'#fff',padding:14,borderRadius:12,fontWeight:900,border:'none'}}>Use This Hymn On Screen</button>
 </>
 )}
@@ -481,11 +498,25 @@ return (
 
 <div style={{display:'flex',gap:6,marginTop:8,alignItems:'center',background:'#fff',border:'1px solid #eee',padding:8,borderRadius:10,flexWrap:'wrap'}}><div style={{display:'flex',alignItems:'center',gap:4}}><span style={{fontSize:10,fontWeight:800}}>Text</span><input type="color" value={textColor} onChange={e=>setTextColor(e.target.value)} style={{width:28,height:28,border:'none',borderRadius:6}}/></div><div style={{display:'flex',alignItems:'center',gap:4}}><span style={{fontSize:10,fontWeight:800}}>Box</span><input type="color" value={boxColor} onChange={e=>setBoxColor(e.target.value)} style={{width:28,height:28,border:'none',borderRadius:6}}/></div><div style={{display:'flex',alignItems:'center',gap:4,flex:1}}><span style={{fontSize:10,fontWeight:800}}>Opac</span><input type="range" min={0} max={1} step={0.05} value={boxOpacity} onChange={e=>setBoxOpacity(parseFloat(e.target.value))} style={{flex:1}}/></div><button onClick={pickLogo} style={{padding:'6px 10px',borderRadius:8,border:'none',background:logoImage?'#16a34a':'#111',color:'#fff',fontWeight:800,fontSize:10}}>{logoImage?'Logo':'Add Logo'}</button><input ref={logoInputRef} type="file" accept="image/*" onChange={onLogoPick} style={{display:'none'}}/><button onClick={()=>setShowText(!showText)} style={{padding:'6px 10px',borderRadius:8,border:'none',background:showText?'#111':'#ddd',color:showText?'#fff':'#000',fontWeight:800,fontSize:10}}>{showText?'Text':'No Text'}</button></div>
 
-<div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{marginTop:10,background:'#000',borderRadius:18,overflow:'hidden',position:'relative',aspectRatio:'9/16',touchAction:'none'}}><video ref={videoRef} muted playsInline autoPlay style={{width:'100%',height:'100%',objectFit:'cover',display:isCam&&bgMode==='face'?'block':'none'}}/>{!isCam&&<div style={{color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',height:420}}>Camera off - {lowData?'480p ON':'720p'}</div>}<canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%'}}/>{isCam&&(<div style={{position:'absolute',top:bgMode==='split'?'auto':'12',bottom:bgMode==='split'?12:'auto',right:12,display:'flex',gap:8,zIndex:10}}><button onClick={toggleCamera} style={{background:'rgba(0,0,0,0.8)',color:'#fff',border:'1px solid rgba(255,255,255,0.3)',borderRadius:20,padding:'8px 12px',fontWeight:800}}>Flip</button><button onClick={toggleTorch} style={{background:torch?'#fbbf24':'rgba(0,0,0,0.8)',color:torch?'#000':'#fff',border:'1px solid rgba(255,255,255,0.3)',borderRadius:20,padding:'8px 12px',fontWeight:800}}>{torch?'On':'Torch'}</button></div>)}</div>
+<div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{marginTop:10,background:'#000',borderRadius:18,overflow:'hidden',position:'relative',aspectRatio:'9/16',touchAction:'none'}}><video ref={videoRef} muted playsInline autoPlay style={{width:'100%',height:'100%',objectFit:'cover',display:isCam&&bgMode==='face'?'block':'none'}}/>{!isCam&&<div style={{color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',height:420}}>Camera off - {lowData?'480p ON':'720p'}</div>}<canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%'}}/>
+{isCam&&(
+<div style={{
+  position:'absolute',
+  top: bgMode==='split'?'auto':'12px',
+  bottom: bgMode==='split'?'50px':'auto',
+  right:12,
+  display:'flex',
+  gap:8,
+  zIndex:50
+}}>
+  <button onClick={toggleCamera} style={{background:'rgba(0,0,0,0.85)',color:'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>Flip</button>
+  <button onClick={toggleTorch} style={{background:torch?'#fbbf24':'rgba(0,0,0,0.85)',color:torch?'#000':'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>{torch?'Flash On':'Flash'}</button>
+</div>
+)}
+</div>
 
 <div style={{display:'flex',gap:8,marginTop:12}}>{!isCam?<button onClick={()=>startCamera()} style={{flex:1,background:'#111',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Start Camera {lowData?'(480p)':''}</button>:<><button onClick={toggleCamera} style={{flex:1,background:'#7c3aed',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Switch Camera</button><button onClick={stopCamera} style={{flex:1,background:'#444',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Stop + Outro</button></>}</div>
 
-{/* MP4 EXCLUSIVE */}
 <div style={{display:'flex',gap:6,marginTop:10}}>
 {!isRecording?<button onClick={startRecording} disabled={!isCam} style={{flex:1,background:isCam?'#a21caf':'#ccc',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Record MP4</button>
 :<button onClick={stopRecording} style={{flex:1,background:'#111',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Stop Recording ({formatTime(liveSeconds)})</button>}
