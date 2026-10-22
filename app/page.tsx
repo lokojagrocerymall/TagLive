@@ -102,10 +102,7 @@ const [showStudio,setShowStudio]=useState(false)
 const [showTickerStudio,setShowTickerStudio]=useState(false)
 const [showAdmin,setShowAdmin]=useState(false)
 const [showSettings,setShowSettings]=useState(false)
-const [playing,setPlaying]=useState<any>(null)
 const [broadcastPlaying,setBroadcastPlaying]=useState<any>(null)
-const [animTitle,setAnimTitle]=useState('KPAKO NYANKPA')
-const [animSub,setAnimSub]=useState('Welcome to Live Service')
 const [tickerText,setTickerText]=useState('📢 ANNOUNCEMENT: Sunday Service 9AM | Midweek Service Wednesday 6PM | Invite Someone!')
 const [tickerOn,setTickerOn]=useState(false)
 const [tickerSize,setTickerSize]=useState(26)
@@ -127,7 +124,6 @@ const [hymnLoading,setHymnLoading]=useState(false)
 const tickerOffsetRef=useRef(720)
 const introFileRef=useRef<HTMLInputElement>(null)
 const outroFileRef=useRef<HTMLInputElement>(null)
-const introVideoRef=useRef<HTMLVideoElement>(null)
 const broadcastVideoRef=useRef<HTMLVideoElement>(null)
 const broadcastImageRef=useRef<HTMLImageElement|null>(null)
 const lastTouch=useRef({ dist: 0, angle: 0, x:0, y:0, scale:1, rot:0, selScale:1, selRot:0 })
@@ -142,6 +138,7 @@ const logoImageRef=useRef<HTMLImageElement|null>(null)
 const recorderRef=useRef<MediaRecorder|null>(null)
 const chunksRef=useRef<Blob[]>([])
 const churchLogoInputRef=useRef<HTMLInputElement>(null)
+const audioCtxRef=useRef<AudioContext|null>(null)
 const formatTime=(sec:number)=>{ const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60; return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}` }
 const startTimer=()=>{ if(timerRef.current) clearInterval(timerRef.current); setLiveSeconds(0); timerRef.current=setInterval(()=>setLiveSeconds(p=>p+1),1000) }
 const stopTimer=()=>{ if(timerRef.current) clearInterval(timerRef.current); timerRef.current=null; setLiveSeconds(0) }
@@ -156,8 +153,8 @@ document.body.appendChild(s)
 try{
 const sv=localStorage.getItem('taglive_saved'); if(sv) setSaved(JSON.parse(sv))
 const yk=localStorage.getItem('taglive_ytkey'); if(yk) setYtKey(yk)
-const si=localStorage.getItem('taglive_intros'); if(si) setIntros(JSON.parse(si))
-const so=localStorage.getItem('taglive_outros'); if(so) setOutros(JSON.parse(so))
+const si=localStorage.getItem('taglive_intros'); if(si) setIntros(JSON.parse(si).filter((x:any)=>x.type!=='animated'))
+const so=localStorage.getItem('taglive_outros'); if(so) setOutros(JSON.parse(so).filter((x:any)=>x.type!=='animated'))
 const ai=localStorage.getItem('taglive_active_intro'); if(ai) setActiveIntroId(ai)
 const ao=localStorage.getItem('taglive_active_outro'); if(ao) setActiveOutroId(ao)
 const tk=localStorage.getItem('taglive_ticker_text'); if(tk) setTickerText(tk)
@@ -199,8 +196,8 @@ setStats({ live: live||0, daily: daily||0, weekly: weekly||0, monthly: monthly||
 trackDevice(); const interval=setInterval(trackDevice,60000); return()=>clearInterval(interval)
 },[isAdmin])
 
-const saveIntros=(arr:any[])=>{ setIntros(arr); localStorage.setItem('taglive_intros', JSON.stringify(arr)) }
-const saveOutros=(arr:any[])=>{ setOutros(arr); localStorage.setItem('taglive_outros', JSON.stringify(arr)) }
+const saveIntros=(arr:any[])=>{ const filtered=arr.filter((x:any)=>x.type!=='animated'); setIntros(filtered); localStorage.setItem('taglive_intros', JSON.stringify(filtered)) }
+const saveOutros=(arr:any[])=>{ const filtered=arr.filter((x:any)=>x.type!=='animated'); setOutros(filtered); localStorage.setItem('taglive_outros', JSON.stringify(filtered)) }
 const fileToBase64=(file:File)=>new Promise<string>((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result as string); r.onerror=rej; r.readAsDataURL(file) })
 const getVideoDuration=(base64:string)=>new Promise<number>((res)=>{ const v=document.createElement('video'); v.src=base64; v.onloadedmetadata=()=>res(v.duration); setTimeout(()=>res(10),2000) })
 const handleIntroFile=async(e:any)=>{
@@ -209,7 +206,7 @@ const base64=await fileToBase64(file)
 let dur=5
 if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }
 const item={ id:`id_${Date.now()}`, type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }
-const n=[...intros,item]; saveIntros(n); setActiveIntroId(item.id); localStorage.setItem('taglive_active_intro', item.id); e.target.value=''; alert(`Intro Saved & Set as Active! Duration: ${Math.round(dur)}s - Will play INSIDE broadcast when you tap Record`)
+const n=[...intros,item]; saveIntros(n); setActiveIntroId(item.id); localStorage.setItem('taglive_active_intro', item.id); e.target.value=''; alert(`Intro Saved & Active! ${Math.round(dur)}s with sound inside broadcast`)
 }
 const handleOutroFile=async(e:any)=>{
 const file=e.target.files?.[0]; if(!file) return
@@ -217,28 +214,7 @@ const base64=await fileToBase64(file)
 let dur=5
 if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }
 const item={ id:`id_${Date.now()}`, type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }
-const n=[...outros,item]; saveOutros(n); setActiveOutroId(item.id); localStorage.setItem('taglive_active_outro', item.id); e.target.value=''; alert(`Outro Saved & Set as Active! Duration: ${Math.round(dur)}s - Will play INSIDE broadcast when you tap Stop`)
-}
-const addAnimatedIntro=(isOutro=false)=>{
-if(!animTitle.trim()) return alert('Add title')
-const item={ id:`id_${Date.now()}`, type:'animated', data:null, duration:5, title:animTitle, subtitle:animSub }
-if(isOutro){ const n=[...outros,item]; saveOutros(n); setActiveOutroId(item.id); localStorage.setItem('taglive_active_outro', item.id) } else { const n=[...intros,item]; saveIntros(n); setActiveIntroId(item.id); localStorage.setItem('taglive_active_intro', item.id) }
-alert('Animated Saved & Set as Active Inside Broadcast! (5s)')
-}
-const playItem=(item:any,onEnd?:()=>void)=>{
-setPlaying(item)
-if(item.type==='video'){ setTimeout(()=>{ introVideoRef.current?.play() },300) }
-else { setTimeout(()=>{ setPlaying(null); if(onEnd) onEnd() }, item.duration*1000) }
-}
-const playActiveIntroThen=(cb:()=>void)=>{
-const active=intros.find(i=>i.id===activeIntroId)
-if(!active){ cb(); return }
-playItem(active,cb)
-}
-const playActiveOutro=()=>{
-const active=outros.find(o=>o.id===activeOutroId)
-if(!active) return
-playItem(active)
+const n=[...outros,item]; saveOutros(n); setActiveOutroId(item.id); localStorage.setItem('taglive_active_outro', item.id); e.target.value=''; alert(`Outro Saved & Active! ${Math.round(dur)}s with sound inside broadcast`)
 }
 const startCamera=async(newFacing=facing)=>{
 try{
@@ -257,7 +233,6 @@ if(isRecording) stopRecording();
 streamRef.current?.getTracks().forEach(t=>t.stop());
 if(videoRef.current) videoRef.current.srcObject=null;
 setIsCam(false); setIsLive(false); setTorch(false); setYtLive(false); stopTimer()
-if(activeOutroId) playActiveOutro()
 }
 const toggleCamera=async()=>{ await startCamera(facing==='user'?'environment':'user') }
 const toggleTorch=async()=>{ try{ const track:any=trackRef.current; if(!track?.getCapabilities?.()?.torch) return alert('Torch not supported'); await track.applyConstraints({advanced:[{torch:!torch}] as any}); setTorch(!torch) }catch(e:any){ alert(e.message) } }
@@ -271,21 +246,21 @@ const active=intros.find(i=>i.id===activeIntroId)
 if(active){
 setBroadcastPlaying(active)
 if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img } }
-if(active.type==='video'&&broadcastVideoRef.current){ broadcastVideoRef.current.src=active.data; broadcastVideoRef.current.play().catch(()=>{}) }
+if(active.type==='video'&&broadcastVideoRef.current){ broadcastVideoRef.current.src=active.data; broadcastVideoRef.current.muted=false; broadcastVideoRef.current.volume=1; broadcastVideoRef.current.play().catch(()=>{}) }
 setTimeout(async()=>{
 setBroadcastPlaying(null); broadcastImageRef.current=null;
 setSelectedPage(page)
 try{
 const res=await fetch(`https://graph.facebook.com/v19.0/${page.id}/live_videos`,{ method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({ access_token: page.access_token, title: verse.substring(0,60), description: 'TagLive - '+verse, status: 'UNPUBLISHED' }) })
-const data=await res.json(); if(data.error) throw new Error(JSON.stringify(data.error)); setFbStreamUrl(data.stream_url); setLiveId(data.id); setIsLive(true); startTimer(); alert('FB LIVE WITH INTRO INSIDE BROADCAST!')
-}catch(e:any){ alert('Auto Live needs approval: '+e.message); setIsLive(true); startTimer() }
+const data=await res.json(); if(data.error) throw new Error(JSON.stringify(data.error)); setFbStreamUrl(data.stream_url); setLiveId(data.id); setIsLive(true); startTimer()
+}catch(e:any){ setIsLive(true); startTimer() }
 }, (active.duration||5)*1000)
 } else {
 setSelectedPage(page)
 try{
 const res=await fetch(`https://graph.facebook.com/v19.0/${page.id}/live_videos`,{ method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({ access_token: page.access_token, title: verse.substring(0,60), description: 'TagLive - '+verse, status: 'UNPUBLISHED' }) })
-const data=await res.json(); if(data.error) throw new Error(JSON.stringify(data.error)); setFbStreamUrl(data.stream_url); setLiveId(data.id); setIsLive(true); startTimer(); alert('FB LIVE!')
-}catch(e:any){ alert('Auto Live needs approval: '+e.message); setIsLive(true); startTimer() }
+const data=await res.json(); if(data.error) throw new Error(JSON.stringify(data.error)); setFbStreamUrl(data.stream_url); setLiveId(data.id); setIsLive(true); startTimer()
+}catch(e:any){ setIsLive(true); startTimer() }
 }
 }
 const openBibleApp=()=>{ setShowBible(true) }
@@ -318,7 +293,6 @@ else { setBibleResult('Not found offline. Try John 3:16, Romans 1:20, Psalm 23.'
 setBibleLoading(false)
 }
 const useBibleVerse=()=>{ if(bibleResult){ setVerse(bibleResult); setShowBible(false) } }
-
 const getFilteredBooks=(q:string)=>{ if(!q||q.length<1) return []; const lower=q.toLowerCase(); return BIBLE_BOOKS.filter(b=>b.name.toLowerCase().includes(lower)||lower.includes(b.name.toLowerCase().split(' ').pop()||'')).slice(0,8) }
 const detectBookFromQuery=(q:string)=>{ const lower=q.toLowerCase(); return BIBLE_BOOKS.find(b=>lower.startsWith(b.name.toLowerCase()))||BIBLE_BOOKS.find(b=>lower.includes(b.name.toLowerCase())) }
 const parseChapterVerse=(q:string,bookName:string)=>{ const rest=q.substring(bookName.length).trim(); const match=rest.match(/(\d+)(?:[:\s]+(\d+))?/); if(!match) return { ch: null, vs: null }; return { ch: parseInt(match[1]), vs: match[2]?parseInt(match[2]):null } }
@@ -327,7 +301,6 @@ const detectedBook=detectBookFromQuery(bibleQuery)
 const parsed=detectedBook?parseChapterVerse(bibleQuery,detectedBook.name):{ ch: null, vs: null }
 const getFilteredHymns=(q:string)=>{ if(!q) return BUILD_348().slice(0,6); const lower=q.toLowerCase(); const num=parseInt(q); if(!isNaN(num)){ const byNo=BUILD_348().filter(h=>h.no===num); if(byNo.length) return byNo } return BUILD_348().filter(h=>h.title.toLowerCase().includes(lower)).slice(0,8) }
 const filteredHymns=getFilteredHymns(hymnQuery)
-
 const fetchHymnOnline = async (no: number) => {
   setHymnLoading(true)
   try{
@@ -384,7 +357,6 @@ const fetchHymnOnline = async (no: number) => {
   }
   setHymnLoading(false)
 }
-
 const pasteClipboard=async()=>{ try{ const t=await navigator.clipboard.readText(); if(t) setVerse(t); else alert('Clipboard empty') }catch{ alert('Allow clipboard') } }
 const saveVerse=()=>{ if(!verse.trim()) return; const ns=[verse,...saved.filter(s=>s!==verse)].slice(0,20); setSaved(ns); localStorage.setItem('taglive_saved', JSON.stringify(ns)); alert('Saved!') }
 const deleteSaved=(idx:number)=>{ const ns=saved.filter((_,i)=>i!==idx); setSaved(ns); localStorage.setItem('taglive_saved', JSON.stringify(ns)); }
@@ -417,8 +389,34 @@ const removeChurchLogo=()=>{
 const startRecording=async()=>{
   const canvas=canvasRef.current; if(!canvas) return alert('Start camera first')
   const canvasStream=(canvas as any).captureStream(30) as MediaStream
-  const audioTracks=streamRef.current?.getAudioTracks()||[]
-  audioTracks.forEach(t=> canvasStream.addTrack(t))
+  // Merge mic + video audio for sound inside broadcast
+  const micTracks=streamRef.current?.getAudioTracks()||[]
+  micTracks.forEach(t=> canvasStream.addTrack(t))
+  
+  const active=intros.find(i=>i.id===activeIntroId)
+  if(active){
+    setBroadcastPlaying(active)
+    if(active.type==='image'){
+      const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }
+    } else if(active.type==='video'&&broadcastVideoRef.current){
+      broadcastVideoRef.current.src=active.data
+      broadcastVideoRef.current.muted=false
+      broadcastVideoRef.current.volume=1
+      broadcastVideoRef.current.crossOrigin="anonymous"
+      try{
+        await broadcastVideoRef.current.play()
+        // Capture video audio track into recording
+        const vStream=(broadcastVideoRef.current as any).captureStream?.() || (broadcastVideoRef.current as any).mozCaptureStream?.()
+        if(vStream){
+          vStream.getAudioTracks().forEach((at:MediaStreamTrack)=>{
+            try{ canvasStream.addTrack(at) }catch{}
+          })
+        }
+      }catch(e){ broadcastVideoRef.current.play().catch(()=>{}) }
+    }
+    setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null }, (active.duration||5)*1000)
+  }
+
   chunksRef.current=[]
   let mime='video/mp4'
   if(!MediaRecorder.isTypeSupported('video/mp4')){
@@ -433,20 +431,9 @@ const startRecording=async()=>{
     setRecordedUrl(url) 
   }
   rec.start(100); recorderRef.current=rec; setIsRecording(true); startTimer()
-  // FIX: INTRO INSIDE BROADCAST - STARTS IMMEDIATELY WHEN YOU TAP RECORD
-  const active=intros.find(i=>i.id===activeIntroId)
-  if(active){
-    setBroadcastPlaying(active)
-    if(active.type==='image'){
-      const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }
-    } else if(active.type==='video'&&broadcastVideoRef.current){
-      broadcastVideoRef.current.src=active.data; broadcastVideoRef.current.play().catch(()=>{})
-    }
-    setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null }, (active.duration||5)*1000)
-  }
 }
 const stopRecordingFinal=()=>{
-  recorderRef.current?.stop(); setIsRecording(false); setBroadcastPlaying(null); broadcastImageRef.current=null; if(!isLive&&!ytLive) stopTimer()
+  recorderRef.current?.stop(); setIsRecording(false); setBroadcastPlaying(null); broadcastImageRef.current=null; if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.src='' }catch{} } if(!isLive&&!ytLive) stopTimer()
 }
 const stopRecording=async()=>{
   const active=outros.find(o=>o.id===activeOutroId)
@@ -454,10 +441,32 @@ const stopRecording=async()=>{
     setBroadcastPlaying(active)
     if(active.type==='image'){
       const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }
+      setTimeout(()=>{ stopRecordingFinal() }, (active.duration||5)*1000)
     } else if(active.type==='video'&&broadcastVideoRef.current){
-      broadcastVideoRef.current.src=active.data; broadcastVideoRef.current.play().catch(()=>{})
+      broadcastVideoRef.current.src=active.data
+      broadcastVideoRef.current.muted=false
+      broadcastVideoRef.current.volume=1
+      broadcastVideoRef.current.crossOrigin="anonymous"
+      try{
+        await broadcastVideoRef.current.play()
+        const vStream=(broadcastVideoRef.current as any).captureStream?.() || (broadcastVideoRef.current as any).mozCaptureStream?.()
+        if(vStream){
+          vStream.getAudioTracks().forEach((at:MediaStreamTrack)=>{
+            try{ 
+              const cStream=(canvasRef.current as any).captureStream?.()
+              // add to existing recorder stream
+              if(recorderRef.current && recorderRef.current.stream){
+                (recorderRef.current.stream as any).addTrack?.(at)
+              }
+            }catch{}
+          })
+        }
+      }catch{}
+      broadcastVideoRef.current.onended=()=>{ stopRecordingFinal() }
+      setTimeout(()=>{ stopRecordingFinal() }, (active.duration||7)*1000)
+    } else {
+      setTimeout(()=>{ stopRecordingFinal() }, (active.duration||5)*1000)
     }
-    setTimeout(()=>{ stopRecordingFinal() }, (active.duration||5)*1000)
   } else {
     stopRecordingFinal()
   }
@@ -494,7 +503,6 @@ if(c&&v&&isCam&&v.readyState>=2){
 const ctx=c.getContext('2d')
 if(ctx){
 c.width=720; c.height=1280
-// === BROADCAST INTRO/OUTRO HAS HIGHEST PRIORITY - INSIDE CANVAS ===
 if(broadcastPlaying){
 ctx.fillStyle='#000'; ctx.fillRect(0,0,c.width,c.height)
 if(broadcastPlaying.type==='image'&&broadcastImageRef.current){
@@ -513,10 +521,6 @@ if(rVideo>rCanvas){ sh=vh; sw=vh*rCanvas; sx=(vw-sw)/2; sy=0 }
 else { sw=vw; sh=vw/rCanvas; sx=0; sy=(vh-sh)/2 }
 ctx.drawImage(broadcastVideoRef.current,sx,sy,sw,sh,0,0,c.width,c.height)
 }
-} else if(broadcastPlaying.type==='animated'){
-const g=ctx.createLinearGradient(0,0,c.width,c.height); g.addColorStop(0,'#1e1b4b'); g.addColorStop(1,'#7c3aed'); ctx.fillStyle=g; ctx.fillRect(0,0,c.width,c.height)
-ctx.fillStyle='#a78bfa'; ctx.font='900 22px sans-serif'; ctx.textAlign='center'; ctx.fillText((broadcastPlaying.subtitle||'WELCOME').toUpperCase(),c.width/2,c.height/2-40)
-ctx.fillStyle='#fff'; ctx.font='900 42px sans-serif'; ctx.fillText(broadcastPlaying.title||'',c.width/2,c.height/2+20)
 }
 if(isLive||ytLive||isRecording){
 const timeStr=formatTime(liveSeconds)
@@ -595,7 +599,6 @@ return()=>cancelAnimationFrame(a)
 
 return (
 <div style={{padding:16,maxWidth:480,margin:'0 auto'}}>
-{playing&&(<div style={{position:'fixed',top:0,left:0,right:0,bottom:0,zIndex:9999,background:'#000',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',padding:12}}><div style={{width:'100%',maxWidth:'100%',maxHeight:'85vh',display:'flex',alignItems:'center',justifyContent:'center',borderRadius:16}}>{playing.type==='image'&&<img src={playing.data} style={{width:'100%',maxHeight:'80vh',objectFit:'contain',borderRadius:16}}/>}{playing.type==='video'&&<video ref={introVideoRef} src={playing.data} autoPlay playsInline style={{width:'100%',maxHeight:'80vh',objectFit:'contain',borderRadius:16}} onEnded={()=>setPlaying(null)}/>}</div>{playing.type==='animated'&&(<div style={{textAlign:'center',padding:20}}><div style={{fontSize:14,letterSpacing:4,color:'#7c3aed',fontWeight:900,marginBottom:20}}>{playing.subtitle||'WELCOME'}</div><div style={{fontSize:28,fontWeight:900,color:'#fff'}}>{playing.title}</div></div>)}<button onClick={()=>setPlaying(null)} style={{position:'absolute',top:20,right:20,background:'rgba(255,255,255,0.2)',color:'#fff',border:'none',borderRadius:20,padding:'8px 14px',fontWeight:800}}>✕ Skip</button></div>)}
 {showBible&&(
 <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,zIndex:9998,background:'rgba(0,0,0,0.92)',padding:12,display:'flex',flexDirection:'column'}}>
 <div style={{background:'#fff',borderRadius:16,padding:12,flex:1,display:'flex',flexDirection:'column',maxWidth:480,margin:'0 auto',width:'100%',overflow:'hidden'}}>
@@ -639,10 +642,11 @@ return (
 <div style={{marginTop:12,display:'flex',flexDirection:'column',gap:12}}>
 <div style={{border:'2px solid #FF0000',borderRadius:12,padding:10,background:lowData?'#fef2f2':'#fff',display:'flex',justifyContent:'space-between',alignItems:'center'}}><div><b style={{fontSize:12}}>Data Saver Mode</b><div style={{fontSize:10,opacity:.7}}>{lowData?'480p - Uses less data':'720p - High Quality'}</div></div><button onClick={()=>{const v=!lowData;setLowData(v);localStorage.setItem('taglive_lowdata',v.toString());if(isCam)setTimeout(()=>startCamera(),300)}} style={{padding:'8px 14px',borderRadius:20,border:'none',background:lowData?'#16a34a':'#111',color:'#fff',fontWeight:900,fontSize:11}}>{lowData?'480p ON':'720p'}</button></div>
 <div style={{border:'2px solid #7c3aed',borderRadius:16,padding:12,background:'#f9f5ff'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:14}}>Intro / Outro Studio</b><button onClick={()=>setShowStudio(!showStudio)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:'#111',color:'#fff',fontWeight:800,fontSize:11}}>{showStudio?'Hide':'Open'}</button></div>
-{showStudio&&(<div style={{marginTop:10}}><div style={{background:'#fff',padding:8,borderRadius:10,border:'1px solid #ddd'}}><input value={animTitle} onChange={e=>setAnimTitle(e.target.value)} placeholder="Title" style={{width:'100%',padding:8,borderRadius:8,border:'1px solid #ddd',fontSize:12,marginBottom:6}}/><input value={animSub} onChange={e=>setAnimSub(e.target.value)} placeholder="Subtitle" style={{width:'100%',padding:8,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/></div><div style={{display:'flex',gap:6,marginTop:8}}><button onClick={()=>addAnimatedIntro(false)} style={{flex:1,background:'#7c3aed',color:'#fff',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:11}}>Save Animated Intro</button><button onClick={()=>addAnimatedIntro(true)} style={{flex:1,background:'#111',color:'#fff',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:11}}>Save Animated Outro</button></div><div style={{display:'flex',gap:6,marginTop:8}}><label style={{flex:1,background:'#7c3aed',color:'#fff',padding:10,borderRadius:10,fontWeight:800,fontSize:11,textAlign:'center',cursor:'pointer'}}>Upload Intro<input ref={introFileRef} type="file" accept="image/*,video/*" onChange={handleIntroFile} style={{display:'none'}}/></label><label style={{flex:1,background:'#111',color:'#fff',padding:10,borderRadius:10,fontWeight:800,fontSize:11,textAlign:'center',cursor:'pointer'}}>Upload Outro<input ref={outroFileRef} type="file" accept="image/*,video/*" onChange={handleOutroFile} style={{display:'none'}}/></label></div>
-<div style={{marginTop:10}}>
-{intros.length>0&&<div style={{marginBottom:8}}><b style={{fontSize:11}}>Active Intro (plays INSIDE on Record):</b><div style={{display:'flex',flexDirection:'column',gap:4,marginTop:4}}>{intros.map((it:any)=><div key={it.id} style={{display:'flex',gap:4}}><button onClick={()=>{setActiveIntroId(it.id);localStorage.setItem('taglive_active_intro',it.id)}} style={{flex:1,padding:6,borderRadius:8,border:'none',background:activeIntroId===it.id?'#16a34a':'#eee',color:activeIntroId===it.id?'#fff':'#000',fontWeight:700,fontSize:10,textAlign:'left'}}>{activeIntroId===it.id?'✓ INSIDE BROADCAST - ':''}{it.title} ({Math.round(it.duration)}s)</button><button onClick={()=>{const n=intros.filter((x:any)=>x.id!==it.id);saveIntros(n); if(activeIntroId===it.id){setActiveIntroId(null);localStorage.removeItem('taglive_active_intro')}}} style={{padding:6,borderRadius:8,border:'none',background:'#ff0000',color:'#fff',fontSize:10}}>X</button></div>)}</div></div>}
-{outros.length>0&&<div><b style={{fontSize:11}}>Active Outro (plays INSIDE on Stop):</b><div style={{display:'flex',flexDirection:'column',gap:4,marginTop:4}}>{outros.map((ot:any)=><div key={ot.id} style={{display:'flex',gap:4}}><button onClick={()=>{setActiveOutroId(ot.id);localStorage.setItem('taglive_active_outro',ot.id)}} style={{flex:1,padding:6,borderRadius:8,border:'none',background:activeOutroId===ot.id?'#16a34a':'#eee',color:activeOutroId===ot.id?'#fff':'#000',fontWeight:700,fontSize:10,textAlign:'left'}}>{activeOutroId===ot.id?'✓ INSIDE BROADCAST - ':''}{ot.title} ({Math.round(ot.duration)}s)</button><button onClick={()=>{const n=outros.filter((x:any)=>x.id!==ot.id);saveOutros(n); if(activeOutroId===ot.id){setActiveOutroId(null);localStorage.removeItem('taglive_active_outro')}}} style={{padding:6,borderRadius:8,border:'none',background:'#ff0000',color:'#fff',fontSize:10}}>X</button></div>)}</div></div>}
+{showStudio&&(<div style={{marginTop:10}}>
+<div style={{display:'flex',gap:6,marginTop:8}}><label style={{flex:1,background:'#7c3aed',color:'#fff',padding:12,borderRadius:10,fontWeight:800,fontSize:12,textAlign:'center',cursor:'pointer'}}>Upload Intro Video<input ref={introFileRef} type="file" accept="video/*,image/*" onChange={handleIntroFile} style={{display:'none'}}/></label><label style={{flex:1,background:'#111',color:'#fff',padding:12,borderRadius:10,fontWeight:800,fontSize:12,textAlign:'center',cursor:'pointer'}}>Upload Outro Video<input ref={outroFileRef} type="file" accept="video/*,image/*" onChange={handleOutroFile} style={{display:'none'}}/></label></div>
+<div style={{marginTop:12}}>
+{intros.length>0&&<div style={{marginBottom:10}}><b style={{fontSize:12}}>Active Intro:</b><div style={{display:'flex',flexDirection:'column',gap:4,marginTop:6}}>{intros.map((it:any)=><div key={it.id} style={{display:'flex',gap:4}}><button onClick={()=>{setActiveIntroId(it.id);localStorage.setItem('taglive_active_intro',it.id)}} style={{flex:1,padding:8,borderRadius:8,border:'none',background:activeIntroId===it.id?'#16a34a':'#eee',color:activeIntroId===it.id?'#fff':'#000',fontWeight:700,fontSize:11,textAlign:'left'}}>{activeIntroId===it.id?'✓ ':''}{it.title} ({Math.round(it.duration)}s)</button><button onClick={()=>{const n=intros.filter((x:any)=>x.id!==it.id);saveIntros(n); if(activeIntroId===it.id){setActiveIntroId(null);localStorage.removeItem('taglive_active_intro')}}} style={{padding:8,borderRadius:8,border:'none',background:'#ff0000',color:'#fff',fontSize:11}}>X</button></div>)}</div></div>}
+{outros.length>0&&<div><b style={{fontSize:12}}>Active Outro:</b><div style={{display:'flex',flexDirection:'column',gap:4,marginTop:6}}>{outros.map((ot:any)=><div key={ot.id} style={{display:'flex',gap:4}}><button onClick={()=>{setActiveOutroId(ot.id);localStorage.setItem('taglive_active_outro',ot.id)}} style={{flex:1,padding:8,borderRadius:8,border:'none',background:activeOutroId===ot.id?'#16a34a':'#eee',color:activeOutroId===ot.id?'#fff':'#000',fontWeight:700,fontSize:11,textAlign:'left'}}>{activeOutroId===ot.id?'✓ ':''}{ot.title} ({Math.round(ot.duration)}s)</button><button onClick={()=>{const n=outros.filter((x:any)=>x.id!==ot.id);saveOutros(n); if(activeOutroId===ot.id){setActiveOutroId(null);localStorage.removeItem('taglive_active_outro')}}} style={{padding:8,borderRadius:8,border:'none',background:'#ff0000',color:'#fff',fontSize:11}}>X</button></div>)}</div></div>}
 </div>
 </div>)}
 </div>
@@ -651,12 +655,12 @@ return (
 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:13}}>Church Name</b><button onClick={()=>setShowChurchName(!showChurchName)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:showChurchName?'#7c3aed':'#111',color:'#fff',fontWeight:800,fontSize:11}}>{showChurchName?'ON':'OFF'}</button></div>
 <input value={churchName} onChange={e=>{setChurchName(e.target.value);localStorage.setItem('taglive_church_name',e.target.value)}} placeholder="SALEM GANA JA CITY" style={{width:'100%',marginTop:8,padding:10,borderRadius:10,border:'2px solid #7c3aed',fontSize:12,fontWeight:800,boxSizing:'border-box'}}/>
 <div style={{marginTop:10,border:'1px dashed #7c3aed',borderRadius:10,padding:10,background:'#f9f5ff'}}>
-<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:11}}>SAVED LOGO (Inside Church Box)</b>{logoImage&&<button onClick={removeChurchLogo} style={{padding:'4px 8px',borderRadius:6,border:'none',background:'red',color:'#fff',fontWeight:800,fontSize:10}}>Remove</button>}</div>
+<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:11}}>SAVED LOGO</b>{logoImage&&<button onClick={removeChurchLogo} style={{padding:'4px 8px',borderRadius:6,border:'none',background:'red',color:'#fff',fontWeight:800,fontSize:10}}>Remove</button>}</div>
 <div style={{display:'flex',gap:8,alignItems:'center',marginTop:8}}>
 {logoImage&&<img src={logoImage} style={{width:50,height:50,objectFit:'contain',borderRadius:8,border:'1px solid #ddd',background:'#fff'}}/>}
 <div style={{flex:1}}>
 <input ref={churchLogoInputRef} type="file" accept="image/*" onChange={handleChurchLogoPick} style={{width:'100%',fontSize:11}}/>
-<div style={{fontSize:9,opacity:0.7,marginTop:2}}>{logoImage?'Logo saved - tap to replace':'No logo saved - choose image (saved to local storage)'}</div>
+<div style={{fontSize:9,opacity:0.7,marginTop:2}}>{logoImage?'Logo saved':'No logo saved'}</div>
 </div>
 </div>
 </div>
@@ -672,7 +676,7 @@ return (
 <div style={{display:'flex',gap:6,marginTop:8,alignItems:'center',background:'#fff',border:'1px solid #eee',padding:8,borderRadius:10,flexWrap:'wrap'}}><div style={{display:'flex',alignItems:'center',gap:4}}><span style={{fontSize:10,fontWeight:800}}>Text</span><input type="color" value={textColor} onChange={e=>setTextColor(e.target.value)} style={{width:28,height:28,border:'none',borderRadius:6}}/></div><div style={{display:'flex',alignItems:'center',gap:4}}><span style={{fontSize:10,fontWeight:800}}>Box</span><input type="color" value={boxColor} onChange={e=>setBoxColor(e.target.value)} style={{width:28,height:28,border:'none',borderRadius:6}}/></div><div style={{display:'flex',alignItems:'center',gap:4,flex:1}}><span style={{fontSize:10,fontWeight:800}}>Opac</span><input type="range" min={0} max={1} step={0.05} value={boxOpacity} onChange={e=>setBoxOpacity(parseFloat(e.target.value))} style={{flex:1}}/></div><button onClick={pickLogo} style={{padding:'6px 10px',borderRadius:8,border:'none',background:logoImage?'#16a34a':'#111',color:'#fff',fontWeight:800,fontSize:10}}>{logoImage?'Logo':'Add Logo'}</button><input ref={logoInputRef} type="file" accept="image/*" onChange={onLogoPick} style={{display:'none'}}/><button onClick={()=>setShowText(!showText)} style={{padding:'6px 10px',borderRadius:8,border:'none',background:showText?'#111':'#ddd',color:showText?'#fff':'#000',fontWeight:800,fontSize:10}}>{showText?'Text':'No Text'}</button></div>
 
 <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{marginTop:10,background:'#000',borderRadius:18,overflow:'hidden',position:'relative',aspectRatio:'9/16',touchAction:'none'}}><video ref={videoRef} muted playsInline autoPlay style={{width:'100%',height:'100%',objectFit:'cover',display:isCam&&bgMode==='face'?'block':'none'}}/>{!isCam&&<div style={{color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',height:420}}>Camera off - {lowData?'480p ON':'720p'}</div>}<canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%'}}/>
-<video ref={broadcastVideoRef} muted playsInline style={{display:'none'}}/>
+<video ref={broadcastVideoRef} muted={false} playsInline crossOrigin="anonymous" style={{display:'none'}}/>
 {isCam&&(
 <div style={{
   position:'absolute',
@@ -687,14 +691,14 @@ return (
   <button onClick={toggleTorch} style={{background:torch?'#fbbf24':'rgba(0,0,0,0.85)',color:torch?'#000':'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>{torch?'Flash On':'Flash'}</button>
 </div>
 )}
-{broadcastPlaying&&<div style={{position:'absolute',top:12,left:12,background:'#7c3aed',color:'#fff',padding:'6px 10px',borderRadius:20,fontWeight:900,fontSize:11,zIndex:60}}>▶️ {broadcastPlaying.title} - INSIDE BROADCAST</div>}
+{broadcastPlaying&&<div style={{position:'absolute',top:12,left:12,background:'#7c3aed',color:'#fff',padding:'6px 10px',borderRadius:20,fontWeight:900,fontSize:11,zIndex:60}}>▶️ {broadcastPlaying.title} - INSIDE</div>}
 </div>
 
-<div style={{display:'flex',gap:8,marginTop:12}}>{!isCam?<button onClick={()=>startCamera()} style={{flex:1,background:'#111',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Start Camera {lowData?'(480p)':''}</button>:<><button onClick={toggleCamera} style={{flex:1,background:'#7c3aed',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Switch Camera</button><button onClick={stopCamera} style={{flex:1,background:'#444',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Stop + Outro</button></>}</div>
+<div style={{display:'flex',gap:8,marginTop:12}}>{!isCam?<button onClick={()=>startCamera()} style={{flex:1,background:'#111',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Start Camera {lowData?'(480p)':''}</button>:<><button onClick={toggleCamera} style={{flex:1,background:'#7c3aed',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Switch Camera</button><button onClick={stopCamera} style={{flex:1,background:'#444',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Stop</button></>}</div>
 
 <div style={{display:'flex',gap:6,marginTop:10}}>
-{!isRecording?<button onClick={startRecording} disabled={!isCam} style={{flex:1,background:isCam?'#a21caf':'#ccc',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Record MP4 {activeIntroId?'+ Intro INSIDE':''}</button>
-:<button onClick={stopRecording} style={{flex:1,background:'#111',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Stop Recording {activeOutroId?'+ Outro INSIDE':''} ({formatTime(liveSeconds)})</button>}
+{!isRecording?<button onClick={startRecording} disabled={!isCam} style={{flex:1,background:isCam?'#a21caf':'#ccc',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Record MP4 {activeIntroId?'+ Intro':''}</button>
+:<button onClick={stopRecording} style={{flex:1,background:'#111',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Stop + Outro ({formatTime(liveSeconds)})</button>}
 {recordedUrl&&<a href={recordedUrl} download={`taglive-${Date.now()}.mp4`} style={{flex:1,background:'#16a34a',color:'#fff',padding:12,borderRadius:10,fontWeight:800,textAlign:'center',textDecoration:'none',fontSize:12}}>Download MP4</a>}
 </div>
 {recordedUrl&&<video src={recordedUrl} controls style={{width:'100%',marginTop:8,borderRadius:12}}/>}
@@ -703,7 +707,7 @@ return (
 <textarea value={verse} onChange={e=>setVerse(e.target.value)} style={{width:'100%',height:90,marginTop:10,padding:12,borderRadius:12,border:'1px solid #ddd'}} placeholder={"Ministering:\nNAME OF PRESENTER"}/>
 {saved.length>0&&<div style={{marginTop:8,border:'1px solid #eee',borderRadius:12,padding:8,background:'#fff'}}>
 <details open>
-<summary style={{fontSize:12,fontWeight:900,cursor:'pointer',padding:4}}>📁 Saved Folder ({saved.length}) - Tap to open/close</summary>
+<summary style={{fontSize:12,fontWeight:900,cursor:'pointer',padding:4}}>📁 Saved Folder ({saved.length})</summary>
 <div style={{marginTop:8,display:'flex',flexDirection:'column',gap:6}}>
 {saved.map((s,i)=>
 <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'#f3f0ff',border:'1px solid #e5e7eb',padding:'8px 10px',borderRadius:20}}>
@@ -714,9 +718,9 @@ return (
 </details>
 </div>}
 
-<div style={{marginTop:14,border:'2px solid #111',borderRadius:14,padding:12}}><b>Connect Facebook - Intro plays first!</b><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={loginFacebook} style={{flex:1,background:fbUser?'#16a34a':'#1877F2',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{fbUser?`✓ ${fbUser.name}`:'Login Facebook'}</button><button onClick={()=>loadPages()} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Load My Pages</button></div>{pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6,padding:10,background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff',color:selectedPage?.id===p.id?'#fff':'#000',borderRadius:8,fontSize:13,fontWeight:700,cursor:'pointer'}}>{p.name} {selectedPage?.id===p.id?`LIVE ${formatTime(liveSeconds)}`:'(Go Live with Intro Inside)'}</div>)} {fbStreamUrl&&<div style={{marginTop:10,padding:10,background:'#dcfce7',borderRadius:8,fontSize:11,wordBreak:'break-all'}}>FB: {fbStreamUrl.substring(0,70)}...</div>}</div>
+<div style={{marginTop:14,border:'2px solid #111',borderRadius:14,padding:12}}><b>Connect Facebook</b><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={loginFacebook} style={{flex:1,background:fbUser?'#16a34a':'#1877F2',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{fbUser?`✓ ${fbUser.name}`:'Login Facebook'}</button><button onClick={()=>loadPages()} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Load My Pages</button></div>{pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6,padding:10,background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff',color:selectedPage?.id===p.id?'#fff':'#000',borderRadius:8,fontSize:13,fontWeight:700,cursor:'pointer'}}>{p.name} {selectedPage?.id===p.id?`LIVE ${formatTime(liveSeconds)}`:'(Go Live)'}</div>)} {fbStreamUrl&&<div style={{marginTop:10,padding:10,background:'#dcfce7',borderRadius:8,fontSize:11,wordBreak:'break-all'}}>FB: {fbStreamUrl.substring(0,70)}...</div>}</div>
 
-<div style={{marginTop:14,border:'2px solid #ff0000',borderRadius:14,padding:12}}><b>Connect YouTube Live - Intro!</b><input value={ytKey} onChange={e=>{setYtKey(e.target.value);localStorage.setItem('taglive_ytkey',e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={()=>{if(!ytKey)return alert('Paste YouTube key first'); const active=intros.find(i=>i.id===activeIntroId); if(active){setBroadcastPlaying(active); if(active.type==='image'){const img=new Image();img.src=active.data;img.onload=()=>{broadcastImageRef.current=img}} if(active.type==='video'&&broadcastVideoRef.current){broadcastVideoRef.current.src=active.data;broadcastVideoRef.current.play().catch(()=>{})} setTimeout(()=>{setBroadcastPlaying(null);broadcastImageRef.current=null;setYtLive(true);setIsLive(true);startTimer();alert('YouTube LIVE AFTER INTRO INSIDE')},(active.duration||5)*1000)} else {setYtLive(true);setIsLive(true);startTimer();alert('YouTube LIVE')}}} style={{flex:1,background:ytLive?'#16a34a':'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{ytLive?`YouTube LIVE ${formatTime(liveSeconds)}`:'Go Live YouTube + Intro Inside'}</button><button onClick={()=>{setYtLive(false);if(!fbStreamUrl)setIsLive(false);stopTimer(); if(activeOutroId){setBroadcastPlaying(outros.find(o=>o.id===activeOutroId)); setTimeout(()=>{setBroadcastPlaying(null); broadcastImageRef.current=null},5000)}}} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Stop YT + Outro Inside</button></div></div>
+<div style={{marginTop:14,border:'2px solid #ff0000',borderRadius:14,padding:12}}><b>Connect YouTube Live</b><input value={ytKey} onChange={e=>{setYtKey(e.target.value);localStorage.setItem('taglive_ytkey',e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={()=>{if(!ytKey)return alert('Paste YouTube key first'); const active=intros.find(i=>i.id===activeIntroId); if(active){setBroadcastPlaying(active); if(active.type==='image'){const img=new Image();img.src=active.data;img.onload=()=>{broadcastImageRef.current=img}} if(active.type==='video'&&broadcastVideoRef.current){broadcastVideoRef.current.src=active.data;broadcastVideoRef.current.muted=false;broadcastVideoRef.current.play().catch(()=>{})} setTimeout(()=>{setBroadcastPlaying(null);broadcastImageRef.current=null;setYtLive(true);setIsLive(true);startTimer()},(active.duration||5)*1000)} else {setYtLive(true);setIsLive(true);startTimer()}}} style={{flex:1,background:ytLive?'#16a34a':'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{ytLive?`YouTube LIVE ${formatTime(liveSeconds)}`:'Go Live YouTube + Intro'}</button><button onClick={()=>{const active=outros.find(o=>o.id===activeOutroId); if(active){setBroadcastPlaying(active); if(active.type==='video'&&broadcastVideoRef.current){broadcastVideoRef.current.src=active.data;broadcastVideoRef.current.muted=false;broadcastVideoRef.current.play()} setTimeout(()=>{setBroadcastPlaying(null);setYtLive(false);if(!fbStreamUrl)setIsLive(false);stopTimer()},(active.duration||5)*1000)} else {setYtLive(false);if(!fbStreamUrl)setIsLive(false);stopTimer()}}} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Stop YT + Outro</button></div></div>
 
 </div>
 )
