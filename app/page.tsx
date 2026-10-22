@@ -138,6 +138,7 @@ const bgImageRef=useRef<HTMLImageElement|null>(null)
 const logoImageRef=useRef<HTMLImageElement|null>(null)
 const recorderRef=useRef<MediaRecorder|null>(null)
 const chunksRef=useRef<Blob[]>([])
+const churchLogoInputRef=useRef<HTMLInputElement>(null)
 const formatTime=(sec:number)=>{ const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60; return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}` }
 const startTimer=()=>{ if(timerRef.current) clearInterval(timerRef.current); setLiveSeconds(0); timerRef.current=setInterval(()=>setLiveSeconds(p=>p+1),1000) }
 const stopTimer=()=>{ if(timerRef.current) clearInterval(timerRef.current); timerRef.current=null; setLiveSeconds(0) }
@@ -159,6 +160,7 @@ const ao=localStorage.getItem('taglive_active_outro'); if(ao) setActiveOutroId(a
 const tk=localStorage.getItem('taglive_ticker_text'); if(tk) setTickerText(tk)
 const ts=localStorage.getItem('taglive_ticker_size'); if(ts) setTickerSize(parseInt(ts))
 const cn=localStorage.getItem('taglive_church_name'); if(cn) setChurchName(cn)
+const cl=localStorage.getItem('taglive_church_logo'); if(cl){ setLogoImage(cl); const img=new Image(); img.src=cl; img.onload=()=>{ logoImageRef.current=img } }
 const ld=localStorage.getItem('taglive_lowdata'); if(ld) setLowData(ld==='true')
 const params=new URLSearchParams(window.location.search)
 if(params.get('admin')==='taglive2026'){ localStorage.setItem('taglive_admin','true'); setIsAdmin(true) }
@@ -374,10 +376,32 @@ const fetchHymnOnline = async (no: number) => {
 
 const pasteClipboard=async()=>{ try{ const t=await navigator.clipboard.readText(); if(t) setVerse(t); else alert('Clipboard empty') }catch{ alert('Allow clipboard') } }
 const saveVerse=()=>{ if(!verse.trim()) return; const ns=[verse,...saved.filter(s=>s!==verse)].slice(0,20); setSaved(ns); localStorage.setItem('taglive_saved', JSON.stringify(ns)); alert('Saved!') }
+const deleteSaved=(idx:number)=>{ const ns=saved.filter((_,i)=>i!==idx); setSaved(ns); localStorage.setItem('taglive_saved', JSON.stringify(ns)); }
 const pickMedia=()=>fileInputRef.current?.click()
 const pickLogo=()=>logoInputRef.current?.click()
 const onFilePick=(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const url=URL.createObjectURL(f); setBgImage(url); setBgMode('image'); const img=new Image(); img.src=url; img.onload=()=>{ bgImageRef.current=img } }
-const onLogoPick=(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const url=URL.createObjectURL(f); setLogoImage(url); const img=new Image(); img.src=url; img.onload=()=>{ logoImageRef.current=img }; setSelected('logo') }
+const onLogoPick=async(e:any)=>{ 
+  const f=e.target.files?.[0]; if(!f) return; 
+  const base64=await fileToBase64(f);
+  setLogoImage(base64); 
+  localStorage.setItem('taglive_church_logo', base64);
+  const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; 
+  setSelected('logo') 
+}
+const handleChurchLogoPick=async(e:any)=>{
+  const f=e.target.files?.[0]; if(!f) return;
+  const base64=await fileToBase64(f);
+  setLogoImage(base64);
+  localStorage.setItem('taglive_church_logo', base64);
+  const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img };
+}
+const removeChurchLogo=()=>{
+  localStorage.removeItem('taglive_church_logo');
+  setLogoImage(null);
+  logoImageRef.current=null;
+  if(churchLogoInputRef.current) churchLogoInputRef.current.value='';
+  if(logoInputRef.current) logoInputRef.current.value='';
+}
 
 const startRecording=()=>{
   const canvas=canvasRef.current; if(!canvas) return alert('Start camera first')
@@ -550,7 +574,22 @@ return (
 {showStudio&&(<div style={{marginTop:10}}><div style={{background:'#fff',padding:8,borderRadius:10,border:'1px solid #ddd'}}><input value={animTitle} onChange={e=>setAnimTitle(e.target.value)} placeholder="Title" style={{width:'100%',padding:8,borderRadius:8,border:'1px solid #ddd',fontSize:12,marginBottom:6}}/><input value={animSub} onChange={e=>setAnimSub(e.target.value)} placeholder="Subtitle" style={{width:'100%',padding:8,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/></div><div style={{display:'flex',gap:6,marginTop:8}}><button onClick={()=>addAnimatedIntro(false)} style={{flex:1,background:'#7c3aed',color:'#fff',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:11}}>Save Animated Intro</button><button onClick={()=>addAnimatedIntro(true)} style={{flex:1,background:'#111',color:'#fff',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:11}}>Save Animated Outro</button></div><div style={{display:'flex',gap:6,marginTop:8}}><label style={{flex:1,background:'#7c3aed',color:'#fff',padding:10,borderRadius:10,fontWeight:800,fontSize:11,textAlign:'center',cursor:'pointer'}}>Upload Intro<input ref={introFileRef} type="file" accept="image/*,video/*" onChange={handleIntroFile} style={{display:'none'}}/></label><label style={{flex:1,background:'#111',color:'#fff',padding:10,borderRadius:10,fontWeight:800,fontSize:11,textAlign:'center',cursor:'pointer'}}>Upload Outro<input ref={outroFileRef} type="file" accept="image/*,video/*" onChange={handleOutroFile} style={{display:'none'}}/></label></div></div>)}
 </div>
 <div style={{border:'2px solid #111',borderRadius:16,padding:12,background:'#ffffff'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><b style={{fontSize:13,color:'#111',flex:1}}>Scrolling Ticker</b><div style={{display:'flex',gap:6}}><button onClick={()=>setTickerOn(!tickerOn)} style={{padding:'8px 14px',borderRadius:20,border:'none',background:tickerOn?'#16a34a':'#111',color:'#fff',fontWeight:900,fontSize:11}}>{tickerOn?'ON':'OFF'}</button><button onClick={()=>setShowTickerStudio(!showTickerStudio)} style={{padding:'8px 12px',borderRadius:20,border:'none',background:showTickerStudio?'#111':'#eee',color:showTickerStudio?'#fff':'#000',fontWeight:800,fontSize:11}}>{showTickerStudio?'Hide':'Open'}</button></div></div>{showTickerStudio&&(<div style={{marginTop:10}}><input value={tickerText} onChange={e=>{setTickerText(e.target.value);localStorage.setItem('taglive_ticker_text',e.target.value);tickerOffsetRef.current=720}} placeholder="Type announcement..." style={{width:'100%',padding:10,borderRadius:10,border:'2px solid #111',fontSize:12,fontWeight:700,background:'#000',color:'#FFFF00',boxSizing:'border-box'}}/></div>)}</div>
-<div style={{border:'2px solid #7c3aed',borderRadius:16,padding:12,background:'#fff'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:13}}>Church Name</b><button onClick={()=>setShowChurchName(!showChurchName)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:showChurchName?'#7c3aed':'#111',color:'#fff',fontWeight:800,fontSize:11}}>{showChurchName?'ON':'OFF'}</button></div><input value={churchName} onChange={e=>{setChurchName(e.target.value);localStorage.setItem('taglive_church_name',e.target.value)}} placeholder="SALEM GANAJA CITY" style={{width:'100%',marginTop:8,padding:10,borderRadius:10,border:'2px solid #7c3aed',fontSize:12,fontWeight:800,boxSizing:'border-box'}}/></div>
+
+<div style={{border:'2px solid #7c3aed',borderRadius:16,padding:12,background:'#fff'}}>
+<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:13}}>Church Name</b><button onClick={()=>setShowChurchName(!showChurchName)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:showChurchName?'#7c3aed':'#111',color:'#fff',fontWeight:800,fontSize:11}}>{showChurchName?'ON':'OFF'}</button></div>
+<input value={churchName} onChange={e=>{setChurchName(e.target.value);localStorage.setItem('taglive_church_name',e.target.value)}} placeholder="SALEM GANA JA CITY" style={{width:'100%',marginTop:8,padding:10,borderRadius:10,border:'2px solid #7c3aed',fontSize:12,fontWeight:800,boxSizing:'border-box'}}/>
+<div style={{marginTop:10,border:'1px dashed #7c3aed',borderRadius:10,padding:10,background:'#f9f5ff'}}>
+<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:11}}>SAVED LOGO (Inside Church Box)</b>{logoImage&&<button onClick={removeChurchLogo} style={{padding:'4px 8px',borderRadius:6,border:'none',background:'red',color:'#fff',fontWeight:800,fontSize:10}}>Remove</button>}</div>
+<div style={{display:'flex',gap:8,alignItems:'center',marginTop:8}}>
+{logoImage&&<img src={logoImage} style={{width:50,height:50,objectFit:'contain',borderRadius:8,border:'1px solid #ddd',background:'#fff'}}/>}
+<div style={{flex:1}}>
+<input ref={churchLogoInputRef} type="file" accept="image/*" onChange={handleChurchLogoPick} style={{width:'100%',fontSize:11}}/>
+<div style={{fontSize:9,opacity:0.7,marginTop:2}}>{logoImage?'Logo saved - tap to replace':'No logo saved - choose image (saved to local storage)'}</div>
+</div>
+</div>
+</div>
+</div>
+
 </div>
 )}
 </div>
@@ -589,7 +628,18 @@ return (
 
 <div style={{display:'flex',gap:6,marginTop:10}}><button onClick={openBibleApp} style={{flex:1,background:'#2563eb',color:'#fff',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Open Bible App</button><button onClick={pasteClipboard} style={{flex:1,background:'#059669',color:'#fff',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Paste Verse</button><button onClick={saveVerse} style={{flex:1,background:'#f59e0b',color:'#000',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Save</button></div>
 <textarea value={verse} onChange={e=>setVerse(e.target.value)} style={{width:'100%',height:90,marginTop:10,padding:12,borderRadius:12,border:'1px solid #ddd'}} placeholder={"Ministering:\nNAME OF PRESENTER"}/>
-{saved.length>0&&<div style={{marginTop:8,border:'1px solid #eee',borderRadius:10,padding:8}}><div style={{fontSize:11,fontWeight:800,marginBottom:6}}>Saved (Tap):</div><div style={{display:'flex',flexWrap:'wrap',gap:6}}>{saved.map((s,i)=><span key={i} onClick={()=>setVerse(s)} style={{fontSize:11,background:'#f3f0ff',border:'1px solid #ddd',padding:'6px 8px',borderRadius:20,cursor:'pointer'}}>{s.substring(0,30)}...</span>)}</div></div>}
+{saved.length>0&&<div style={{marginTop:8,border:'1px solid #eee',borderRadius:12,padding:8,background:'#fff'}}>
+<details open>
+<summary style={{fontSize:12,fontWeight:900,cursor:'pointer',padding:4}}>📁 Saved Folder ({saved.length}) - Tap to open/close</summary>
+<div style={{marginTop:8,display:'flex',flexDirection:'column',gap:6}}>
+{saved.map((s,i)=>
+<div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'#f3f0ff',border:'1px solid #e5e7eb',padding:'8px 10px',borderRadius:20}}>
+<span onClick={()=>setVerse(s)} style={{fontSize:11,flex:1,cursor:'pointer',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',fontWeight:600}}>{s.substring(0,40)}...</span>
+<button onClick={()=>deleteSaved(i)} style={{marginLeft:8,background:'#ff0000',color:'#fff',border:'none',borderRadius:50,width:22,height:22,fontWeight:900,fontSize:12,lineHeight:'22px'}}>×</button>
+</div>)}
+</div>
+</details>
+</div>}
 
 <div style={{marginTop:14,border:'2px solid #111',borderRadius:14,padding:12}}><b>Connect Facebook - Intro plays first!</b><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={loginFacebook} style={{flex:1,background:fbUser?'#16a34a':'#1877F2',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{fbUser?`✓ ${fbUser.name}`:'Login Facebook'}</button><button onClick={()=>loadPages()} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Load My Pages</button></div>{pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6,padding:10,background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff',color:selectedPage?.id===p.id?'#fff':'#000',borderRadius:8,fontSize:13,fontWeight:700,cursor:'pointer'}}>{p.name} {selectedPage?.id===p.id?`LIVE ${formatTime(liveSeconds)}`:'(Go Live with Intro)'}</div>)} {fbStreamUrl&&<div style={{marginTop:10,padding:10,background:'#dcfce7',borderRadius:8,fontSize:11,wordBreak:'break-all'}}>FB: {fbStreamUrl.substring(0,70)}...</div>}</div>
 
