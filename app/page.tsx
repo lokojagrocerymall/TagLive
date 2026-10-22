@@ -405,9 +405,22 @@ const removeChurchLogo=()=>{
 const startRecording=async()=>{
   const canvas=canvasRef.current; if(!canvas) return alert('Start camera first')
   if(canvas.width!==720 || canvas.height!==1280){ canvas.width=720; canvas.height=1280 }
-  const canvasStream=(canvas as any).captureStream(30) as MediaStream
-  const micTracks=streamRef.current?.getAudioTracks()||[]
-  micTracks.forEach(t=> canvasStream.addTrack(t))
+
+  // Video track from canvas (30fps smooth)
+  const canvasVideoStream=(canvas as any).captureStream(30) as MediaStream
+  const videoTrack=canvasVideoStream.getVideoTracks()[0]
+
+  // --- AUDIO MIXER FIX - THIS GIVES SOUND ---
+  const audioCtx=new (window.AudioContext || (window as any).webkitAudioContext)()
+  audioCtxRef.current=audioCtx
+  const dest=audioCtx.createMediaStreamDestination()
+  mixedDestRef.current=dest
+
+  // Add mic to mixer
+  if(streamRef.current?.getAudioTracks().length>0){
+    const micSource=audioCtx.createMediaStreamSource(streamRef.current)
+    micSource.connect(dest)
+  }
   
   const active=intros.find(i=>i.id===activeIntroId)
   if(active){
@@ -421,16 +434,20 @@ const startRecording=async()=>{
       broadcastVideoRef.current.crossOrigin="anonymous"
       try{
         await broadcastVideoRef.current.play()
-        const vStream=(broadcastVideoRef.current as any).captureStream?.() || (broadcastVideoRef.current as any).mozCaptureStream?.()
-        if(vStream){
-          vStream.getAudioTracks().forEach((at:MediaStreamTrack)=>{
-            try{ canvasStream.addTrack(at) }catch{}
-          })
-        }
+        const vSource=audioCtx.createMediaElementSource(broadcastVideoRef.current)
+        vSource.connect(dest)
+        vSource.connect(audioCtx.destination) // hear it while recording
       }catch(e){ broadcastVideoRef.current.play().catch(()=>{}) }
     }
     setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null }, (active.duration||5)*1000)
   }
+
+  // Final stream = video + mixed audio (mic + intro sound)
+  const finalStream=new MediaStream()
+  finalStream.addTrack(videoTrack)
+  const mixedAudio=dest.stream.getAudioTracks()[0]
+  if(mixedAudio) finalStream.addTrack(mixedAudio)
+  else if(streamRef.current?.getAudioTracks()[0]) finalStream.addTrack(streamRef.current.getAudioTracks()[0])
 
   chunksRef.current=[]
   let mime='video/mp4'
@@ -438,12 +455,13 @@ const startRecording=async()=>{
     if(MediaRecorder.isTypeSupported('video/webm;codecs=h264')) mime='video/webm;codecs=h264'
     else mime='video/webm;codecs=vp9'
   }
-  const rec=new MediaRecorder(canvasStream, { mimeType: mime })
+  const rec=new MediaRecorder(finalStream, { mimeType: mime, videoBitsPerSecond: 2500000 })
   rec.ondataavailable=(e)=>{ if(e.data.size>0) chunksRef.current.push(e.data) }
   rec.onstop=()=>{ 
     const blob=new Blob(chunksRef.current, { type: 'video/mp4' }); 
     const url=URL.createObjectURL(blob); 
-    setRecordedUrl(url) 
+    setRecordedUrl(url)
+    try{ audioCtx.close() }catch{}
   }
   rec.start(100); recorderRef.current=rec; setIsRecording(true); startTimer()
 }
@@ -503,7 +521,6 @@ const c=canvasRef.current, v=videoRef.current
 if(c&&v&&isCam&&v.readyState>=2){
 const ctx=c.getContext('2d')
 if(ctx){
-if(c.width!==720 || c.height!==1280){ c.width=720; c.height=1280 }
 if(broadcastPlaying){
 ctx.fillStyle='#000'; ctx.fillRect(0,0,c.width,c.height)
 if(broadcastPlaying.type==='image'&&broadcastImageRef.current){
