@@ -138,7 +138,6 @@ const logoImageRef=useRef<HTMLImageElement|null>(null)
 const recorderRef=useRef<MediaRecorder|null>(null)
 const chunksRef=useRef<Blob[]>([])
 const churchLogoInputRef=useRef<HTMLInputElement>(null)
-const audioCtxRef=useRef<AudioContext|null>(null)
 const formatTime=(sec:number)=>{ const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60; return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}` }
 const startTimer=()=>{ if(timerRef.current) clearInterval(timerRef.current); setLiveSeconds(0); timerRef.current=setInterval(()=>setLiveSeconds(p=>p+1),1000) }
 const stopTimer=()=>{ if(timerRef.current) clearInterval(timerRef.current); timerRef.current=null; setLiveSeconds(0) }
@@ -206,7 +205,7 @@ const base64=await fileToBase64(file)
 let dur=5
 if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }
 const item={ id:`id_${Date.now()}`, type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }
-const n=[...intros,item]; saveIntros(n); setActiveIntroId(item.id); localStorage.setItem('taglive_active_intro', item.id); e.target.value=''; alert(`Intro Saved & Active! ${Math.round(dur)}s with sound inside broadcast`)
+const n=[...intros,item]; saveIntros(n); setActiveIntroId(item.id); localStorage.setItem('taglive_active_intro', item.id); e.target.value=''; alert(`Intro Saved! ${Math.round(dur)}s - will play inside with original ratio`)
 }
 const handleOutroFile=async(e:any)=>{
 const file=e.target.files?.[0]; if(!file) return
@@ -214,7 +213,7 @@ const base64=await fileToBase64(file)
 let dur=5
 if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }
 const item={ id:`id_${Date.now()}`, type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }
-const n=[...outros,item]; saveOutros(n); setActiveOutroId(item.id); localStorage.setItem('taglive_active_outro', item.id); e.target.value=''; alert(`Outro Saved & Active! ${Math.round(dur)}s with sound inside broadcast`)
+const n=[...outros,item]; saveOutros(n); setActiveOutroId(item.id); localStorage.setItem('taglive_active_outro', item.id); e.target.value=''; alert(`Outro Saved! ${Math.round(dur)}s - will play inside with original ratio`)
 }
 const startCamera=async(newFacing=facing)=>{
 try{
@@ -388,8 +387,8 @@ const removeChurchLogo=()=>{
 
 const startRecording=async()=>{
   const canvas=canvasRef.current; if(!canvas) return alert('Start camera first')
+  if(canvas.width!==720 || canvas.height!==1280){ canvas.width=720; canvas.height=1280 }
   const canvasStream=(canvas as any).captureStream(30) as MediaStream
-  // Merge mic + video audio for sound inside broadcast
   const micTracks=streamRef.current?.getAudioTracks()||[]
   micTracks.forEach(t=> canvasStream.addTrack(t))
   
@@ -405,7 +404,6 @@ const startRecording=async()=>{
       broadcastVideoRef.current.crossOrigin="anonymous"
       try{
         await broadcastVideoRef.current.play()
-        // Capture video audio track into recording
         const vStream=(broadcastVideoRef.current as any).captureStream?.() || (broadcastVideoRef.current as any).mozCaptureStream?.()
         if(vStream){
           vStream.getAudioTracks().forEach((at:MediaStreamTrack)=>{
@@ -447,21 +445,7 @@ const stopRecording=async()=>{
       broadcastVideoRef.current.muted=false
       broadcastVideoRef.current.volume=1
       broadcastVideoRef.current.crossOrigin="anonymous"
-      try{
-        await broadcastVideoRef.current.play()
-        const vStream=(broadcastVideoRef.current as any).captureStream?.() || (broadcastVideoRef.current as any).mozCaptureStream?.()
-        if(vStream){
-          vStream.getAudioTracks().forEach((at:MediaStreamTrack)=>{
-            try{ 
-              const cStream=(canvasRef.current as any).captureStream?.()
-              // add to existing recorder stream
-              if(recorderRef.current && recorderRef.current.stream){
-                (recorderRef.current.stream as any).addTrack?.(at)
-              }
-            }catch{}
-          })
-        }
-      }catch{}
+      try{ await broadcastVideoRef.current.play() }catch{}
       broadcastVideoRef.current.onended=()=>{ stopRecordingFinal() }
       setTimeout(()=>{ stopRecordingFinal() }, (active.duration||7)*1000)
     } else {
@@ -502,29 +486,24 @@ const c=canvasRef.current, v=videoRef.current
 if(c&&v&&isCam&&v.readyState>=2){
 const ctx=c.getContext('2d')
 if(ctx){
-c.width=720; c.height=1280
+// FIX: DO NOT RESET WIDTH EVERY FRAME - CAUSES SKIPPING
+if(c.width!==720 || c.height!==1280){ c.width=720; c.height=1280 }
 if(broadcastPlaying){
 ctx.fillStyle='#000'; ctx.fillRect(0,0,c.width,c.height)
 if(broadcastPlaying.type==='image'&&broadcastImageRef.current){
 const iw=broadcastImageRef.current.width, ih=broadcastImageRef.current.height
-const rCanvas=c.width/c.height, rImg=iw/ih
-let sx,sy,sw,sh
-if(rImg>rCanvas){ sh=ih; sw=ih*rCanvas; sx=(iw-sw)/2; sy=0 }
-else { sw=iw; sh=iw/rCanvas; sx=0; sy=(ih-sh)/2 }
-ctx.drawImage(broadcastImageRef.current,sx,sy,sw,sh,0,0,c.width,c.height)
+const ratio=Math.min(c.width/iw, c.height/ih)
+const nw=iw*ratio, nh=ih*ratio
+const x=(c.width-nw)/2, y=(c.height-nh)/2
+ctx.drawImage(broadcastImageRef.current,x,y,nw,nh)
 } else if(broadcastPlaying.type==='video'&&broadcastVideoRef.current&&broadcastVideoRef.current.readyState>=2){
 const vw=broadcastVideoRef.current.videoWidth, vh=broadcastVideoRef.current.videoHeight
 if(vw&&vh){
-const rCanvas=c.width/c.height, rVideo=vw/vh
-let sx,sy,sw,sh
-if(rVideo>rCanvas){ sh=vh; sw=vh*rCanvas; sx=(vw-sw)/2; sy=0 }
-else { sw=vw; sh=vw/rCanvas; sx=0; sy=(vh-sh)/2 }
-ctx.drawImage(broadcastVideoRef.current,sx,sy,sw,sh,0,0,c.width,c.height)
+const ratio=Math.min(c.width/vw, c.height/vh)
+const nw=vw*ratio, nh=vh*ratio
+const x=(c.width-nw)/2, y=(c.height-nh)/2
+ctx.drawImage(broadcastVideoRef.current,x,y,nw,nh)
 }
-}
-if(isLive||ytLive||isRecording){
-const timeStr=formatTime(liveSeconds)
-ctx.save(); ctx.fillStyle='#FF0000'; ctx.font='900 28px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top'; ctx.shadowColor='rgba(0,0,0,0.9)'; ctx.shadowBlur=6; ctx.fillText(`● LIVE ${timeStr}${lowData?' [480p]':''}`,24,22); ctx.restore()
 }
 return
 }
@@ -691,7 +670,6 @@ return (
   <button onClick={toggleTorch} style={{background:torch?'#fbbf24':'rgba(0,0,0,0.85)',color:torch?'#000':'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>{torch?'Flash On':'Flash'}</button>
 </div>
 )}
-{broadcastPlaying&&<div style={{position:'absolute',top:12,left:12,background:'#7c3aed',color:'#fff',padding:'6px 10px',borderRadius:20,fontWeight:900,fontSize:11,zIndex:60}}>▶️ {broadcastPlaying.title} - INSIDE</div>}
 </div>
 
 <div style={{display:'flex',gap:8,marginTop:12}}>{!isCam?<button onClick={()=>startCamera()} style={{flex:1,background:'#111',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Start Camera {lowData?'(480p)':''}</button>:<><button onClick={toggleCamera} style={{flex:1,background:'#7c3aed',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Switch Camera</button><button onClick={stopCamera} style={{flex:1,background:'#444',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Stop</button></>}</div>
