@@ -61,7 +61,7 @@ const SS_HYMNS = [
 {no:351,title:"Why Do You Wait Dear Brother",lyrics:"Why do you wait, dear brother?\nOh, why do you tarry so long?"},
 {no:352,title:"Come With Thy Sins To The Fountain",lyrics:"Come with thy sins to the fountain,\nCome with thy burden of grief;"},
 ];
-const BUILD_348 = ()=>{ let list=[...SS_HYMNS]; for(let i=1;i<=348;i++){ if(!list.find(h=>h.no===i)){ list.push({no:i,title:`SS&S ${i}`,lyrics:`SS&S ${i} - (Tap Search to fetch online)`}); } } return list.sort((a,b)=>a.no-b.no); };
+const BUILD_348 = ()=>{ let list=[...SS_HYMNS]; for(let i=1;i<=348;i++){ if(!list.find(h=>h.no===i)){ list.push({no:i,title:`SS&S ${i}`,lyrics:`SS&S ${i}`}); } } return list.sort((a,b)=>a.no-b.no); };
 
 export default function LiveStudio(){
 const [verse,setVerse]=useState("John 3:16 - For God so loved the world that He gave His only begotten Son...")
@@ -310,36 +310,64 @@ const parsed=detectedBook?parseChapterVerse(bibleQuery,detectedBook.name):{ ch: 
 const getFilteredHymns=(q:string)=>{ if(!q) return BUILD_348().slice(0,6); const lower=q.toLowerCase(); const num=parseInt(q); if(!isNaN(num)){ const byNo=BUILD_348().filter(h=>h.no===num); if(byNo.length) return byNo } return BUILD_348().filter(h=>h.title.toLowerCase().includes(lower)).slice(0,8) }
 const filteredHymns=getFilteredHymns(hymnQuery)
 
+// BIBLE-STYLE HYMN FETCH - OFFLINE FIRST LIKE BIBLE
 const fetchHymnOnline = async (no: number) => {
   setHymnLoading(true)
-  // 1. Try real local DB first (no dummy)
+  try{
+    const cache=JSON.parse(localStorage.getItem('taglive_hymn_cache')||'{}')
+    if(cache[no]){
+      setHymnResult(cache[no]+' [CACHED]')
+      setHymnLoading(false)
+      return
+    }
+  }catch{}
+
   const realLocal = SS_HYMNS.find(h=>h.no===no)
   if(realLocal){
-    setHymnResult(`${realLocal.no}. ${realLocal.title}\n\n${realLocal.lyrics}`)
+    const full=`${realLocal.no}. ${realLocal.title}\n\n${realLocal.lyrics}`
+    setHymnResult(full)
+    try{
+      const cache=JSON.parse(localStorage.getItem('taglive_hymn_cache')||'{}')
+      cache[no]=full
+      localStorage.setItem('taglive_hymn_cache', JSON.stringify(cache))
+    }catch{}
     setHymnLoading(false)
-    // still try online to update
+    // try update from API in background
     try{
       const res=await fetch(`/api/sss?no=${no}`)
       const d=await res.json()
-      if(d && d.lyrics && !d.lyrics.includes(`SS&S ${no} - (Tap`)){
-        setHymnResult(`${d.no}. ${d.title}\n\n${d.lyrics}`)
+      if(d && d.lyrics && d.lyrics.length>20 && !d.lyrics.includes(`SS&S ${no} - (Tap`)){
+        const full2=`${d.no}. ${d.title}\n\n${d.lyrics}`
+        setHymnResult(full2)
+        const cache=JSON.parse(localStorage.getItem('taglive_hymn_cache')||'{}')
+        cache[no]=full2
+        localStorage.setItem('taglive_hymn_cache', JSON.stringify(cache))
       }
     }catch{}
     return
   }
-  // 2. Try API online
+
   try {
     const res = await fetch(`/api/sss?no=${no}`)
     const d = await res.json()
-    if (d && d.lyrics && d.lyrics.length>10 && !d.lyrics.startsWith(`SS&S ${no} -`)) {
-      setHymnResult(`${d.no}. ${d.title}\n\n${d.lyrics}`)
+    if (d && d.lyrics && d.lyrics.length>10) {
+      const full=`${d.no}. ${d.title}\n\n${d.lyrics}`
+      setHymnResult(full)
+      try{
+        const cache=JSON.parse(localStorage.getItem('taglive_hymn_cache')||'{}')
+        cache[no]=full
+        localStorage.setItem('taglive_hymn_cache', JSON.stringify(cache))
+      }catch{}
       setHymnLoading(false)
       return
     }
-    throw new Error('dummy')
-  } catch {
-    // 3. Final fallback - tell user API missing
-    setHymnResult(`${no}. SS&S ${no}\n\nHymn ${no} not in local DB yet.\nAdd it in SS_HYMNS array or in /api/sss/route.ts\n\nBut you can still use number ${no} on screen.`)
+  } catch {}
+
+  const fallback = BUILD_348().find(h=>h.no===no)
+  if(fallback){
+    setHymnResult(`${fallback.no}. ${fallback.title}\n\n${fallback.lyrics}`)
+  } else {
+    setHymnResult(`${no}. SS&S ${no}\n\nHymn not found. Add it to SS_HYMNS array.`)
   }
   setHymnLoading(false)
 }
@@ -416,7 +444,6 @@ ctx.drawImage(v,sX,sY,sW,sH,0,c.height*0.48,targetW,targetH)
 } else if(bgMode==='black'){ ctx.fillStyle='#000'; ctx.fillRect(0,0,c.width,c.height) }
 else if(bgMode==='image'){ 
   if(bgImageRef.current){
-    // cover crop for bg image too
     const iw=bgImageRef.current.width, ih=bgImageRef.current.height
     const rCanvas=c.width/c.height, rImg=iw/ih
     let sx,sy,sw,sh
@@ -426,23 +453,11 @@ else if(bgMode==='image'){
   } else { const g=ctx.createLinearGradient(0,0,c.width,c.height); g.addColorStop(0,'#1e3a8a'); g.addColorStop(1,'#581c87'); ctx.fillStyle=g; ctx.fillRect(0,0,c.width,c.height) }
 }
 else {
-  // FACE MODE - FIXED NO STRETCH (cover crop)
-  const vw=v.videoWidth||1280
-  const vh=v.videoHeight||720
-  const rCanvas=c.width/c.height
-  const rVideo=vw/vh
+  const vw=v.videoWidth||1280, vh=v.videoHeight||720
+  const rCanvas=c.width/c.height, rVideo=vw/vh
   let sx,sy,sw,sh
-  if(rVideo>rCanvas){
-    sh=vh
-    sw=vh*rCanvas
-    sx=(vw-sw)/2
-    sy=0
-  }else{
-    sw=vw
-    sh=vw/rCanvas
-    sx=0
-    sy=(vh-sh)/2
-  }
+  if(rVideo>rCanvas){ sh=vh; sw=vh*rCanvas; sx=(vw-sw)/2; sy=0 }
+  else { sw=vw; sh=vw/rCanvas; sx=0; sy=(vh-sh)/2 }
   ctx.drawImage(v,sx,sy,sw,sh,0,0,c.width,c.height)
 }
 if(logoImageRef.current){ ctx.save(); ctx.translate(logoPos.x,logoPos.y); ctx.rotate(logoPos.rotation*Math.PI/180); ctx.scale(logoPos.scale,logoPos.scale); const iw=logoImageRef.current.width, ih=logoImageRef.current.height; const maxLogoW=180; const sc=Math.min(1,maxLogoW/iw); ctx.drawImage(logoImageRef.current,-iw*sc/2,-ih*sc/2,iw*sc,ih*sc); if(selected==='logo'){ ctx.strokeStyle='#00ff00'; ctx.lineWidth=4; ctx.setLineDash([10,10]); ctx.strokeRect(-iw*sc/2-6,-ih*sc/2-6,iw*sc+12,ih*sc+12); ctx.setLineDash([]) } ctx.restore() }
@@ -508,13 +523,13 @@ return (
 </>
 ):(
 <>
-<div style={{display:'flex',gap:6,marginTop:10}}><input value={hymnQuery} onChange={e=>setHymnQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){const num=parseInt(hymnQuery);if(!isNaN(num))fetchHymnOnline(num)}}} placeholder="Type Hymn No. e.g. 40" style={{flex:1,padding:12,borderRadius:10,border:'2px solid #7c3aed',fontSize:13,fontWeight:700}}/><button onClick={()=>{const num=parseInt(hymnQuery);if(!isNaN(num))fetchHymnOnline(num)}} style={{background:'#7c3aed',color:'#fff',padding:'10px 16px',borderRadius:10,border:0,fontWeight:700}}>{hymnLoading?'...':'Search'}</button></div>
-<div style={{maxHeight:200,overflowY:'auto',marginTop:8,background:'#f9f5ff',borderRadius:10,padding:8,border:'1px solid #ddd'}}><div style={{fontSize:11,fontWeight:900,marginBottom:6}}>SS&S Hymns (Tap to fetch online):</div>{filteredHymns.map(h=>(
+<div style={{display:'flex',gap:6,marginTop:10}}><input value={hymnQuery} onChange={e=>setHymnQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){const num=parseInt(hymnQuery);if(!isNaN(num))fetchHymnOnline(num)}}} placeholder="Type Hymn No." style={{flex:1,padding:12,borderRadius:10,border:'2px solid #7c3aed',fontSize:13,fontWeight:700}}/><button onClick={()=>{const num=parseInt(hymnQuery);if(!isNaN(num))fetchHymnOnline(num)}} style={{background:'#7c3aed',color:'#fff',padding:'10px 16px',borderRadius:10,border:0,fontWeight:700}}>{hymnLoading?'...':'Search'}</button></div>
+<div style={{maxHeight:200,overflowY:'auto',marginTop:8,background:'#f9f5ff',borderRadius:10,padding:8,border:'1px solid #ddd'}}><div style={{fontSize:11,fontWeight:900,marginBottom:6}}>SS&S Hymns:</div>{filteredHymns.map(h=>(
 <div key={h.no} onClick={()=>fetchHymnOnline(h.no)} style={{padding:'8px 10px',background:'#fff',border:'1px solid #eee',borderRadius:8,marginTop:4,cursor:'pointer'}}>
 <b style={{fontSize:13}}>{h.no}. {h.title}</b><div style={{fontSize:11,opacity:.7,marginTop:2}}>{h.lyrics.substring(0,60)}...</div>
 </div>
 ))}</div>
-<div style={{marginTop:8,background:'#fffef0',borderRadius:12,padding:12,flex:1,overflowY:'auto',border:'1px solid #ddd'}}>{hymnLoading?<div style={{opacity:.6,fontSize:12}}>Fetching hymn online...</div>:hymnResult?<div style={{fontSize:14,lineHeight:1.5,fontWeight:600,whiteSpace:'pre-wrap'}}>{hymnResult}</div>:<div style={{opacity:.6,fontSize:12}}>Type 40 and Search — will fetch real lyrics (To God Be The Glory).</div>}</div>
+<div style={{marginTop:8,background:'#fffef0',borderRadius:12,padding:12,flex:1,overflowY:'auto',border:'1px solid #ddd'}}>{hymnLoading?<div style={{opacity:.6,fontSize:12}}>Fetching...</div>:hymnResult?<div style={{fontSize:14,lineHeight:1.5,fontWeight:600,whiteSpace:'pre-wrap'}}>{hymnResult}</div>:<div style={{opacity:.6,fontSize:12}}>Search by number - works offline like Bible.</div>}</div>
 <button onClick={()=>{if(hymnResult){setVerse(hymnResult);setShowBible(false)}}} disabled={!hymnResult} style={{marginTop:10,background:hymnResult?'#7c3aed':'#ccc',color:'#fff',padding:14,borderRadius:12,fontWeight:900,border:'none'}}>Use This Hymn On Screen</button>
 </>
 )}
