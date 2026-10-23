@@ -116,7 +116,7 @@ const handleVis=async()=>{ if(!document.hidden){ try{ const t=await navigator.cl
 document.addEventListener('visibilitychange', handleVis)
 return()=>{ document.removeEventListener('visibilitychange', handleVis); if(timerRef.current) clearInterval(timerRef.current) }
 },[])
-  useEffect(()=>{
+useEffect(()=>{
 const trackDevice=async()=>{
 try{
 let deviceId=localStorage.getItem('taglive_device')
@@ -271,7 +271,8 @@ const onFilePick=(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const ur
 const onLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const base64=await fileToBase64(f); setLogoImage(base64); localStorage.setItem('taglive_church_logo', base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; setSelected('logo') }
 const handleChurchLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const base64=await fileToBase64(f); setLogoImage(base64); localStorage.setItem('taglive_church_logo', base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; }
 const removeChurchLogo=()=>{ localStorage.removeItem('taglive_church_logo'); setLogoImage(null); logoImageRef.current=null; if(churchLogoInputRef.current) churchLogoInputRef.current.value=''; if(logoInputRef.current) logoInputRef.current.value=''; }
-  // FIXED: INTRO NOW AUTO-CLEARS AFTER DURATION + SAFE AUDIO
+
+// FIXED START RECORDING - INTRO NOW AUTO CLEARS
 const startRecording=async()=>{
   const canvas=canvasRef.current; if(!canvas) return alert('Start camera first')
   if(canvas.width!==720 || canvas.height!==1280){ canvas.width=720; canvas.height=1280 }
@@ -292,57 +293,12 @@ const startRecording=async()=>{
   const active=intros.find(i=>i.id===activeIntroId)
   if(active){
     setBroadcastPlaying(active)
-    if(active.type==='image'){ 
-      const img=new Image(); 
-      img.src=active.data; 
-      img.onload=()=>{ broadcastImageRef.current=img } 
-    }
+    if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img } }
     else if(active.type==='video'&&broadcastVideoRef.current){
-      broadcastVideoRef.current.src=active.data; 
-      broadcastVideoRef.current.muted=false; 
-      broadcastVideoRef.current.volume=1; 
-      broadcastVideoRef.current.crossOrigin="anonymous"
+      broadcastVideoRef.current.src=active.data; broadcastVideoRef.current.muted=false; broadcastVideoRef.current.volume=1; broadcastVideoRef.current.crossOrigin="anonymous"
       try{ await broadcastVideoRef.current.play(); }catch{}
     }
-    // FIXED: INTRO AUTO-CLEARS + SMOOTH RECORDING + SOUND
-const startRecording=async()=>{
-  const canvas=canvasRef.current; if(!canvas) return alert('Start camera first')
-  if(canvas.width!==720 || canvas.height!==1280){ canvas.width=720; canvas.height=1280 }
-  const canvasStream=(canvas as any).captureStream(30) as MediaStream
-  try{
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
-    audioCtxRef.current = ctx
-    const dest = ctx.createMediaStreamDestination()
-    const micTracks = streamRef.current?.getAudioTracks()||[]
-    micTracks.forEach(t=>{
-      try{ const src = ctx.createMediaStreamSource(new MediaStream([t])); src.connect(dest) }catch{}
-    })
-    dest.stream.getAudioTracks().forEach(at=>canvasStream.addTrack(at))
-  }catch{
-    const micTracks=streamRef.current?.getAudioTracks()||[]
-    micTracks.forEach(t=> canvasStream.addTrack(t))
-  }
-  const active=intros.find(i=>i.id===activeIntroId)
-  if(active){
-    setBroadcastPlaying(active)
-    if(active.type==='image'){ 
-      const img=new Image(); 
-      img.src=active.data; 
-      img.onload=()=>{ broadcastImageRef.current=img } 
-    }
-    else if(active.type==='video'&&broadcastVideoRef.current){
-      broadcastVideoRef.current.src=active.data; 
-      broadcastVideoRef.current.muted=false; 
-      broadcastVideoRef.current.volume=1; 
-      broadcastVideoRef.current.crossOrigin="anonymous"
-      try{ await broadcastVideoRef.current.play(); }catch{}
-    }
-    // FIX: THIS WAS MISSING - INTRO NOW AUTO CLEARS
-    setTimeout(()=>{ 
-      setBroadcastPlaying(null); 
-      broadcastImageRef.current=null;
-      if(broadcastVideoRef.current){ try{broadcastVideoRef.current.pause()}catch{} }
-    }, (active.duration||5)*1000)
+    setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; if(broadcastVideoRef.current){ try{broadcastVideoRef.current.pause()}catch{} } }, (active.duration||5)*1000)
   }
   chunksRef.current=[]
   let mime='video/mp4'
