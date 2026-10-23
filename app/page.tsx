@@ -416,12 +416,14 @@ const vw=broadcastVideoRef.current.videoWidth, vh=broadcastVideoRef.current.vide
 if(vw&&vh){ const ratio=Math.min(c.width/vw, c.height/vh); const nw=vw*ratio, nh=vh*ratio; const x=(c.width-nw)/2, y=(c.height-nh)/2; ctx.drawImage(broadcastVideoRef.current,x,y,nw,nh) }
 }
 return
-}
-a=requestAnimationFrame(draw)
-}
-draw()
-return()=>cancelAnimationFrame(a)
-},[isCam,verse,isLive,pos,bgMode,fontSize,align,bgImage,ytLive,textColor,boxColor,boxOpacity,logoImage,logoPos,isRecording,selected,showText,tickerOn,tickerText,tickerSize,tickerSpeed,churchName,showChurchName,liveSeconds,lowData,broadcastPlaying])
+  }
+  }
+  }
+  a=requestAnimationFrame(draw)
+  }
+  draw()
+  return()=>cancelAnimationFrame(a)
+  },[isCam,verse,isLive,pos,bgMode,fontSize,align,bgImage,ytLive,textColor,boxColor,boxOpacity,logoImage,logoPos,isRecording,selected,showText,tickerOn,tickerText,tickerSize,tickerSpeed,churchName,showChurchName,liveSeconds,lowData,broadcastPlaying])
 return (
 <div style={{padding:16,maxWidth:480,margin:'0 auto'}}>
 {showBible&&(
