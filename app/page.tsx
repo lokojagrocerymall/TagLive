@@ -479,8 +479,6 @@ ctx.fillText(txt,tickerOffsetRef.current,c.height-tickerH/2)
 }
 }
 }
-}
-}
 a=requestAnimationFrame(draw)
 }
 draw()
