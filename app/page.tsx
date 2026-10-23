@@ -42,8 +42,16 @@ const [boxOpacity,setBoxOpacity]=useState(1)
 const [logoImage,setLogoImage]=useState<string|null>(null)
 const [logoPos,setLogoPos]=useState({ x: 360, y: 300, scale: 0.7, rotation: 0 })
 const [isRecording,setIsRecording]=useState(false)
-const [recordedUrl,setRecordedUrl]=useState<string|null>(null)
-const [mp4Url,setMp4Url]=useState<string|null>(null)
+{/* RECORDING PREVIEW - PROFESSIONAL */}
+{recordedUrl && (
+  <div style={{marginTop:12, padding:12, border:'1px solid #ddd', borderRadius:12, background:'#fff'}}>
+    <video src={recordedUrl} controls playsInline style={{width:'100%', borderRadius:8, background:'#000'}} />
+    <div style={{display:'flex', gap:8, marginTop:10}}>
+      <a href={recordedUrl} download={`TagLive-${Date.now()}.webm`} style={{flex:1, textAlign:'center', padding:12, background:'#111', color:'#fff', borderRadius:8, textDecoration:'none'}}>Save Recording</a>
+      <button onClick={()=>setRecordedUrl(null)} style={{flex:1, padding:12, background:'#eee', borderRadius:8}}>Clear</button>
+    </div>
+  </div>
+)}
 const [isConverting,setIsConverting]=useState(false)
 const [selected,setSelected]=useState<'text'|'logo'>('text')
 const [showText,setShowText]=useState(true)
