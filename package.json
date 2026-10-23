@@ -15,9 +15,7 @@
     "@supabase/ssr": "^0.5.2",
     "next-auth": "^4.24.11",
     "livekit-client": "^2.20.0",
-    "livekit-server-sdk": "^2.15.1",
-    "@ffmpeg/ffmpeg": "^0.12.10",
-    "@ffmpeg/util": "^0.12.1"
+    "livekit-server-sdk": "^2.15.1"
   },
   "devDependencies": {
     "typescript": "^5",
