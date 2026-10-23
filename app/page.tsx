@@ -169,6 +169,19 @@ const h=lowData?480:720
 const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:newFacing,width:{ideal:w},height:{ideal:h}},audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}})
 streamRef.current=s; trackRef.current=s.getVideoTracks()[0]
 if(videoRef.current){ videoRef.current.srcObject=s; await videoRef.current.play() }
+// FIX: If recording, connect NEW mic to existing recording
+if(isRecording && audioCtxRef.current){
+  try{
+    const ctx=audioCtxRef.current
+    const dest=(ctx as any)._dest || (audioCtxRef.current as any).destRef
+    // Find dest from previous
+    const newTrack=s.getAudioTracks()[0]
+    if(newTrack && (audioCtxRef.current as any)._dest){
+      const src=ctx.createMediaStreamSource(new MediaStream([newTrack]))
+      src.connect((audioCtxRef.current as any)._dest)
+    }
+  }catch{}
+}
 setFacing(newFacing); setIsCam(true)
 }catch(e:any){ alert('Camera: '+e.message) }
 }
@@ -281,10 +294,27 @@ const startRecording=async()=>{
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
     audioCtxRef.current = ctx
     const dest = ctx.createMediaStreamDestination()
+    ;(ctx as any)._dest = dest // save for camera flip fix
+    ;(audioCtxRef.current as any)._dest = dest
+    
+    // Mic audio
     const micTracks = streamRef.current?.getAudioTracks()||[]
     micTracks.forEach(t=>{
       try{ const src = ctx.createMediaStreamSource(new MediaStream([t])); src.connect(dest) }catch{}
     })
+    
+    // FIX: Intro/Outro video sound -> into recording
+    if(broadcastVideoRef.current){
+      try{
+        // Create source from video element so its sound goes to recording
+        const videoEl = broadcastVideoRef.current
+        // Use MediaElementSource (works for intro/outro video sound)
+        const vSrc = (ctx as any)._videoSrc || ctx.createMediaElementSource(videoEl)
+        ;(ctx as any)._videoSrc = vSrc
+        vSrc.connect(dest)
+      }catch{}
+    }
+    
     dest.stream.getAudioTracks().forEach(at=>canvasStream.addTrack(at))
   }catch{
     const micTracks=streamRef.current?.getAudioTracks()||[]
