@@ -3,6 +3,14 @@ import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@supabase/supabase-js'
 const supabase = createClient('https://gqifluvkrjzsebfdjcio.supabase.co','eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdxaWZsdXZrcmp6c2ViZmRqY2lvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIzNzY4NDgsImV4cCI6MjEwNzk1Mjg0OH0.zonQMk22nXN0VsbHyI88hT27ntl-VxEEi8k2G8-k5lc')
 declare global { interface Window { FB: any } }
+const IDB_NAME='taglive_db'; const IDB_VER=3;
+const idbOpen=():Promise<IDBDatabase>=>new Promise((res,rej)=>{
+const r=indexedDB.open(IDB_NAME, IDB_VER);
+  r.onupgradeneeded=()=>{ const db=r.result; if(!db.objectStoreNames.contains('intros')) db.createObjectStore('intros',{keyPath:'id'}); if(!db.objectStoreNames.contains('outros')) db.createObjectStore('outros',{keyPath:'id'}) };
+  r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);
+});
+const idbGetAll=async(store:string):Promise<any[]>=>{ try{ const db=await idbOpen(); return await new Promise((res)=>{ const tx=db.transaction(store,'readonly'); const req=tx.objectStore(store).getAll(); req.onsuccess=()=>res(req.result as any[]); }); }catch{ return [] } };
+const idbSave=async(store:string,item:any)=>{ const db=await idbOpen(); await new Promise<void>((res)=>{ const tx=db.transaction(store,'readwrite'); tx.objectStore(store).put(item); tx.oncomplete=()=>res(); }); };
 const OFFLINE_KJV: Record<string,string> = {"john 3:16":"John 3:16 - For God so loved the world...","romans 1:20":"Romans 1:20 - For the invisible things...","romans 8:28":"Romans 8:28 - And we know that all things...","psalm 23":"Psalm 23 - The LORD is my shepherd...","jeremiah 29:11":"Jeremiah 29:11 - For I know the thoughts...","philippians 4:13":"Philippians 4:13 - I can do all things...","isaiah 41:10":"Isaiah 41:10 - Fear thou not...","john 14:6":"John 14:6 - I am the way...","2 timothy 1:7":"2 Timothy 1:7 - For God hath not given...","psalm 91:1":"Psalm 91:1 - He that dwelleth...","matthew 28:19":"Matthew 28:19 - Go ye therefore...","genesis 1:1":"Genesis 1:1 - In the beginning...","proverbs 3:5":"Proverbs 3:5 - Trust in the LORD...","john 1:1":"John 1:1 - In the beginning was the Word...","romans 10:9":"Romans 10:9 - That if thou shalt confess..."}
 const BIBLE_VERSIONS = [{ id: 'kjv', label: 'KJV' },{ id: 'akjv', label: 'NKJV-like' },{ id: 'web', label: 'NIV-like' },{ id: 'bbe', label: 'GNB-like' },{ id: 'asv', label: 'RSV-like' },{ id: 'lsv', label: 'ESV-like' },{ id: 'oeb-cw', label: 'AMP-like' },{ id: 'webbe', label: 'WEBBE' },]
 const BIBLE_BOOKS = [{ name: "Genesis", chapters: 50 },{ name: "Exodus", chapters: 40 },{ name: "Leviticus", chapters: 27 },{ name: "Numbers", chapters: 36 },{ name: "Deuteronomy", chapters: 34 },{ name: "Joshua", chapters: 24 },{ name: "Judges", chapters: 21 },{ name: "Ruth", chapters: 4 },{ name: "1 Samuel", chapters: 31 },{ name: "2 Samuel", chapters: 24 },{ name: "1 Kings", chapters: 22 },{ name: "2 Kings", chapters: 25 },{ name: "1 Chronicles", chapters: 29 },{ name: "2 Chronicles", chapters: 36 },{ name: "Ezra", chapters: 10 },{ name: "Nehemiah", chapters: 13 },{ name: "Esther", chapters: 10 },{ name: "Job", chapters: 42 },{ name: "Psalm", chapters: 150 },{ name: "Proverbs", chapters: 31 },{ name: "Ecclesiastes", chapters: 12 },{ name: "Song of Solomon", chapters: 8 },{ name: "Isaiah", chapters: 66 },{ name: "Jeremiah", chapters: 52 },{ name: "Lamentations", chapters: 5 },{ name: "Ezekiel", chapters: 48 },{ name: "Daniel", chapters: 12 },{ name: "Hosea", chapters: 14 },{ name: "Joel", chapters: 3 },{ name: "Amos", chapters: 9 },{ name: "Obadiah", chapters: 1 },{ name: "Jonah", chapters: 4 },{ name: "Micah", chapters: 7 },{ name: "Nahum", chapters: 3 },{ name: "Habakkuk", chapters: 3 },{ name: "Zephaniah", chapters: 3 },{ name: "Haggai", chapters: 2 },{ name: "Zechariah", chapters: 14 },{ name: "Malachi", chapters: 4 },{ name: "Matthew", chapters: 28 },{ name: "Mark", chapters: 16 },{ name: "Luke", chapters: 24 },{ name: "John", chapters: 21 },{ name: "Acts", chapters: 28 },{ name: "Romans", chapters: 16 },{ name: "1 Corinthians", chapters: 16 },{ name: "2 Corinthians", chapters: 13 },{ name: "Galatians", chapters: 6 },{ name: "Ephesians", chapters: 6 },{ name: "Philippians", chapters: 4 },{ name: "Colossians", chapters: 4 },{ name: "1 Thessalonians", chapters: 5 },{ name: "2 Thessalonians", chapters: 3 },{ name: "1 Timothy", chapters: 6 },{ name: "2 Timothy", chapters: 4 },{ name: "Titus", chapters: 3 },{ name: "Philemon", chapters: 1 },{ name: "Hebrews", chapters: 13 },{ name: "James", chapters: 5 },{ name: "1 Peter", chapters: 5 },{ name: "2 Peter", chapters: 3 },{ name: "1 John", chapters: 5 },{ name: "2 John", chapters: 1 },{ name: "3 John", chapters: 1 },{ name: "Jude", chapters: 1 },{ name: "Revelation", chapters: 22 }]
@@ -140,25 +148,30 @@ setStats({ live: live||0, daily: daily||0, weekly: weekly||0, monthly: monthly||
 }
 trackDevice(); const interval=setInterval(trackDevice,60000); return()=>clearInterval(interval)
 },[isAdmin])
-const saveIntros=(arr:any[])=>{ const filtered=arr.filter((x:any)=>x.type!=='animated'); setIntros(filtered); localStorage.setItem('taglive_intros', JSON.stringify(filtered)) }
-const saveOutros=(arr:any[])=>{ const filtered=arr.filter((x:any)=>x.type!=='animated'); setOutros(filtered); localStorage.setItem('taglive_outros', JSON.stringify(filtered)) }
+const saveIntros=(arr:any[])=>{ try{ localStorage.setItem('taglive_intros', JSON.stringify(arr)) }catch{} }
+const saveOutros=(arr:any[])=>{ try{ localStorage.setItem('taglive_outros', JSON.stringify(arr)) }catch{} }
 const fileToBase64=(file:File)=>new Promise<string>((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result as string); r.onerror=rej; r.readAsDataURL(file) })
-const getVideoDuration=(base64:string)=>new Promise<number>((res)=>{ const v=document.createElement('video'); v.src=base64; v.onloadedmetadata=()=>res(v.duration); setTimeout(()=>res(10),2000) })
+const getVideoDuration=(src:string)=>new Promise<number>((res)=>{ const v=document.createElement('video'); v.preload='metadata'; v.onloadedmetadata=()=>res(v.duration||5); v.onerror=()=>res(5); v.src=src; })
 const handleIntroFile=async(e:any)=>{
 const file=e.target.files?.[0]; if(!file) return
-const base64=await fileToBase64(file)
-let dur=5
-if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }
-const item={ id:`id_${Date.now()}`, type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }
-const n=[...intros,item]; saveIntros(n); setActiveIntroId(item.id); localStorage.setItem('taglive_active_intro', item.id); e.target.value=''; alert(`Intro Saved! ${Math.round(dur)}s - stays after refresh`)
+try{
+  const blobUrl=URL.createObjectURL(file);
+  let dur=5; if(file.type.startsWith('video')){ try{ dur=await getVideoDuration(blobUrl) }catch{ dur=5 } }
+  const id=`id_${Date.now()}`; await idbSave('intros',{ id, type:file.type.startsWith('video')?'video':'image', duration:dur, title:file.name, blob:file })
+  const n=[...intros,{ id, type:file.type.startsWith('video')?'video':'image', data:blobUrl, duration:dur, title:file.name }];
+  setIntros(n); setActiveIntroId(id); localStorage.setItem('taglive_active_intro', id); e.target.value=''; alert(`Intro Saved! ${Math.round(dur)}s - stays FOREVER ✅`)
+}catch(err:any){ alert('Intro fail: '+err.message) }
 }
 const handleOutroFile=async(e:any)=>{
 const file=e.target.files?.[0]; if(!file) return
-const base64=await fileToBase64(file)
-let dur=5
-if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }
-const item={ id:`id_${Date.now()}`, type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }
-const n=[...outros,item]; saveOutros(n); setActiveOutroId(item.id); localStorage.setItem('taglive_active_outro', item.id); e.target.value=''; alert(`Outro Saved! ${Math.round(dur)}s - stays after refresh`)
+try{
+  const blobUrl=URL.createObjectURL(file);
+  let dur=5; if(file.type.startsWith('video')){ try{ dur=await getVideoDuration(blobUrl) }catch{ dur=5 } }
+  const id=`id_${Date.now()}`; await idbSave('outros',{ id, type:file.type.startsWith('video')?'video':'image', duration:dur, title:file.name, blob:file })
+  const all=await idbGetAll('outros'); const list=all.map((x:any)=>({ id:x.id, type:x.type, data: x.blob? URL.createObjectURL(x.blob) : x.data, duration:x.duration, title:x.title }));
+  setOutros(list); const last=list[list.length-1]; if(last){ setActiveOutroId(last.id); localStorage.setItem('taglive_active_outro', last.id); }
+  e.target.value=''; alert(`Outro Saved! ${Math.round(dur)}s - stays FOREVER ✅`)
+}catch(err:any){ alert('Outro fail: '+err.message) }
 }
 const startCamera=async(newFacing=facing)=>{
 try{
@@ -340,12 +353,12 @@ const startRecording=async()=>{
     }
     setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; if(broadcastVideoRef.current){ try{broadcastVideoRef.current.pause()}catch{} } }, (active.duration||5)*1000)
   }
-  chunksRef.current=[]
+  chunksRef.current=[]; setRecordedUrl(null); setMp4Url(null);
   let mime='video/mp4'
   if(!MediaRecorder.isTypeSupported('video/mp4')){ if(MediaRecorder.isTypeSupported('video/webm;codecs=h264')) mime='video/webm;codecs=h264'; else mime='video/webm;codecs=vp9' }
   const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 2500000 })
   rec.ondataavailable=(e)=>{ if(e.data.size>0) chunksRef.current.push(e.data) }
-  rec.onstop=()=>{ const blob=new Blob(chunksRef.current, { type: 'video/mp4' }); const url=URL.createObjectURL(blob); setRecordedUrl(url) }
+  rec.onstop=async()=>{ const webmBlob=new Blob(chunksRef.current, { type: rec.mimeType }); const webmUrl=URL.createObjectURL(webmBlob); setRecordedUrl(webmUrl); setIsConverting(true); try{ const { FFmpeg } = await import('@ffmpeg/ffmpeg'); const { toBlobURL } = await import('@ffmpeg/util'); const ffmpeg = new FFmpeg(); const baseURL='https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm'; await ffmpeg.load({ coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`,'text/javascript'), wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`,'application/wasm') }); const data = new Uint8Array(await webmBlob.arrayBuffer()); await ffmpeg.writeFile('input.webm', data); await ffmpeg.exec(['-i','input.webm','-c:v','libx264','-c:a','aac','-movflags','+faststart','-pix_fmt','yuv420p','output.mp4']); const mp4Data = await ffmpeg.readFile('output.mp4') as any; const mp4Blob = new Blob([mp4Data], {type:'video/mp4'}); const mp4UrlLocal = URL.createObjectURL(mp4Blob); setMp4Url(mp4UrlLocal); setIsConverting(false); }catch(err){ console.log('ffmpeg fail',err); setMp4Url(webmUrl); setIsConverting(false); } }
   rec.start(100); recorderRef.current=rec; setIsRecording(true); startTimer()
 }
 const stopRecordingFinal=()=>{
@@ -572,9 +585,12 @@ return (
 <div style={{display:'flex',gap:6,marginTop:10}}>
 {!isRecording?<button onClick={startRecording} disabled={!isCam} style={{flex:1,background:isCam?'#a21caf':'#ccc',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Record MP4 {activeIntroId?'+ Intro':''}</button>
 :<button onClick={stopRecording} style={{flex:1,background:'#111',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Stop + Outro ({formatTime(liveSeconds)})</button>}
-{recordedUrl&&<a href={recordedUrl} download={`${churchName.replace(/[^a-zA-Z0-9]/g,'_')}-${Date.now()}.mp4`} style={{flex:1,background:'#16a34a',color:'#fff',padding:12,borderRadius:10,fontWeight:800,textAlign:'center',textDecoration:'none',fontSize:12}}>Download MP4</a>}
+{isConverting&&<div style={{padding:10,background:'#fef3c7',color:'#92400e',borderRadius:10,fontWeight:800,fontSize:12}}>⏳ Converting to MP4 with SOUND + TIMER... Wait 10 sec...</div>}
+{mp4Url&&<a href={mp4Url} download={`${churchName.replace(/[^a-zA-Z0-9]/g,'_')}-${Date.now()}_WITH_SOUND.mp4`} style={{flex:1,background:'#16a34a',color:'#fff',padding:14,borderRadius:10,fontWeight:800,textAlign:'center',textDecoration:'none',fontSize:13}}>⬇️ Download MP4 WITH SOUND + TIMER ✅</a>}
+{!mp4Url&&recordedUrl&&<a href={recordedUrl} download={`${churchName.replace(/[^a-zA-Z0-9]/g,'_')}-${Date.now()}.mp4`} style={{flex:1,background:'#6b7280',color:'#fff',padding:12,borderRadius:10,fontWeight:800,textAlign:'center',textDecoration:'none',fontSize:12}}>Download WebM (backup)</a>}
 </div>
-{recordedUrl&&<video src={recordedUrl} controls style={{width:'100%',marginTop:8,borderRadius:12}}/>}
+{mp4Url&&<video src={mp4Url} controls style={{width:'100%',marginTop:8,borderRadius:12,background:'#000'}}/>}
+{!mp4Url&&recordedUrl&&<video src={recordedUrl} controls style={{width:'100%',marginTop:8,borderRadius:12}}/>}
 <div style={{display:'flex',gap:6,marginTop:10}}><button onClick={openBibleApp} style={{flex:1,background:'#2563eb',color:'#fff',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Open Bible App</button><button onClick={pasteClipboard} style={{flex:1,background:'#059669',color:'#fff',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Paste Verse</button><button onClick={saveVerse} style={{flex:1,background:'#f59e0b',color:'#000',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Save</button></div>
 <textarea value={verse} onChange={e=>setVerse(e.target.value)} style={{width:'100%',height:90,marginTop:10,padding:12,borderRadius:12,border:'1px solid #ddd'}} placeholder={"Ministering:\nNAME OF PRESENTER"}/>
 {saved.length>0&&<div style={{marginTop:8,border:'1px solid #eee',borderRadius:12,padding:8,background:'#fff'}}>
