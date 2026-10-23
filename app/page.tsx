@@ -354,12 +354,12 @@ const startRecording=async()=>{
     setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; if(broadcastVideoRef.current){ try{broadcastVideoRef.current.pause()}catch{} } }, (active.duration||5)*1000)
   }
   chunksRef.current=[]; setRecordedUrl(null); setMp4Url(null);
-  let mime='video/mp4'
-  if(!MediaRecorder.isTypeSupported('video/mp4')){ if(MediaRecorder.isTypeSupported('video/webm;codecs=h264')) mime='video/webm;codecs=h264'; else mime='video/webm;codecs=vp9' }
-  const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 2500000 })
-  rec.ondataavailable=(e)=>{ if(e.data.size>0) chunksRef.current.push(e.data) }
-  rec.onstop=async()=>{ const webmBlob=new Blob(chunksRef.current, { type: rec.mimeType }); const webmUrl=URL.createObjectURL(webmBlob); setRecordedUrl(webmUrl); setIsConverting(true); try{ const { FFmpeg } = await import('@ffmpeg/ffmpeg'); const { toBlobURL } = await import('@ffmpeg/util'); const ffmpeg = new FFmpeg(); const baseURL='https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm'; await ffmpeg.load({ coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`,'text/javascript'), wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`,'application/wasm') }); const data = new Uint8Array(await webmBlob.arrayBuffer()); await ffmpeg.writeFile('input.webm', data); await ffmpeg.exec(['-i','input.webm','-c:v','libx264','-c:a','aac','-movflags','+faststart','-pix_fmt','yuv420p','output.mp4']); const mp4Data = await ffmpeg.readFile('output.mp4') as any; const mp4Blob = new Blob([mp4Data], {type:'video/mp4'}); const mp4UrlLocal = URL.createObjectURL(mp4Blob); setMp4Url(mp4UrlLocal); setIsConverting(false); }catch(err){ console.log('ffmpeg fail',err); setMp4Url(webmUrl); setIsConverting(false); } }
-  rec.start(100); recorderRef.current=rec; setIsRecording(true); startTimer()
+    let mime='video/webm;codecs=vp9,opus'
+    if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm'
+    const rec=new MediaRecorder(canvasStreamRef.current!, { mimeType: mime, audioBitsPerSecond: 128000, videoBitsPerSecond: 2500000 })
+    rec.ondataavailable=(e)=>{ if(e.data.size>0) chunksRef.current.push(e.data) }
+    rec.onstop=()=>{ const blob=new Blob(chunksRef.current, { type: 'video/webm;codecs=vp9,opus' }); const url=URL.createObjectURL(blob); setRecordedUrl(url); setMp4Url(url); setIsConverting(false); }
+    rec.start(100); recorderRef.current=rec
 }
 const stopRecordingFinal=()=>{
   recorderRef.current?.stop(); setIsRecording(false); setBroadcastPlaying(null); broadcastImageRef.current=null; 
