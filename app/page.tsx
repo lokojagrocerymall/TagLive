@@ -415,15 +415,77 @@ ctx.drawImage(broadcastImageRef.current,x,y,nw,nh)
 const vw=broadcastVideoRef.current.videoWidth, vh=broadcastVideoRef.current.videoHeight
 if(vw&&vh){ const ratio=Math.min(c.width/vw, c.height/vh); const nw=vw*ratio, nh=vh*ratio; const x=(c.width-nw)/2, y=(c.height-nh)/2; ctx.drawImage(broadcastVideoRef.current,x,y,nw,nh) }
 }
-return
-  }
-  }
-  }
-  a=requestAnimationFrame(draw)
-  }
-  draw()
-  return()=>cancelAnimationFrame(a)
-  },[isCam,verse,isLive,pos,bgMode,fontSize,align,bgImage,ytLive,textColor,boxColor,boxOpacity,logoImage,logoPos,isRecording,selected,showText,tickerOn,tickerText,tickerSize,tickerSpeed,churchName,showChurchName,liveSeconds,lowData,broadcastPlaying])
+} else {
+const hexToRgba=(hex:string,op:number)=>{ const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16); return `rgba(${r},${g},${b},${op})` }
+if(bgMode==='split'){
+ctx.fillStyle='#000'; ctx.fillRect(0,0,c.width,c.height)
+const vw=v.videoWidth||1280; const vh=v.videoHeight||720
+const targetW=c.width; const targetH=c.height*0.52
+const scale=Math.max(targetW/vw,targetH/vh)
+const sW=targetW/scale; const sH=targetH/scale
+const sX=(vw-sW)/2; const sY=(vh-sH)/2
+ctx.drawImage(v,sX,sY,sW,sH,0,c.height*0.48,targetW,targetH)
+} else if(bgMode==='black'){ ctx.fillStyle='#000'; ctx.fillRect(0,0,c.width,c.height) }
+else if(bgMode==='image'){ 
+  if(bgImageRef.current){
+    const iw=bgImageRef.current.width, ih=bgImageRef.current.height
+    const rCanvas=c.width/c.height, rImg=iw/ih
+    let sx,sy,sw,sh
+    if(rImg>rCanvas){ sh=ih; sw=ih*rCanvas; sx=(iw-sw)/2; sy=0 }
+    else { sw=iw; sh=iw/rCanvas; sx=0; sy=(ih-sh)/2 }
+    ctx.drawImage(bgImageRef.current,sx,sy,sw,sh,0,0,c.width,c.height)
+  } else { const g=ctx.createLinearGradient(0,0,c.width,c.height); g.addColorStop(0,'#1e3a8a'); g.addColorStop(1,'#581c87'); ctx.fillStyle=g; ctx.fillRect(0,0,c.width,c.height) }
+}
+else {
+  const vw=v.videoWidth||1280, vh=v.videoHeight||720
+  const rCanvas=c.width/c.height, rVideo=vw/vh
+  let sx,sy,sw,sh
+  if(rVideo>rCanvas){ sh=vh; sw=vh*rCanvas; sx=(vw-sw)/2; sy=0 }
+  else { sw=vw; sh=vw/rCanvas; sx=0; sy=(vh-sh)/2 }
+  ctx.drawImage(v,sx,sy,sw,sh,0,0,c.width,c.height)
+}
+if(logoImageRef.current){ ctx.save(); ctx.translate(logoPos.x,logoPos.y); ctx.rotate(logoPos.rotation*Math.PI/180); ctx.scale(logoPos.scale,logoPos.scale); const iw=logoImageRef.current.width, ih=logoImageRef.current.height; const maxLogoW=180; const sc=Math.min(1,maxLogoW/iw); ctx.drawImage(logoImageRef.current,-iw*sc/2,-ih*sc/2,iw*sc,ih*sc); if(selected==='logo'){ ctx.strokeStyle='#00ff00'; ctx.lineWidth=4; ctx.setLineDash([10,10]); ctx.strokeRect(-iw*sc/2-6,-ih*sc/2-6,iw*sc+12,ih*sc+12); ctx.setLineDash([]) } ctx.restore() }
+if(showText){
+ctx.save();
+const isSplit=bgMode==='split'
+const drawX=isSplit?c.width*0.5:pos.x
+const drawY=isSplit?c.height*0.24:pos.y
+const maxW=isSplit?600:560
+ctx.translate(drawX,drawY); ctx.rotate(pos.rotation*Math.PI/180); ctx.scale(pos.scale,pos.scale); ctx.font=`bold ${fontSize}px sans-serif`; const pad=24; const boxW=maxW+pad*2; const paragraphs=verse.split('\n'); let allLines:{text:string,isLastInPara:boolean,paraIdx:number}[]=[]; paragraphs.forEach((para,pIdx)=>{ if(!para.trim()){ allLines.push({text:'',isLastInPara:true,paraIdx:pIdx}); return } const wrapped=wrapText(ctx,para.trim(),maxW); wrapped.forEach((l,i)=>allLines.push({text:l,isLastInPara:i===wrapped.length-1,paraIdx:pIdx})) }); const realCount=allLines.filter(l=>l.text!=='').length; const lineH=fontSize*1.38; const boxH=realCount*lineH+(paragraphs.length-1)*10+pad*2; if(bgMode==='face'||bgMode==='split'){ ctx.fillStyle=hexToRgba(boxColor,boxOpacity); ctx.fillRect(-boxW/2,-boxH/2,boxW,boxH) } else if(bgMode==='image'){ ctx.shadowColor='rgba(0,0,0,0.9)'; ctx.shadowBlur=10; ctx.shadowOffsetX=2; ctx.shadowOffsetY=3 } ctx.fillStyle=textColor; let y=-boxH/2+pad+lineH/2; allLines.forEach((ln)=>{ if(!ln.text){ y+=10; return } if(paragraphs.length>1&&ln.paraIdx>0){ ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(ln.text,0,y) } else { if(align==='justify'&&!ln.isLastInPara){ const words=ln.text.split(' '); if(words.length===1){ ctx.textAlign='center'; ctx.fillText(ln.text,0,y) } else { ctx.textAlign='left'; ctx.textBaseline='middle'; const totalWordsWidth=words.reduce((s,w)=>s+ctx.measureText(w).width,0); const gap=(maxW-totalWordsWidth)/(words.length-1); let x=-maxW/2; words.forEach((w)=>{ ctx.fillText(w,x,y); x+=ctx.measureText(w).width+gap }) } } else { ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(ln.text,0,y) } } y+=lineH });
+if(isSplit&&showChurchName&&churchName){
+ctx.fillStyle='#FFD700'; ctx.font=`900 ${Math.max(14,Math.floor(fontSize*0.52))}px sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle'
+const churchY=y+22; const tW=ctx.measureText(churchName.toUpperCase()).width+28
+ctx.fillStyle='rgba(124,58,237,0.95)'; const pillH=28; ctx.fillRect(-tW/2,churchY-pillH/2,tW,pillH)
+ctx.fillStyle='#FFD700'; ctx.fillText(churchName.toUpperCase(),0,churchY)
+}
+if(selected==='text'&&!isSplit){ ctx.strokeStyle='#7c3aed'; ctx.lineWidth=3; ctx.setLineDash([12,8]); ctx.strokeRect(-boxW/2-4,-boxH/2-4,boxW+8,boxH+8); ctx.setLineDash([]) } ctx.restore() }
+if(isLive||ytLive||isRecording){
+const timeStr=formatTime(liveSeconds)
+ctx.save(); ctx.fillStyle='#FF0000'; ctx.font='900 28px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top'; ctx.shadowColor='rgba(0,0,0,0.9)'; ctx.shadowBlur=6; ctx.fillText(`● LIVE ${timeStr}${lowData?' [480p]':''}`,24,22); ctx.restore()
+}
+if(tickerOn&&tickerText){
+const tickerH=tickerSize+24
+ctx.fillStyle='#000000'
+ctx.fillRect(0,c.height-tickerH,c.width,tickerH)
+ctx.fillStyle='#FFFF00'
+ctx.font='bold '+tickerSize+'px sans-serif'
+ctx.textAlign='left'
+ctx.textBaseline='middle'
+const txt=tickerText+'   •   '+tickerText
+const w=ctx.measureText(txt).width
+tickerOffsetRef.current-=tickerSpeed
+if(tickerOffsetRef.current<0-w){ tickerOffsetRef.current=c.width }
+ctx.fillText(txt,tickerOffsetRef.current,c.height-tickerH/2)
+}
+}
+}
+}
+}
+a=requestAnimationFrame(draw)
+}
+draw()
+return()=>cancelAnimationFrame(a)
+},[isCam,verse,isLive,pos,bgMode,fontSize,align,bgImage,ytLive,textColor,boxColor,boxOpacity,logoImage,logoPos,isRecording,selected,showText,tickerOn,tickerText,tickerSize,tickerSpeed,churchName,showChurchName,liveSeconds,lowData,broadcastPlaying])
 return (
 <div style={{padding:16,maxWidth:480,margin:'0 auto'}}>
 {showBible&&(
