@@ -285,7 +285,7 @@ const onLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; con
 const handleChurchLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const base64=await fileToBase64(f); setLogoImage(base64); localStorage.setItem('taglive_church_logo', base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; }
 const removeChurchLogo=()=>{ localStorage.removeItem('taglive_church_logo'); setLogoImage(null); logoImageRef.current=null; if(churchLogoInputRef.current) churchLogoInputRef.current.value=''; if(logoInputRef.current) logoInputRef.current.value=''; }
 
-// FIXED START RECORDING - INTRO NOW AUTO CLEARS
+// FIXED START RECORDING - INTRO NOW AUTO CLEARS + NO SKIP + SOUND WORKS
 const startRecording=async()=>{
   const canvas=canvasRef.current; if(!canvas) return alert('Start camera first')
   if(canvas.width!==720 || canvas.height!==1280){ canvas.width=720; canvas.height=1280 }
@@ -294,24 +294,22 @@ const startRecording=async()=>{
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
     audioCtxRef.current = ctx
     const dest = ctx.createMediaStreamDestination()
-    ;(ctx as any)._dest = dest // save for camera flip fix
-    ;(audioCtxRef.current as any)._dest = dest
+    ;(ctx as any)._dest = dest
     
-    // Mic audio
+    // Mic audio - keep when you flip camera
     const micTracks = streamRef.current?.getAudioTracks()||[]
     micTracks.forEach(t=>{
       try{ const src = ctx.createMediaStreamSource(new MediaStream([t])); src.connect(dest) }catch{}
     })
     
-    // FIX: Intro/Outro video sound -> into recording
+    // FIX: Intro/Outro video sound -> into recording + LIVE speaker
     if(broadcastVideoRef.current){
       try{
-        // Create source from video element so its sound goes to recording
         const videoEl = broadcastVideoRef.current
-        // Use MediaElementSource (works for intro/outro video sound)
-        const vSrc = (ctx as any)._videoSrc || ctx.createMediaElementSource(videoEl)
+        const vSrc = ctx.createMediaElementSource(videoEl)
         ;(ctx as any)._videoSrc = vSrc
         vSrc.connect(dest)
+        vSrc.connect(ctx.destination) // for LIVE sound
       }catch{}
     }
     
@@ -323,10 +321,22 @@ const startRecording=async()=>{
   const active=intros.find(i=>i.id===activeIntroId)
   if(active){
     setBroadcastPlaying(active)
-    if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img } }
+    if(active.type==='image'){ 
+      const img=new Image(); img.src=active.data; 
+      await new Promise(r=>{ img.onload=r as any; setTimeout(r,1000) })
+      broadcastImageRef.current=img 
+    }
     else if(active.type==='video'&&broadcastVideoRef.current){
-      broadcastVideoRef.current.src=active.data; broadcastVideoRef.current.muted=false; broadcastVideoRef.current.volume=1; broadcastVideoRef.current.crossOrigin="anonymous"
-      try{ await broadcastVideoRef.current.play(); }catch{}
+      const v=broadcastVideoRef.current
+      v.crossOrigin="anonymous"; v.muted=false; v.volume=1; v.playsInline=true
+      v.src=active.data
+      // FIX SKIP: wait until video can play through
+      await new Promise<void>(r=>{
+        const onReady=()=>{ v.removeEventListener('canplaythrough',onReady); r() }
+        v.addEventListener('canplaythrough',onReady)
+        setTimeout(r,2500) // fallback for slow phones
+      })
+      try{ await v.play(); }catch(e){ console.log('intro play fail',e) }
     }
     setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; if(broadcastVideoRef.current){ try{broadcastVideoRef.current.pause()}catch{} } }, (active.duration||5)*1000)
   }
@@ -350,9 +360,15 @@ const stopRecording=async()=>{
     setBroadcastPlaying(active)
     if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; setTimeout(()=>{ stopRecordingFinal() }, (active.duration||5)*1000) }
     else if(active.type==='video'&&broadcastVideoRef.current){
-      broadcastVideoRef.current.src=active.data; broadcastVideoRef.current.muted=false; broadcastVideoRef.current.volume=1; broadcastVideoRef.current.crossOrigin="anonymous"
-      try{ await broadcastVideoRef.current.play() }catch{}
-      broadcastVideoRef.current.onended=()=>{ stopRecordingFinal() }
+      const v=broadcastVideoRef.current
+      v.crossOrigin="anonymous"; v.muted=false; v.volume=1; v.playsInline=true; v.src=active.data
+      await new Promise<void>(r=>{
+        const onReady=()=>{ v.removeEventListener('canplaythrough',onReady); r() }
+        v.addEventListener('canplaythrough',onReady)
+        setTimeout(r,2500)
+      })
+      try{ await v.play() }catch{}
+      v.onended=()=>{ stopRecordingFinal() }
       setTimeout(()=>{ stopRecordingFinal() }, (active.duration||7)*1000)
     } else { setTimeout(()=>{ stopRecordingFinal() }, (active.duration||5)*1000) }
   } else { stopRecordingFinal() }
@@ -400,69 +416,6 @@ const vw=broadcastVideoRef.current.videoWidth, vh=broadcastVideoRef.current.vide
 if(vw&&vh){ const ratio=Math.min(c.width/vw, c.height/vh); const nw=vw*ratio, nh=vh*ratio; const x=(c.width-nw)/2, y=(c.height-nh)/2; ctx.drawImage(broadcastVideoRef.current,x,y,nw,nh) }
 }
 return
-}
-const hexToRgba=(hex:string,op:number)=>{ const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16); return `rgba(${r},${g},${b},${op})` }
-if(bgMode==='split'){
-ctx.fillStyle='#000'; ctx.fillRect(0,0,c.width,c.height)
-const vw=v.videoWidth||1280; const vh=v.videoHeight||720
-const targetW=c.width; const targetH=c.height*0.52
-const scale=Math.max(targetW/vw,targetH/vh)
-const sW=targetW/scale; const sH=targetH/scale
-const sX=(vw-sW)/2; const sY=(vh-sH)/2
-ctx.drawImage(v,sX,sY,sW,sH,0,c.height*0.48,targetW,targetH)
-} else if(bgMode==='black'){ ctx.fillStyle='#000'; ctx.fillRect(0,0,c.width,c.height) }
-else if(bgMode==='image'){ 
-  if(bgImageRef.current){
-    const iw=bgImageRef.current.width, ih=bgImageRef.current.height
-    const rCanvas=c.width/c.height, rImg=iw/ih
-    let sx,sy,sw,sh
-    if(rImg>rCanvas){ sh=ih; sw=ih*rCanvas; sx=(iw-sw)/2; sy=0 }
-    else { sw=iw; sh=iw/rCanvas; sx=0; sy=(ih-sh)/2 }
-    ctx.drawImage(bgImageRef.current,sx,sy,sw,sh,0,0,c.width,c.height)
-  } else { const g=ctx.createLinearGradient(0,0,c.width,c.height); g.addColorStop(0,'#1e3a8a'); g.addColorStop(1,'#581c87'); ctx.fillStyle=g; ctx.fillRect(0,0,c.width,c.height) }
-}
-else {
-  const vw=v.videoWidth||1280, vh=v.videoHeight||720
-  const rCanvas=c.width/c.height, rVideo=vw/vh
-  let sx,sy,sw,sh
-  if(rVideo>rCanvas){ sh=vh; sw=vh*rCanvas; sx=(vw-sw)/2; sy=0 }
-  else { sw=vw; sh=vw/rCanvas; sx=0; sy=(vh-sh)/2 }
-  ctx.drawImage(v,sx,sy,sw,sh,0,0,c.width,c.height)
-}
-if(logoImageRef.current){ ctx.save(); ctx.translate(logoPos.x,logoPos.y); ctx.rotate(logoPos.rotation*Math.PI/180); ctx.scale(logoPos.scale,logoPos.scale); const iw=logoImageRef.current.width, ih=logoImageRef.current.height; const maxLogoW=180; const sc=Math.min(1,maxLogoW/iw); ctx.drawImage(logoImageRef.current,-iw*sc/2,-ih*sc/2,iw*sc,ih*sc); if(selected==='logo'){ ctx.strokeStyle='#00ff00'; ctx.lineWidth=4; ctx.setLineDash([10,10]); ctx.strokeRect(-iw*sc/2-6,-ih*sc/2-6,iw*sc+12,ih*sc+12); ctx.setLineDash([]) } ctx.restore() }
-if(showText){
-ctx.save();
-const isSplit=bgMode==='split'
-const drawX=isSplit?c.width*0.5:pos.x
-const drawY=isSplit?c.height*0.24:pos.y
-const maxW=isSplit?600:560
-ctx.translate(drawX,drawY); ctx.rotate(pos.rotation*Math.PI/180); ctx.scale(pos.scale,pos.scale); ctx.font=`bold ${fontSize}px sans-serif`; const pad=24; const boxW=maxW+pad*2; const paragraphs=verse.split('\n'); let allLines:{text:string,isLastInPara:boolean,paraIdx:number}[]=[]; paragraphs.forEach((para,pIdx)=>{ if(!para.trim()){ allLines.push({text:'',isLastInPara:true,paraIdx:pIdx}); return } const wrapped=wrapText(ctx,para.trim(),maxW); wrapped.forEach((l,i)=>allLines.push({text:l,isLastInPara:i===wrapped.length-1,paraIdx:pIdx})) }); const realCount=allLines.filter(l=>l.text!=='').length; const lineH=fontSize*1.38; const boxH=realCount*lineH+(paragraphs.length-1)*10+pad*2; if(bgMode==='face'||bgMode==='split'){ ctx.fillStyle=hexToRgba(boxColor,boxOpacity); ctx.fillRect(-boxW/2,-boxH/2,boxW,boxH) } else if(bgMode==='image'){ ctx.shadowColor='rgba(0,0,0,0.9)'; ctx.shadowBlur=10; ctx.shadowOffsetX=2; ctx.shadowOffsetY=3 } ctx.fillStyle=textColor; let y=-boxH/2+pad+lineH/2; allLines.forEach((ln)=>{ if(!ln.text){ y+=10; return } if(paragraphs.length>1&&ln.paraIdx>0){ ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(ln.text,0,y) } else { if(align==='justify'&&!ln.isLastInPara){ const words=ln.text.split(' '); if(words.length===1){ ctx.textAlign='center'; ctx.fillText(ln.text,0,y) } else { ctx.textAlign='left'; ctx.textBaseline='middle'; const totalWordsWidth=words.reduce((s,w)=>s+ctx.measureText(w).width,0); const gap=(maxW-totalWordsWidth)/(words.length-1); let x=-maxW/2; words.forEach((w)=>{ ctx.fillText(w,x,y); x+=ctx.measureText(w).width+gap }) } } else { ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(ln.text,0,y) } } y+=lineH });
-if(isSplit&&showChurchName&&churchName){
-ctx.fillStyle='#FFD700'; ctx.font=`900 ${Math.max(14,Math.floor(fontSize*0.52))}px sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle'
-const churchY=y+22; const tW=ctx.measureText(churchName.toUpperCase()).width+28
-ctx.fillStyle='rgba(124,58,237,0.95)'; const pillH=28; ctx.fillRect(-tW/2,churchY-pillH/2,tW,pillH)
-ctx.fillStyle='#FFD700'; ctx.fillText(churchName.toUpperCase(),0,churchY)
-}
-if(selected==='text'&&!isSplit){ ctx.strokeStyle='#7c3aed'; ctx.lineWidth=3; ctx.setLineDash([12,8]); ctx.strokeRect(-boxW/2-4,-boxH/2-4,boxW+8,boxH+8); ctx.setLineDash([]) } ctx.restore() }
-if(isLive||ytLive||isRecording){
-const timeStr=formatTime(liveSeconds)
-ctx.save(); ctx.fillStyle='#FF0000'; ctx.font='900 28px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top'; ctx.shadowColor='rgba(0,0,0,0.9)'; ctx.shadowBlur=6; ctx.fillText(`● LIVE ${timeStr}${lowData?' [480p]':''}`,24,22); ctx.restore()
-}
-if(tickerOn&&tickerText){
-const tickerH=tickerSize+24
-ctx.fillStyle='#000000'
-ctx.fillRect(0,c.height-tickerH,c.width,tickerH)
-ctx.fillStyle='#FFFF00'
-ctx.font='bold '+tickerSize+'px sans-serif'
-ctx.textAlign='left'
-ctx.textBaseline='middle'
-const txt=tickerText+'   •   '+tickerText
-const w=ctx.measureText(txt).width
-tickerOffsetRef.current-=tickerSpeed
-if(tickerOffsetRef.current<0-w){ tickerOffsetRef.current=c.width }
-ctx.fillText(txt,tickerOffsetRef.current,c.height-tickerH/2)
-}
-}
 }
 a=requestAnimationFrame(draw)
 }
@@ -548,7 +501,8 @@ return (
 <div style={{display:'flex',alignItems:'center',gap:6,marginTop:10,flexWrap:'wrap'}}><div style={{flex:1,minWidth:140,display:'flex',alignItems:'center',gap:6,background:'#f3f0ff',padding:'6px 10px',borderRadius:10}}><span style={{fontSize:10,fontWeight:800}}>A-</span><input type="range" min={20} max={60} value={fontSize} onChange={e=>setFontSize(parseInt(e.target.value))} style={{flex:1}}/><span style={{fontSize:10,fontWeight:800}}>A+</span><span style={{fontSize:10,fontWeight:800,background:'#111',color:'#fff',padding:'3px 6px',borderRadius:20}}>{fontSize}</span></div><button onClick={()=>setAlign(align==='justify'?'center':'justify')} style={{padding:'8px 10px',borderRadius:10,border:'none',background:align==='justify'?'#111':'#ddd',color:align==='justify'?'#fff':'#000',fontWeight:800,fontSize:10}}>{align==='justify'?'Justify':'Center'}</button><button onClick={pickMedia} style={{padding:'8px 10px',borderRadius:10,border:'none',background:'#7c3aed',color:'#fff',fontWeight:800,fontSize:10}}>Media</button><input ref={fileInputRef} type="file" accept="image/*" onChange={onFilePick} style={{display:'none'}}/></div>
 <div style={{display:'flex',gap:6,marginTop:8,alignItems:'center',background:'#fff',border:'1px solid #eee',padding:8,borderRadius:10,flexWrap:'wrap'}}><div style={{display:'flex',alignItems:'center',gap:4}}><span style={{fontSize:10,fontWeight:800}}>Text</span><input type="color" value={textColor} onChange={e=>setTextColor(e.target.value)} style={{width:28,height:28,border:'none',borderRadius:6}}/></div><div style={{display:'flex',alignItems:'center',gap:4}}><span style={{fontSize:10,fontWeight:800}}>Box</span><input type="color" value={boxColor} onChange={e=>setBoxColor(e.target.value)} style={{width:28,height:28,border:'none',borderRadius:6}}/></div><div style={{display:'flex',alignItems:'center',gap:4,flex:1}}><span style={{fontSize:10,fontWeight:800}}>Opac</span><input type="range" min={0} max={1} step={0.05} value={boxOpacity} onChange={e=>setBoxOpacity(parseFloat(e.target.value))} style={{flex:1}}/></div><button onClick={pickLogo} style={{padding:'6px 10px',borderRadius:8,border:'none',background:logoImage?'#16a34a':'#111',color:'#fff',fontWeight:800,fontSize:10}}>{logoImage?'Logo':'Add Logo'}</button><input ref={logoInputRef} type="file" accept="image/*" onChange={onLogoPick} style={{display:'none'}}/><button onClick={()=>setShowText(!showText)} style={{padding:'6px 10px',borderRadius:8,border:'none',background:showText?'#111':'#ddd',color:showText?'#fff':'#000',fontWeight:800,fontSize:10}}>{showText?'Text':'No Text'}</button></div>
 <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{marginTop:10,background:'#000',borderRadius:18,overflow:'hidden',position:'relative',aspectRatio:'9/16',touchAction:'none'}}><video ref={videoRef} muted playsInline autoPlay style={{width:'100%',height:'100%',objectFit:'cover',display:isCam&&bgMode==='face'?'block':'none'}}/>{!isCam&&<div style={{color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',height:420}}>Camera off - {lowData?'480p ON':'720p'}</div>}<canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%'}}/>
-<video ref={broadcastVideoRef} muted={false} playsInline crossOrigin="anonymous" style={{display:'none'}}/>
+{/* FIXED: off-screen not display:none so sound works */}
+<video ref={broadcastVideoRef} muted={false} playsInline crossOrigin="anonymous" style={{position:'absolute',left:'-9999px',top:'-9999px',width:'10px',height:'10px',opacity:0.01}}/>
 {isCam&&(<div style={{position:'absolute',top: bgMode==='split'?'auto':'12px',bottom: bgMode==='split'?'50px':'auto',right:12,display:'flex',gap:8,zIndex:50}}><button onClick={toggleCamera} style={{background:'rgba(0,0,0,0.85)',color:'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>Flip</button><button onClick={toggleTorch} style={{background:torch?'#fbbf24':'rgba(0,0,0,0.85)',color:torch?'#000':'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>{torch?'Flash On':'Flash'}</button></div>)}
 </div>
 <div style={{display:'flex',gap:8,marginTop:12}}>{!isCam?<button onClick={()=>startCamera()} style={{flex:1,background:'#111',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Start Camera {lowData?'(480p)':''}</button>:<><button onClick={toggleCamera} style={{flex:1,background:'#7c3aed',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Switch Camera</button><button onClick={stopCamera} style={{flex:1,background:'#444',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Stop</button></>}</div>
