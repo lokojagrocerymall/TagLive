@@ -170,25 +170,6 @@ const h=lowData?480:720
 const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:newFacing,width:{ideal:w},height:{ideal:h}},audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}})
 streamRef.current=s; trackRef.current=s.getVideoTracks()[0]
 if(videoRef.current){ videoRef.current.srcObject=s; await videoRef.current.play() }
-if(isRecording && audioCtxRef.current){
-  try{
-    const ctx=audioCtxRef.current
-    const newTrack=s.getAudioTracks()[0]
-    if(newTrack && (audioCtxRef.current as any)._dest){
-      const src=ctx.createMediaStreamSource(new MediaStream([newTrack]))
-      src.connect((audioCtxRef.current as any)._dest)
-    }
-  }catch{}
-}
-setFacing(newFacing); setIsCam(true)
-}catch(e:any){ alert('Camera: '+e.message) }
-}
-ioCtxRef.current as any)._dest){
-      const src=ctx.createMediaStreamSource(new MediaStream([newTrack]))
-      src.connect((audioCtxRef.current as any)._dest)
-    }
-  }catch{}
-}
 setFacing(newFacing); setIsCam(true)
 }catch(e:any){ alert('Camera: '+e.message) }
 }
