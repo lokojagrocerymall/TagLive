@@ -6,8 +6,6 @@ declare global { interface Window { FB: any } }
 const OFFLINE_KJV: Record<string,string> = {"john 3:16":"John 3:16 - For God so loved the world...","romans 1:20":"Romans 1:20 - For the invisible things...","romans 8:28":"Romans 8:28 - And we know that all things...","psalm 23":"Psalm 23 - The LORD is my shepherd...","jeremiah 29:11":"Jeremiah 29:11 - For I know the thoughts...","philippians 4:13":"Philippians 4:13 - I can do all things...","isaiah 41:10":"Isaiah 41:10 - Fear thou not...","john 14:6":"John 14:6 - I am the way...","2 timothy 1:7":"2 Timothy 1:7 - For God hath not given...","psalm 91:1":"Psalm 91:1 - He that dwelleth...","matthew 28:19":"Matthew 28:19 - Go ye therefore...","genesis 1:1":"Genesis 1:1 - In the beginning...","proverbs 3:5":"Proverbs 3:5 - Trust in the LORD...","john 1:1":"John 1:1 - In the beginning was the Word...","romans 10:9":"Romans 10:9 - That if thou shalt confess..."}
 const BIBLE_VERSIONS = [{ id: 'kjv', label: 'KJV' },{ id: 'akjv', label: 'NKJV-like' },{ id: 'web', label: 'NIV-like' },{ id: 'bbe', label: 'GNB-like' },{ id: 'asv', label: 'RSV-like' },{ id: 'lsv', label: 'ESV-like' },{ id: 'oeb-cw', label: 'AMP-like' },{ id: 'webbe', label: 'WEBBE' },]
 const BIBLE_BOOKS = [{ name: "Genesis", chapters: 50 },{ name: "Exodus", chapters: 40 },{ name: "Leviticus", chapters: 27 },{ name: "Numbers", chapters: 36 },{ name: "Deuteronomy", chapters: 34 },{ name: "Joshua", chapters: 24 },{ name: "Judges", chapters: 21 },{ name: "Ruth", chapters: 4 },{ name: "1 Samuel", chapters: 31 },{ name: "2 Samuel", chapters: 24 },{ name: "1 Kings", chapters: 22 },{ name: "2 Kings", chapters: 25 },{ name: "1 Chronicles", chapters: 29 },{ name: "2 Chronicles", chapters: 36 },{ name: "Ezra", chapters: 10 },{ name: "Nehemiah", chapters: 13 },{ name: "Esther", chapters: 10 },{ name: "Job", chapters: 42 },{ name: "Psalm", chapters: 150 },{ name: "Proverbs", chapters: 31 },{ name: "Ecclesiastes", chapters: 12 },{ name: "Song of Solomon", chapters: 8 },{ name: "Isaiah", chapters: 66 },{ name: "Jeremiah", chapters: 52 },{ name: "Lamentations", chapters: 5 },{ name: "Ezekiel", chapters: 48 },{ name: "Daniel", chapters: 12 },{ name: "Hosea", chapters: 14 },{ name: "Joel", chapters: 3 },{ name: "Amos", chapters: 9 },{ name: "Obadiah", chapters: 1 },{ name: "Jonah", chapters: 4 },{ name: "Micah", chapters: 7 },{ name: "Nahum", chapters: 3 },{ name: "Habakkuk", chapters: 3 },{ name: "Zephaniah", chapters: 3 },{ name: "Haggai", chapters: 2 },{ name: "Zechariah", chapters: 14 },{ name: "Malachi", chapters: 4 },{ name: "Matthew", chapters: 28 },{ name: "Mark", chapters: 16 },{ name: "Luke", chapters: 24 },{ name: "John", chapters: 21 },{ name: "Acts", chapters: 28 },{ name: "Romans", chapters: 16 },{ name: "1 Corinthians", chapters: 16 },{ name: "2 Corinthians", chapters: 13 },{ name: "Galatians", chapters: 6 },{ name: "Ephesians", chapters: 6 },{ name: "Philippians", chapters: 4 },{ name: "Colossians", chapters: 4 },{ name: "1 Thessalonians", chapters: 5 },{ name: "2 Thessalonians", chapters: 3 },{ name: "1 Timothy", chapters: 6 },{ name: "2 Timothy", chapters: 4 },{ name: "Titus", chapters: 3 },{ name: "Philemon", chapters: 1 },{ name: "Hebrews", chapters: 13 },{ name: "James", chapters: 5 },{ name: "1 Peter", chapters: 5 },{ name: "2 Peter", chapters: 3 },{ name: "1 John", chapters: 5 },{ name: "2 John", chapters: 1 },{ name: "3 John", chapters: 1 },{ name: "Jude", chapters: 1 },{ name: "Revelation", chapters: 22 }]
-const SS_HYMNS = [{no:1,title:"There Shall Be Showers Of Blessing",lyrics:"There shall be showers of blessing:\nThis is the promise of love;"},{no:2,title:"What A Friend We Have In Jesus",lyrics:"What a friend we have in Jesus, All our sins and griefs to bear!"},{no:10,title:"How Great Thou Art",lyrics:"O Lord my God, when I in awesome wonder\nConsider all the worlds Thy hands have made;"},{no:20,title:"It Is Well With My Soul",lyrics:"When peace like a river attendeth my way,\nWhen sorrows like sea billows roll;\nWhatever my lot, Thou hast taught me to say,\nIt is well, it is well with my soul."},{no:40,title:"To God Be The Glory",lyrics:"To God be the glory, great things He hath done;"},{no:41,title:"The Old Rugged Cross",lyrics:"On a hill far away stood an old rugged cross,"},{no:42,title:"Blessed Assurance",lyrics:"Blessed assurance, Jesus is mine!"},{no:63,title:"All Hail The Power Of Jesus Name",lyrics:"All hail the power of Jesus' name!"},{no:85,title:"Hark The Herald Angels Sing",lyrics:"Hark! the herald angels sing"},{no:93,title:"O Come All Ye Faithful",lyrics:"O come, all ye faithful,"},{no:100,title:"Holy Holy Holy",lyrics:"Holy, holy, holy! Lord God Almighty!"},{no:151,title:"Behold The Saviour Of Mankind",lyrics:"Behold the Saviour of mankind"},{no:152,title:"Low In The Grave He Lay",lyrics:"Low in the grave He lay—Jesus, my Saviour!"},{no:204,title:"I Will Sing The Wondrous Story",lyrics:"I will sing the wondrous story"},{no:210,title:"I've Found A Friend In Jesus",lyrics:"I've found a friend in Jesus, He's everything to me,"},{no:301,title:"I've A Message From The Lord",lyrics:"I've a message from the Lord, Hallelujah!"},{no:320,title:"When The Roll Is Called Up Yonder",lyrics:"When the trumpet of the Lord shall sound,"},{no:351,title:"Why Do You Wait Dear Brother",lyrics:"Why do you wait, dear brother?"},{no:352,title:"Come With Thy Sins To The Fountain",lyrics:"Come with thy sins to the fountain,"},];
-const BUILD_348 = ()=>{ let list=[...SS_HYMNS]; for(let i=1;i<=348;i++){ if(!list.find(h=>h.no===i)){ list.push({no:i,title:`SS&S ${i}`,lyrics:`SS&S ${i}`}); } } return list.sort((a,b)=>a.no-b.no); };
 export default function LiveStudio(){
 const [verse,setVerse]=useState("John 3:16 - For God so loved the world that He gave His only begotten Son...")
 const [isCam,setIsCam]=useState(false)
@@ -45,133 +43,66 @@ const [activeIntroId,setActiveIntroId]=useState<string|null>(null)
 const [activeOutroId,setActiveOutroId]=useState<string|null>(null)
 const [showStudio,setShowStudio]=useState(false)
 const [showTickerStudio,setShowTickerStudio]=useState(false)
+const [showSettings,setShowSettings]=useState(true)
+const [showBible,setShowBible]=useState(false)
+const [bibleQuery,setBibleQuery]=useState('')
+const [bibleResult,setBibleResult]=useState('')
+const [bibleLoading,setBibleLoading]=useState(false)
+const [bibleVer,setBibleVer]=useState('kjv')
 const [showAdmin,setShowAdmin]=useState(false)
-const [showSettings,setShowSettings]=useState(false)
-const [broadcastPlaying,setBroadcastPlaying]=useState<any>(null)
-const [tickerText,setTickerText]=useState('📢 ANNOUNCEMENT: Sunday Service 9AM | Midweek Service Wednesday 6PM | Invite Someone!')
 const [tickerOn,setTickerOn]=useState(false)
-const [tickerSize,setTickerSize]=useState(26)
+const [tickerText,setTickerText]=useState('Welcome to Church Service | Sunday Service 9AM | Midweek Wednesday 6PM')
+const [tickerSize,setTickerSize]=useState(18)
 const [tickerSpeed,setTickerSpeed]=useState(2)
-const [churchName,setChurchName]=useState("KPAKO NYANKPA INT'L MINISTRY")
+const [churchName,setChurchName]=useState('KPAKO NYANKPA INT\'L MINISTRY')
 const [showChurchName,setShowChurchName]=useState(true)
 const [liveSeconds,setLiveSeconds]=useState(0)
 const [recSeconds,setRecSeconds]=useState(0)
-const timerRef=useRef<any>(null)
-const [showBible,setShowBible]=useState(false)
-const [bibleVer,setBibleVer]=useState('kjv')
-const [bibleQuery,setBibleQuery]=useState('Romans 1:20')
-const [bibleResult,setBibleResult]=useState('')
-const [bibleLoading,setBibleLoading]=useState(false)
 const [lowData,setLowData]=useState(false)
-const [bibleMode,setBibleMode]=useState<'bible'|'hymn'>('bible')
-const [hymnQuery,setHymnQuery]=useState('')
-const [hymnResult,setHymnResult]=useState('')
-const [hymnLoading,setHymnLoading]=useState(false)
-const tickerOffsetRef=useRef(720)
-const introFileRef=useRef<HTMLInputElement>(null)
-const outroFileRef=useRef<HTMLInputElement>(null)
-const broadcastVideoRef=useRef<HTMLVideoElement>(null)
-const broadcastImageRef=useRef<HTMLImageElement|null>(null)
-const lastTouch=useRef({ dist: 0, angle: 0, x:0, y:0, scale:1, rot:0, selScale:1, selRot:0 })
-const videoRef=useRef<HTMLVideoElement>(null)
+const [broadcastPlaying,setBroadcastPlaying]=useState<any>(null)
 const canvasRef=useRef<HTMLCanvasElement>(null)
+const videoRef=useRef<HTMLVideoElement>(null)
 const streamRef=useRef<MediaStream|null>(null)
 const trackRef=useRef<MediaStreamTrack|null>(null)
-const fileInputRef=useRef<HTMLInputElement>(null)
-const logoInputRef=useRef<HTMLInputElement>(null)
+const recorderRef=useRef<MediaRecorder|null>(null)
+const recordedChunksRef=useRef<Blob[]>([])
+const chunksRef=useRef<Blob[]>([])
 const bgImageRef=useRef<HTMLImageElement|null>(null)
 const logoImageRef=useRef<HTMLImageElement|null>(null)
-const recorderRef=useRef<MediaRecorder|null>(null)
-const chunksRef=useRef<Blob[]>([])
-const recordedChunksRef=useRef<Blob[]>([])
+const broadcastVideoRef=useRef<HTMLVideoElement>(null)
+const broadcastImageRef=useRef<HTMLImageElement|null>(null)
+const fileInputRef=useRef<HTMLInputElement>(null)
+const logoInputRef=useRef<HTMLInputElement>(null)
 const churchLogoInputRef=useRef<HTMLInputElement>(null)
+const introFileRef=useRef<HTMLInputElement>(null)
+const outroFileRef=useRef<HTMLInputElement>(null)
+const tickerOffsetRef=useRef(720)
+const lastTouch=useRef({ x:0, y:0, dist:0, angle:0, selScale:1, selRot:0 })
 const audioCtxRef=useRef<AudioContext|null>(null)
-const formatTime=(sec:number)=>{ const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60; return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}` }
-const startTimer=()=>{ if(timerRef.current) clearInterval(timerRef.current); setLiveSeconds(0); timerRef.current=setInterval(()=>setLiveSeconds(p=>p+1),1000) }
-const stopTimer=()=>{ if(timerRef.current) clearInterval(timerRef.current); timerRef.current=null; setLiveSeconds(0) }
-const openDB=()=>new Promise<any>((res,rej)=>{ const req=indexedDB.open('taglive_db',1); req.onupgradeneeded=()=>{ const db=req.result; if(!db.objectStoreNames.contains('media')) db.createObjectStore('media',{keyPath:'id'}) }; req.onsuccess=()=>res(req.result); req.onerror=()=>rej(req.error) })
-const saveToDB=async(item:any)=>{ const db=await openDB(); return new Promise<void>((res,rej)=>{ const tx=db.transaction('media','readwrite'); tx.objectStore('media').put(item); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error) }) }
-const getAllFromDB=async():Promise<any[]>=>{ const db=await openDB(); return new Promise((res,rej)=>{ const tx=db.transaction('media','readonly'); const req=tx.objectStore('media').getAll(); req.onsuccess=()=>res(req.result||[]); req.onerror=()=>rej(req.error) }) }
-useEffect(()=>{
-const fbAppId='1951327349161990'
-if(!document.getElementById('fb-sdk')){
-const s=document.createElement('script'); s.id='fb-sdk'; s.src='https://connect.facebook.net/en_US/sdk.js';
-s.onload=()=>{ window.FB.init({appId: fbAppId, cookie:true, xfbml:false, version:'v19.0'}) }
-document.body.appendChild(s)
-}
-try{
-const sv=localStorage.getItem('taglive_saved'); if(sv) setSaved(JSON.parse(sv))
-const yk=localStorage.getItem('taglive_ytkey'); if(yk) setYtKey(yk)
-const ai=localStorage.getItem('taglive_active_intro'); if(ai) setActiveIntroId(ai)
-const ao=localStorage.getItem('taglive_active_outro'); if(ao) setActiveOutroId(ao)
-const tk=localStorage.getItem('taglive_ticker_text'); if(tk) setTickerText(tk)
-const ts=localStorage.getItem('taglive_ticker_size'); if(ts) setTickerSize(parseInt(ts))
-const tsp=localStorage.getItem('taglive_ticker_speed'); if(tsp) setTickerSpeed(parseInt(tsp))
-const ton=localStorage.getItem('taglive_ticker_on'); if(ton) setTickerOn(ton==='true')
-const cn=localStorage.getItem('taglive_church_name'); if(cn) setChurchName(cn)
-const cl=localStorage.getItem('taglive_church_logo'); if(cl){ setLogoImage(cl); const img=new Image(); img.src=cl; img.onload=()=>{ logoImageRef.current=img } }
-const ld=localStorage.getItem('taglive_lowdata'); if(ld) setLowData(ld==='true')
-const params=new URLSearchParams(window.location.search)
-if(params.get('admin')==='taglive2026'){ localStorage.setItem('taglive_admin','true'); setIsAdmin(true) }
-else if(localStorage.getItem('taglive_admin')==='true'){ setIsAdmin(true) }
-}catch{}
-;(async()=>{
-  try{
-    const all=await getAllFromDB();
-    const introList=all.filter((x:any)=>x.kind==='intro').map((x:any)=>x.data);
-    const outroList=all.filter((x:any)=>x.kind==='outro').map((x:any)=>x.data);
-    if(introList.length) setIntros(introList);
-    if(outroList.length) setOutros(outroList);
-  }catch{}
-  try{
-    const si=localStorage.getItem('taglive_intros'); if(si){ const arr=JSON.parse(si); for(const it of arr){ await saveToDB({id:it.id,kind:'intro',data:it}) } }
-    const so=localStorage.getItem('taglive_outros'); if(so){ const arr=JSON.parse(so); for(const it of arr){ await saveToDB({id:it.id,kind:'outro',data:it}) } }
-  }catch{}
-})()
-const handleVis=async()=>{ if(!document.hidden){ try{ const t=await navigator.clipboard.readText(); if(t && t.length>5 && t.length<500 && t!==verse) setVerse(t) }catch{} } }
-document.addEventListener('visibilitychange', handleVis)
-return()=>{ document.removeEventListener('visibilitychange', handleVis); if(timerRef.current) clearInterval(timerRef.current) }
-},[])
-useEffect(()=>{
-const trackDevice=async()=>{
-try{
-let deviceId=localStorage.getItem('taglive_device')
-if(!deviceId){ deviceId=`dev_${Date.now()}_${Math.random().toString(36).slice(2,9)}`; localStorage.setItem('taglive_device', deviceId) }
-await supabase.from('taglive_devices').upsert({ device_id: deviceId, last_seen: new Date().toISOString(), user_agent: navigator.userAgent.substring(0,200) }, { onConflict: 'device_id' })
-const lastView=localStorage.getItem('tl_last_view'); const now=Date.now()
-if(!lastView || now-parseInt(lastView)>30*60*1000){ await supabase.from('taglive_views').insert({ device_id: deviceId }); localStorage.setItem('tl_last_view', now.toString()) }
-if(localStorage.getItem('taglive_admin')==='true'){
-const nowDate=new Date(); const todayStart=new Date(nowDate); todayStart.setHours(0,0,0,0)
-const weekStart=new Date(nowDate); weekStart.setDate(nowDate.getDate()-7)
-const monthStart=new Date(nowDate); monthStart.setDate(nowDate.getDate()-30)
-const fiveMinAgo=new Date(nowDate.getTime()-5*60*1000)
-const { count: live }=await supabase.from('taglive_devices').select('*',{count:'exact',head:true}).gt('last_seen', fiveMinAgo.toISOString())
-const { count: total }=await supabase.from('taglive_views').select('*',{count:'exact',head:true})
-const { count: daily }=await supabase.from('taglive_views').select('*',{count:'exact',head:true}).gte('created_at', todayStart.toISOString())
-const { count: weekly }=await supabase.from('taglive_views').select('*',{count:'exact',head:true}).gte('created_at', weekStart.toISOString())
-const { count: monthly }=await supabase.from('taglive_views').select('*',{count:'exact',head:true}).gte('created_at', monthStart.toISOString())
-setStats({ live: live||0, daily: daily||0, weekly: weekly||0, monthly: monthly||0, total: total||0 })
-}
-}catch{}
-}
-trackDevice(); const interval=setInterval(trackDevice,60000); return()=>clearInterval(interval)
-},[isAdmin])
+const timerRef=useRef<any>(null)
+const formatTime=(s:number)=>{ const m=Math.floor(s/60); const sec=s%60; return `${m}:${sec.toString().padStart(2,'0')}` }
+const startTimer=()=>{ if(timerRef.current) clearInterval(timerRef.current); timerRef.current=setInterval(()=>setLiveSeconds(p=>p+1),1000) }
+const stopTimer=()=>{ if(timerRef.current) clearInterval(timerRef.current); timerRef.current=null }
+useEffect(()=>{ try{ const s=localStorage.getItem('taglive_saved'); if(s) setSaved(JSON.parse(s)); const cn=localStorage.getItem('taglive_church_name'); if(cn) setChurchName(cn); const lg=localStorage.getItem('taglive_church_logo'); if(lg){ setLogoImage(lg); const img=new Image(); img.src=lg; img.onload=()=>logoImageRef.current=img } const ld=localStorage.getItem('taglive_lowdata'); if(ld) setLowData(ld==='true'); const tk=localStorage.getItem('taglive_ticker_text'); if(tk) setTickerText(tk); const to=localStorage.getItem('taglive_ticker_on'); if(to) setTickerOn(to==='true'); const yk=localStorage.getItem('taglive_ytkey'); if(yk) setYtKey(yk) }catch{} },[])
+useEffect(()=>{ const check=async()=>{ try{ const today=new Date().toISOString().split('T')[0]; const {data}=await supabase.from('taglive_stats').select('*').eq('date',today).single(); if(data) setStats({ live:data.live||0, daily:data.daily||0, weekly:data.weekly||0, monthly:data.monthly||0, total:data.total||0 }) }catch{} }; check() },[])
+useEffect(()=>{ const load=async()=>{ try{ const idb=await openDB(); const tx=idb.transaction('media','readonly'); const store=tx.objectStore('media'); const req=store.getAll(); req.onsuccess=()=>{ const all=req.result||[]; const ins=all.filter((x:any)=>x.kind==='intro'); const outs=all.filter((x:any)=>x.kind==='outro'); if(ins.length) setIntros(ins.map((x:any)=>x.data)); if(outs.length) setOutros(outs.map((x:any)=>x.data)) } }catch{} }; load() },[])
+const openDB=()=>new Promise<any>((res,rej)=>{ const r=indexedDB.open('taglive_db',1); r.onupgradeneeded=()=>{ const db=r.result; if(!db.objectStoreNames.contains('media')) db.createObjectStore('media',{keyPath:'id'}) }; r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error) })
+const saveToDB=async(obj:any)=>{ const db=await openDB(); const tx=db.transaction('media','readwrite'); tx.objectStore('media').put(obj) }
 const saveIntros=async(arr:any[])=>{ const filtered=arr.filter((x:any)=>x.type!=='animated'); setIntros(filtered); for(const it of filtered){ await saveToDB({id:it.id,kind:'intro',data:it}) } try{ localStorage.removeItem('taglive_intros') }catch{} }
 const saveOutros=async(arr:any[])=>{ const filtered=arr.filter((x:any)=>x.type!=='animated'); setOutros(filtered); for(const it of filtered){ await saveToDB({id:it.id,kind:'outro',data:it}) } try{ localStorage.removeItem('taglive_outros') }catch{} }
 const fileToBase64=(file:File)=>new Promise<string>((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result as string); r.onerror=rej; r.readAsDataURL(file) })
 const getVideoDuration=(base64:string)=>new Promise<number>((res)=>{ const v=document.createElement('video'); v.src=base64; v.onloadedmetadata=()=>res(v.duration); setTimeout(()=>res(10),2000) })
-const handleIntroFile=async(e:any)=>{ const file=e.target.files?.[0]; if(!file) return; const base64=await fileToBase64(file); let dur=5; if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) } const item={ id:`id_${Date.now()}`, type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }; const n=[...intros,item]; await saveIntros(n); setActiveIntroId(item.id); localStorage.setItem('taglive_active_intro', item.id); e.target.value=''; alert(`Intro Saved! ${Math.round(dur)}s - stays after refresh`) }
-const handleOutroFile=async(e:any)=>{ const file=e.target.files?.[0]; if(!file) return; const base64=await fileToBase64(file); let dur=5; if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) } const item={ id:`id_${Date.now()}`, type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }; const n=[...outros,item]; await saveOutros(n); setActiveOutroId(item.id); localStorage.setItem('taglive_active_outro', item.id); e.target.value=''; alert(`Outro Saved! ${Math.round(dur)}s - stays after refresh`) }
+const handleIntroFile=async(e:any)=>{ const file=e.target.files?.[0]; if(!file) return; const base64=await fileToBase64(file); let dur=5; if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) } const item={ id:`id_${Date.now()}`, type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }; const n=[...intros,item]; await saveIntros(n); setActiveIntroId(item.id); localStorage.setItem('taglive_active_intro', item.id); e.target.value=''; console.log('intro saved') }
+const handleOutroFile=async(e:any)=>{ const file=e.target.files?.[0]; if(!file) return; const base64=await fileToBase64(file); let dur=5; if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) } const item={ id:`id_${Date.now()}`, type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }; const n=[...outros,item]; await saveOutros(n); setActiveOutroId(item.id); localStorage.setItem('taglive_active_outro', item.id); e.target.value=''; console.log('outro saved') }
 const startCamera=async(newFacing=facing)=>{ try{ if(streamRef.current) streamRef.current.getTracks().forEach(t=>t.stop()); await new Promise(r=>setTimeout(r,300)); const w=lowData?640:1280; const h=lowData?480:720; const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:newFacing,width:{ideal:w},height:{ideal:h}},audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}}); streamRef.current=s; trackRef.current=s.getVideoTracks()[0]; if(videoRef.current){ videoRef.current.srcObject=s; await videoRef.current.play() } setFacing(newFacing); setIsCam(true) }catch(e:any){ alert('Camera: '+e.message) } }
 const stopCamera=()=>{ if(isRecording) stopRecording(); streamRef.current?.getTracks().forEach(t=>t.stop()); if(videoRef.current) videoRef.current.srcObject=null; setIsCam(false); setIsLive(false); setTorch(false); setYtLive(false); stopTimer() }
-}
 const toggleCamera=async()=>{ await startCamera(facing==='user'?'environment':'user') }
 const toggleTorch=async()=>{ try{ const track:any=trackRef.current; if(!track?.getCapabilities?.()?.torch) return alert('Torch not supported'); await track.applyConstraints({advanced:[{torch:!torch}] as any}); setTorch(!torch) }catch(e:any){ alert(e.message) } }
 const loginFacebook=()=>{
 if(!window.FB){ alert('Wait 3 sec...'); return }
 window.FB.login((resp:any)=>{ if(resp.authResponse){ window.FB.api('/me?fields=name,picture', (u:any)=>{ setFbUser(u); loadPages(resp.authResponse.accessToken) }) } },{scope:'public_profile,pages_show_list,pages_read_engagement,business_management'})
 }
-const loadPages=(tok?:string)=>{ const t=tok||window.FB?.getAuthResponse()?.accessToken; if(!t) return alert('Login first'); window.FB.api('/me/accounts', {access_token:t}, (res:any)=>{ if(res.data?.length){ setPages(res.data); alert(`Found ${res.data.length} pages`) } else alert('No pages') }) }
+const loadPages=(tok?:string)=>{ const t=tok||window.FB?.getAuthResponse()?.accessToken; if(!t) return alert('Login first'); window.FB.api('/me/accounts', {access_token:t}, (res:any)=>{ if(res.data?.length){ setPages(res.data); console.log(`Found ${res.data.length} pages`) } else console.log('No pages') }) }
 const createFbLiveAuto=async(page:any)=>{
 const active=intros.find(i=>i.id===activeIntroId)
 if(active){
@@ -183,20 +114,18 @@ setBroadcastPlaying(null); broadcastImageRef.current=null;
 setSelectedPage(page)
 try{
 const res=await fetch(`https://graph.facebook.com/v19.0/${page.id}/live_videos`,{ method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({ access_token: page.access_token, title: verse.substring(0,60), description: 'TagLive - '+verse, status: 'UNPUBLISHED' }) })
-const data=await res.json(); if(data.error) throw new Error(JSON.stringify(data.error)); setFbStreamUrl(data.stream_url); setLiveId(data.id); setIsLive(true); startTimer()
-}catch(e:any){ setIsLive(true); startTimer() }
+const data=await res.json(); if(data.error) throw new Error(JSON.stringify(data.error)); setFbStreamUrl(data.stream_url); setLiveId(data.id); setIsLive(true); startTimer(); try{ if(!isRecording) setTimeout(()=>startRecording().catch(()=>{}), 800) }catch{}
+}catch(e:any){ setIsLive(true); startTimer(); try{ if(!isRecording) setTimeout(()=>startRecording().catch(()=>{}), 800) }catch{} }
 }, (active.duration||5)*1000)
 } else {
 setSelectedPage(page)
 try{
 const res=await fetch(`https://graph.facebook.com/v19.0/${page.id}/live_videos`,{ method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({ access_token: page.access_token, title: verse.substring(0,60), description: 'TagLive - '+verse, status: 'UNPUBLISHED' }) })
-const data=await res.json(); if(data.error) throw new Error(JSON.stringify(data.error)); setFbStreamUrl(data.stream_url); setLiveId(data.id); setIsLive(true); startTimer()
-}catch(e:any){ setIsLive(true); startTimer() }
+const data=await res.json(); if(data.error) throw new Error(JSON.stringify(data.error)); setFbStreamUrl(data.stream_url); setLiveId(data.id); setIsLive(true); startTimer(); try{ if(!isRecording) setTimeout(()=>startRecording().catch(()=>{}), 800) }catch{}
+}catch(e:any){ setIsLive(true); startTimer(); try{ if(!isRecording) setTimeout(()=>startRecording().catch(()=>{}), 800) }catch{} }
 }
 }
-const openBibleApp=()=>{ setShowBible(true) }
-const fetchBible=async(overrideQuery?:string)=>{
-const queryToUse=overrideQuery||bibleQuery
+const fetchBible=async(queryToUse=bibleQuery)=>{
 if(!queryToUse.trim()) return
 setBibleLoading(true)
 setBibleResult('')
@@ -230,27 +159,8 @@ const parseChapterVerse=(q:string,bookName:string)=>{ const rest=q.substring(boo
 const filteredBooks=getFilteredBooks(bibleQuery)
 const detectedBook=detectBookFromQuery(bibleQuery)
 const parsed=detectedBook?parseChapterVerse(bibleQuery,detectedBook.name):{ ch: null, vs: null }
-const getFilteredHymns=(q:string)=>{ if(!q) return BUILD_348().slice(0,6); const lower=q.toLowerCase(); const num=parseInt(q); if(!isNaN(num)){ const byNo=BUILD_348().filter(h=>h.no===num); if(byNo.length) return byNo } return BUILD_348().filter(h=>h.title.toLowerCase().includes(lower)).slice(0,8) }
-const filteredHymns=getFilteredHymns(hymnQuery)
-const fetchHymnOnline = async (no: number) => {
-  setHymnLoading(true)
-  try{ const cache=JSON.parse(localStorage.getItem('taglive_hymn_cache')||'{}'); if(cache[no]){ setHymnResult(cache[no]+' [CACHED]'); setHymnLoading(false); return } }catch{}
-  const realLocal = SS_HYMNS.find(h=>h.no===no)
-  if(realLocal){
-    const full=`${realLocal.no}. ${realLocal.title}\n\n${realLocal.lyrics}`
-    setHymnResult(full)
-    try{ const cache=JSON.parse(localStorage.getItem('taglive_hymn_cache')||'{}'); cache[no]=full; localStorage.setItem('taglive_hymn_cache', JSON.stringify(cache)) }catch{}
-    setHymnLoading(false)
-    try{ const res=await fetch(`/api/sss?no=${no}`); const d=await res.json(); if(d && d.lyrics && d.lyrics.length>20 && !d.lyrics.includes(`SS&S ${no} - (Tap`)){ const full2=`${d.no}. ${d.title}\n\n${d.lyrics}`; setHymnResult(full2); const cache=JSON.parse(localStorage.getItem('taglive_hymn_cache')||'{}'); cache[no]=full2; localStorage.setItem('taglive_hymn_cache', JSON.stringify(cache)) } }catch{}
-    return
-  }
-  try { const res = await fetch(`/api/sss?no=${no}`); const d = await res.json(); if (d && d.lyrics && d.lyrics.length>10) { const full=`${d.no}. ${d.title}\n\n${d.lyrics}`; setHymnResult(full); try{ const cache=JSON.parse(localStorage.getItem('taglive_hymn_cache')||'{}'); cache[no]=full; localStorage.setItem('taglive_hymn_cache', JSON.stringify(cache)) }catch{}; setHymnLoading(false); return } } catch {}
-  const fallback = BUILD_348().find(h=>h.no===no)
-  if(fallback){ setHymnResult(`${fallback.no}. ${fallback.title}\n\n${fallback.lyrics}`) } else { setHymnResult(`${no}. SS&S ${no}\n\nHymn not found.`) }
-  setHymnLoading(false)
-}
 const pasteClipboard=async()=>{ try{ const t=await navigator.clipboard.readText(); if(t) setVerse(t); else alert('Clipboard empty') }catch{ alert('Allow clipboard') } }
-const saveVerse=()=>{ if(!verse.trim()) return; const ns=[verse,...saved.filter(s=>s!==verse)].slice(0,20); setSaved(ns); localStorage.setItem('taglive_saved', JSON.stringify(ns)); alert('Saved!') }
+const saveVerse=()=>{ if(!verse.trim()) return; const ns=[verse,...saved.filter(s=>s!==verse)].slice(0,20); setSaved(ns); localStorage.setItem('taglive_saved', JSON.stringify(ns)); console.log('saved') }
 const deleteSaved=(idx:number)=>{ const ns=saved.filter((_,i)=>i!==idx); setSaved(ns); localStorage.setItem('taglive_saved', JSON.stringify(ns)); }
 const pickMedia=()=>fileInputRef.current?.click()
 const pickLogo=()=>logoInputRef.current?.click()
@@ -258,8 +168,6 @@ const onFilePick=(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const ur
 const onLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const base64=await fileToBase64(f); setLogoImage(base64); localStorage.setItem('taglive_church_logo', base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; setSelected('logo') }
 const handleChurchLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const base64=await fileToBase64(f); setLogoImage(base64); localStorage.setItem('taglive_church_logo', base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; }
 const removeChurchLogo=()=>{ localStorage.removeItem('taglive_church_logo'); setLogoImage(null); logoImageRef.current=null; if(churchLogoInputRef.current) churchLogoInputRef.current.value=''; if(logoInputRef.current) logoInputRef.current.value=''; }
-
-// FIXED START RECORDING - WITH SOUND + INTRO + PREVIEW (NO SILENT)
 const startRecording=async()=>{
   const canvas=canvasRef.current; if(!canvas) return alert('Start camera first')
   if(canvas.width!==720 || canvas.height!==1280){ canvas.width=720; canvas.height=1280 }
@@ -346,14 +254,12 @@ const startRecording=async()=>{
   setIsRecording(true)
   startTimer()
 }
-
 const stopRecordingFinal=()=>{
   try{ recorderRef.current?.stop() }catch{}
   try{ (recorderRef.current as any)?._combined?.getTracks().forEach((t:any)=>t.stop()) }catch{}
   setIsRecording(false)
   if(!isLive&&!ytLive) stopTimer()
 }
-
 const stopRecording=async()=>{
   const active=outros.find((o:any)=>o.id===activeOutroId)
   if(active){
@@ -367,7 +273,6 @@ const stopRecording=async()=>{
     } else { stopRecordingFinal() }
   } else { stopRecordingFinal() }
 }
-
 const onTouchStart=(e:any)=>{
 const rect=canvasRef.current?.getBoundingClientRect(); if(!rect) return
 const tx=(e.touches[0].clientX-rect.left)*(720/rect.width)
@@ -480,14 +385,13 @@ a=requestAnimationFrame(draw)
 draw()
 return()=>cancelAnimationFrame(a)
 },[isCam,verse,isLive,pos,bgMode,fontSize,align,bgImage,ytLive,textColor,boxColor,boxOpacity,logoImage,logoPos,isRecording,selected,showText,tickerOn,tickerText,tickerSize,tickerSpeed,churchName,showChurchName,liveSeconds,lowData,broadcastPlaying])
+const openBibleApp=()=>setShowBible(true)
 return (
 <div style={{padding:16,maxWidth:480,margin:'0 auto'}}>
 {showBible&&(
 <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,zIndex:9998,background:'rgba(0,0,0,0.92)',padding:12,display:'flex',flexDirection:'column'}}>
 <div style={{background:'#fff',borderRadius:16,padding:12,flex:1,display:'flex',flexDirection:'column',maxWidth:480,margin:'0 auto',width:'100%',overflow:'hidden'}}>
-<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:13}}>📖 Bible & Hymn {isCam&&<span style={{color:'#FF0000'}}>● LIVE {formatTime(liveSeconds)}</span>}</b><button onClick={()=>setShowBible(false)} style={{background:'#111',color:'#fff',border:'none',borderRadius:20,padding:'8px 12px',fontWeight:800}}>✕ Close</button></div>
-<div style={{display:'flex',gap:6,marginTop:10}}><button onClick={()=>setBibleMode('bible')} style={{flex:1,padding:8,borderRadius:20,border:'none',background:bibleMode==='bible'?'#111':'#eee',color:bibleMode==='bible'?'#fff':'#000',fontWeight:800,fontSize:12}}>Bible</button><button onClick={()=>setBibleMode('hymn')} style={{flex:1,padding:8,borderRadius:20,border:'none',background:bibleMode==='hymn'?'#7c3aed':'#eee',color:bibleMode==='hymn'?'#fff':'#000',fontWeight:800,fontSize:12}}>Hymn SS&S</button></div>
-{bibleMode==='bible'?(
+<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:13}}>📖 Bible {isCam&&<span style={{color:'#FF0000'}}>● LIVE {formatTime(liveSeconds)}</span>}</b><button onClick={()=>setShowBible(false)} style={{background:'#111',color:'#fff',border:'none',borderRadius:20,padding:'8px 12px',fontWeight:800}}>✕ Close</button></div>
 <>
 <div style={{display:'flex',gap:6,marginTop:10,flexWrap:'wrap'}}>{BIBLE_VERSIONS.map(v=>(<button key={v.id} onClick={()=>setBibleVer(v.id)} style={{padding:'6px 10px',borderRadius:20,border:'none',background:bibleVer===v.id?'#111':'#eee',color:bibleVer===v.id?'#fff':'#000',fontWeight:800,fontSize:10}}>{v.label}</button>))}</div>
 <div style={{display:'flex',gap:6,marginTop:10}}><input value={bibleQuery} onChange={e=>setBibleQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')fetchBible()}} placeholder="Type 1 Thes, John, Romans..." style={{flex:1,padding:12,borderRadius:10,border:'2px solid #7c3aed',fontSize:13,fontWeight:700}}/><button onClick={()=>fetchBible()} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:10,padding:'0 16px',fontWeight:800}}>{bibleLoading?'...':'Search'}</button></div>
@@ -499,23 +403,10 @@ return (
 <div style={{marginTop:8,background:'#f9f5ff',borderRadius:12,padding:12,flex:1,overflowY:'auto',border:'1px solid #ddd'}}>{bibleLoading?<div style={{opacity:.6,fontSize:12}}>Searching...</div>:bibleResult?<div style={{fontSize:14,lineHeight:1.5,fontWeight:600,whiteSpace:'pre-wrap'}}>{bibleResult}</div>:<div style={{opacity:.6,fontSize:12}}>Type 1 Thes → pick book → chapter → verse.</div>}</div>
 <button onClick={useBibleVerse} disabled={!bibleResult} style={{marginTop:10,background:bibleResult?'#16a34a':'#ccc',color:'#fff',padding:14,borderRadius:12,fontWeight:900,border:'none'}}>Use This Verse On Screen</button>
 </>
-):(
-<>
-<div style={{display:'flex',gap:6,marginTop:10}}><input value={hymnQuery} onChange={e=>setHymnQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){const num=parseInt(hymnQuery);if(!isNaN(num))fetchHymnOnline(num)}}} placeholder="Type Hymn No." style={{flex:1,padding:12,borderRadius:10,border:'2px solid #7c3aed',fontSize:13,fontWeight:700}}/><button onClick={()=>{const num=parseInt(hymnQuery);if(!isNaN(num))fetchHymnOnline(num)}} style={{background:'#7c3aed',color:'#fff',padding:'10px 16px',borderRadius:10,border:0,fontWeight:700}}>{hymnLoading?'...':'Search'}</button></div>
-<div style={{maxHeight:200,overflowY:'auto',marginTop:8,background:'#f9f5ff',borderRadius:10,padding:8,border:'1px solid #ddd'}}><div style={{fontSize:11,fontWeight:900,marginBottom:6}}>SS&S Hymns:</div>{filteredHymns.map(h=>(
-<div key={h.no} onClick={()=>fetchHymnOnline(h.no)} style={{padding:'8px 10px',background:'#fff',border:'1px solid #eee',borderRadius:8,marginTop:4,cursor:'pointer'}}>
-<b style={{fontSize:13}}>{h.no}. {h.title}</b><div style={{fontSize:11,opacity:.7,marginTop:2}}>{h.lyrics.substring(0,60)}...</div>
-</div>
-))}</div>
-<div style={{marginTop:8,background:'#fffef0',borderRadius:12,padding:12,flex:1,overflowY:'auto',border:'1px solid #ddd'}}>{hymnLoading?<div style={{opacity:.6,fontSize:12}}>Fetching...</div>:hymnResult?<div style={{fontSize:14,lineHeight:1.5,fontWeight:600,whiteSpace:'pre-wrap'}}>{hymnResult}</div>:<div style={{opacity:.6,fontSize:12}}>Search by number - works offline like Bible.</div>}</div>
-<button onClick={()=>{if(hymnResult){setVerse(hymnResult);setShowBible(false)}}} disabled={!hymnResult} style={{marginTop:10,background:hymnResult?'#7c3aed':'#ccc',color:'#fff',padding:14,borderRadius:12,fontWeight:900,border:'none'}}>Use This Hymn On Screen</button>
-</>
-)}
 </div>
 </div>
 )}
 <div style={{display:'flex',alignItems:'center',gap:12}}><div style={{width:52,height:52,background:'#111',borderRadius:14,display:'flex',alignItems:'center',justifyContent:'center',position:'relative'}}><div style={{width:28,height:28,border:'3px solid #fff',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center'}}><div style={{width:0,height:0,borderLeft:'8px solid #7c3aed',borderTop:'5px solid transparent',borderBottom:'5px solid transparent',marginLeft:2}}/></div><div style={{position:'absolute',right:-10,top:6,background:'#7c3aed',padding:'3px 4px',borderRadius:4,transform:'rotate(12deg)'}}><div style={{width:14,height:2,background:'#000',marginBottom:2}}/><div style={{width:14,height:2,background:'#000',marginBottom:2}}/><div style={{width:14,height:2,background:'#000'}}/></div></div><div><div style={{fontSize:26,fontWeight:900}}>Tag<span style={{color:'#7c3aed'}}>Live</span></div><div style={{fontSize:10,letterSpacing:2,fontWeight:800,color:'#666'}}>TAG YOUR LIVE</div></div>{(isLive||ytLive||isRecording)&&(<div style={{marginLeft:'auto',color:'#FF0000',padding:'6px 12px',fontSize:16,fontWeight:900}}>● LIVE {formatTime(liveSeconds)}</div>)}</div>
-{isAdmin&&(<div style={{marginTop:10,background:'#000',border:'2px solid #00ff00',borderRadius:16,padding:12}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:12,color:'#00ff00'}}>ADMIN DASHBOARD</b><button onClick={()=>setShowAdmin(!showAdmin)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:showAdmin?'#00ff00':'#111',color:showAdmin?'#000':'#00ff00',fontWeight:800,fontSize:11}}>Open</button></div>{showAdmin&&(<div style={{marginTop:10}}><div style={{display:'grid',gridTemplateColumns:'repeat(5, 1fr)',gap:6,textAlign:'center'}}><div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>LIVE</div><div style={{fontSize:18,fontWeight:900,color:'#00ff00'}}>{stats.live}</div></div><div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>DAILY</div><div style={{fontSize:18,fontWeight:900,color:'#ffeb00'}}>{stats.daily}</div></div><div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>WEEKLY</div><div style={{fontSize:18,fontWeight:900,color:'#00d4ff'}}>{stats.weekly}</div></div><div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>MONTHLY</div><div style={{fontSize:18,fontWeight:900,color:'#ff00ff'}}>{stats.monthly}</div></div><div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>TOTAL</div><div style={{fontSize:18,fontWeight:900,color:'#fff'}}>{stats.total}</div></div></div></div>)}</div>)}
 <div style={{marginTop:12,border:'2px solid #111',borderRadius:16,padding:12,background:'#ffffff'}}>
 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:14}}>⚙️ Settings & Studio</b><button onClick={()=>setShowSettings(!showSettings)} style={{padding:'8px 14px',borderRadius:20,border:'none',background:showSettings?'#111':'#eee',color:showSettings?'#fff':'#000',fontWeight:900,fontSize:11}}>{showSettings?'Hide':'Open'}</button></div>
 {showSettings&&(
@@ -587,8 +478,8 @@ return (
 </div>
 </details>
 </div>}
-<div style={{marginTop:14,border:'2px solid #111',borderRadius:14,padding:12}}><b>Connect Facebook</b><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={loginFacebook} style={{flex:1,background:fbUser?'#16a34a':'#1877F2',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{fbUser?`✓ ${fbUser.name}`:'Login Facebook'}</button><button onClick={()=>loadPages()} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Load My Pages</button></div>{pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6,padding:10,background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff',color:selectedPage?.id===p.id?'#fff':'#000',borderRadius:8,fontSize:13,fontWeight:700,cursor:'pointer'}}>{p.name} {selectedPage?.id===p.id?`LIVE ${formatTime(liveSeconds)}`:'(Go Live)'}</div>)} {fbStreamUrl&&<div style={{marginTop:10,padding:10,background:'#dcfce7',borderRadius:8,fontSize:11,wordBreak:'break-all'}}>FB: {fbStreamUrl.substring(0,70)}...</div>}</div>
-<div style={{marginTop:14,border:'2px solid #ff0000',borderRadius:14,padding:12}}><b>Connect YouTube Live</b><input value={ytKey} onChange={e=>{setYtKey(e.target.value);localStorage.setItem('taglive_ytkey',e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={()=>{if(!ytKey)return alert('Paste YouTube key first'); const active=intros.find(i=>i.id===activeIntroId); if(active){setBroadcastPlaying(active); if(active.type==='image'){const img=new Image();img.src=active.data;img.onload=()=>{broadcastImageRef.current=img}} if(active.type==='video'&&broadcastVideoRef.current){broadcastVideoRef.current.src=active.data;broadcastVideoRef.current.muted=false;broadcastVideoRef.current.play().catch(()=>{})} setTimeout(()=>{setBroadcastPlaying(null);broadcastImageRef.current=null;setYtLive(true);setIsLive(true);startTimer()},(active.duration||5)*1000)} else {setYtLive(true);setIsLive(true);startTimer()}}} style={{flex:1,background:ytLive?'#16a34a':'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{ytLive?`YouTube LIVE ${formatTime(liveSeconds)}`:'Go Live YouTube + Intro'}</button><button onClick={()=>{const active=outros.find(o=>o.id===activeOutroId); if(active){setBroadcastPlaying(active); if(active.type==='video'&&broadcastVideoRef.current){broadcastVideoRef.current.src=active.data;broadcastVideoRef.current.muted=false;broadcastVideoRef.current.play()} setTimeout(()=>{setBroadcastPlaying(null);setYtLive(false);if(!fbStreamUrl)setIsLive(false);stopTimer()},(active.duration||5)*1000)} else {setYtLive(false);if(!fbStreamUrl)setIsLive(false);stopTimer()}}} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Stop YT + Outro</button></div></div>
+<div style={{marginTop:14,border:'2px solid #111',borderRadius:14,padding:12}}><b>Connect Facebook</b><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={loginFacebook} style={{flex:1,background:fbUser?'#16a34a':'#1877F2',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{fbUser?`✓ ${fbUser.name}`:'Login Facebook'}</button><button onClick={()=>loadPages()} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Load My Pages</button></div>{pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6,padding:10,background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff',color:selectedPage?.id===p.id?'#fff':'#000',borderRadius:8,fontSize:13,fontWeight:700,cursor:'pointer'}}>{p.name} {selectedPage?.id===p.id?`LIVE ${formatTime(liveSeconds)}`:'(Go Live + Record)'}</div>)} {fbStreamUrl&&<div style={{marginTop:10,padding:10,background:'#dcfce7',borderRadius:8,fontSize:11,wordBreak:'break-all'}}>FB: {fbStreamUrl.substring(0,70)}... (auto-recording)</div>}</div>
+<div style={{marginTop:14,border:'2px solid #ff0000',borderRadius:14,padding:12}}><b>Connect YouTube Live</b><input value={ytKey} onChange={e=>{setYtKey(e.target.value);localStorage.setItem('taglive_ytkey',e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={()=>{if(!ytKey)return alert('Paste YouTube key first'); const active=intros.find(i=>i.id===activeIntroId); if(active){setBroadcastPlaying(active); if(active.type==='image'){const img=new Image();img.src=active.data;img.onload=()=>{broadcastImageRef.current=img}} if(active.type==='video'&&broadcastVideoRef.current){broadcastVideoRef.current.src=active.data;broadcastVideoRef.current.muted=false;broadcastVideoRef.current.play().catch(()=>{})} setTimeout(()=>{setBroadcastPlaying(null);broadcastImageRef.current=null;setYtLive(true);setIsLive(true);startTimer(); try{ if(!isRecording) setTimeout(()=>startRecording().catch(()=>{}), 800) }catch{} },(active.duration||5)*1000)} else {setYtLive(true);setIsLive(true);startTimer(); try{ if(!isRecording) setTimeout(()=>startRecording().catch(()=>{}), 800) }catch{} }}} style={{flex:1,background:ytLive?'#16a34a':'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{ytLive?`YouTube LIVE ${formatTime(liveSeconds)} + Recording`:'Go Live YouTube + Intro + Record'}</button><button onClick={()=>{const active=outros.find(o=>o.id===activeOutroId); if(active){setBroadcastPlaying(active); if(active.type==='video'&&broadcastVideoRef.current){broadcastVideoRef.current.src=active.data;broadcastVideoRef.current.muted=false;broadcastVideoRef.current.play()} setTimeout(()=>{setBroadcastPlaying(null);setYtLive(false);if(!fbStreamUrl)setIsLive(false);stopTimer()},(active.duration||5)*1000)} else {setYtLive(false);if(!fbStreamUrl)setIsLive(false);stopTimer()}}} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Stop YT + Outro</button></div></div>
 </div>
 </div>
 )
