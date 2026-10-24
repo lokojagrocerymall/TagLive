@@ -582,11 +582,16 @@ return (
 {!isRecording?<button onClick={startRecording} disabled={!isCam} style={{flex:1,background:isCam?'#a21caf':'#ccc',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Record MP4 {activeIntroId?'+ Intro':''}</button>
 :<button onClick={stopRecording} style={{flex:1,background:'#111',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Stop + Outro ({formatTime(liveSeconds)})</button>}
 {isConverting&&<div style={{padding:10,background:'#fef3c7',color:'#92400e',borderRadius:10,fontWeight:800,fontSize:12}}>⏳ Converting to MP4 with SOUND + TIMER... Wait 10 sec...</div>}
-{mp4Url&&<a href={mp4Url} download={`${churchName.replace(/[^a-zA-Z0-9]/g,'_')}-${Date.now()}_WITH_SOUND.mp4`} style={{flex:1,background:'#16a34a',color:'#fff',padding:14,borderRadius:10,fontWeight:800,textAlign:'center',textDecoration:'none',fontSize:13}}>⬇️ Download MP4 WITH SOUND + TIMER ✅</a>}
-{!mp4Url&&recordedUrl&&<a href={recordedUrl} download={`${churchName.replace(/[^a-zA-Z0-9]/g,'_')}-${Date.now()}.mp4`} style={{flex:1,background:'#6b7280',color:'#fff',padding:12,borderRadius:10,fontWeight:800,textAlign:'center',textDecoration:'none',fontSize:12}}>Download WebM (backup)</a>}
+{/* RECORDING PREVIEW - PROFESSIONAL */}
+{(recordedUrl || mp4Url) && (
+<div style={{marginTop:"12px",padding:"12px",background:"#111",borderRadius:"12px",border:"1px solid #333"}}>
+<video src={recordedUrl || mp4Url || ""} controls style={{width:"100%",borderRadius:"8px",background:"#000"}} />
+<div style={{display:"flex",gap:"10px",marginTop:"10px"}}>
+<a href={recordedUrl || mp4Url || ""} download={`TagLive-${Date.now()}.mp4`} style={{flex:1,textAlign:"center",padding:"10px",background:"#fff",color:"#000",borderRadius:"8px",textDecoration:"none",fontWeight:"bold"}}>Download MP4</a>
+<button onClick={()=>{setRecordedUrl(null);setMp4Url(null)}} style={{flex:1,padding:"10px",background:"#333",color:"#fff",borderRadius:"8px"}}>Clear</button>
 </div>
-{mp4Url&&<video src={mp4Url} controls style={{width:'100%',marginTop:8,borderRadius:12,background:'#000'}}/>}
-{!mp4Url&&recordedUrl&&<video src={recordedUrl} controls style={{width:'100%',marginTop:8,borderRadius:12}}/>}
+</div>
+)}
 <div style={{display:'flex',gap:6,marginTop:10}}><button onClick={openBibleApp} style={{flex:1,background:'#2563eb',color:'#fff',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Open Bible App</button><button onClick={pasteClipboard} style={{flex:1,background:'#059669',color:'#fff',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Paste Verse</button><button onClick={saveVerse} style={{flex:1,background:'#f59e0b',color:'#000',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Save</button></div>
 <textarea value={verse} onChange={e=>setVerse(e.target.value)} style={{width:'100%',height:90,marginTop:10,padding:12,borderRadius:12,border:'1px solid #ddd'}} placeholder={"Ministering:\nNAME OF PRESENTER"}/>
 {saved.length>0&&<div style={{marginTop:8,border:'1px solid #eee',borderRadius:12,padding:8,background:'#fff'}}>
