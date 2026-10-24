@@ -473,6 +473,7 @@ if(tickerOffsetRef.current<0-w){ tickerOffsetRef.current=c.width }
 ctx.fillText(txt,tickerOffsetRef.current,c.height-tickerH/2)
 }
 }
+}
 a=requestAnimationFrame(draw)
 }
 draw()
