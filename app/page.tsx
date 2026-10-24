@@ -40,38 +40,6 @@ const BIBLE_BOOKS = [
 { name: "Philemon", chapters: 1 },{ name: "Hebrews", chapters: 13 },{ name: "James", chapters: 5 },{ name: "1 Peter", chapters: 5 },{ name: "2 Peter", chapters: 3 },
 { name: "1 John", chapters: 5 },{ name: "2 John", chapters: 1 },{ name: "3 John", chapters: 1 },{ name: "Jude", chapters: 1 },{ name: "Revelation", chapters: 22 }
 ]
-const SS_HYMNS = [
-{no:1,title:"There Shall Be Showers Of Blessing",lyrics:"There shall be showers of blessing:\nThis is the promise of love;"},
-{no:2,title:"What A Friend We Have In Jesus",lyrics:"What a friend we have in Jesus, All our sins and griefs to bear!"},
-{no:10,title:"How Great Thou Art",lyrics:"O Lord my God, when I in awesome wonder\nConsider all the worlds Thy hands have made;"},
-{no:20,title:"It Is Well With My Soul",lyrics:"When peace like a river attendeth my way,\nWhen sorrows like sea billows roll;\nWhatever my lot, Thou hast taught me to say,\nIt is well, it is well with my soul."},
-{no:40,title:"To God Be The Glory",lyrics:"To God be the glory, great things He hath done;\nSo loved He the world that He gave us His Son;\nWho yielded His life an atonement for sin,\nAnd opened the life-gate that all may go in."},
-{no:41,title:"The Old Rugged Cross",lyrics:"On a hill far away stood an old rugged cross,\nThe emblem of suffering and shame;"},
-{no:42,title:"Blessed Assurance",lyrics:"Blessed assurance, Jesus is mine!\nOh, what a foretaste of glory divine!"},
-{no:63,title:"All Hail The Power Of Jesus Name",lyrics:"All hail the power of Jesus' name!\nLet angels prostrate fall;"},
-{no:85,title:"Hark The Herald Angels Sing",lyrics:"Hark! the herald angels sing\nGlory to the newborn King;"},
-{no:93,title:"O Come All Ye Faithful",lyrics:"O come, all ye faithful,\nJoyful and triumphant!"},
-{no:100,title:"Holy Holy Holy",lyrics:"Holy, holy, holy! Lord God Almighty!\nEarly in the morning our song shall rise to Thee;"},
-{no:151,title:"Behold The Saviour Of Mankind",lyrics:"Behold the Saviour of mankind\nNailed to the shameful tree;"},
-{no:152,title:"Low In The Grave He Lay",lyrics:"Low in the grave He lay—Jesus, my Saviour!\nWaiting the coming day—Jesus, my Lord!"},
-{no:204,title:"I Will Sing The Wondrous Story",lyrics:"I will sing the wondrous story\nOf the Christ Who died for me."},
-{no:210,title:"I've Found A Friend In Jesus",lyrics:"I've found a friend in Jesus, He's everything to me,\nHe's the fairest of ten thousand to my soul;"},
-{no:301,title:"I've A Message From The Lord",lyrics:"I've a message from the Lord, Hallelujah!\nThis message unto you I'll give;"},
-{no:320,title:"When The Roll Is Called Up Yonder",lyrics:"When the trumpet of the Lord shall sound, and time shall be no more,\nAnd the morning breaks, eternal, bright and fair;"},
-{no:351,title:"Why Do You Wait Dear Brother",lyrics:"Why do you wait, dear brother?\nOh, why do you tarry so long?"},
-{no:352,title:"Come With Thy Sins To The Fountain",lyrics:"Come with thy sins to the fountain,\nCome with thy burden of grief;"},
-];
-const BUILD_348 = ()=>{ let list=[...SS_HYMNS]; for(let i=1;i<=348;i++){ if(!list.find(h=>h.no===i)){ list.push({no:i,title:`SS&S ${i}`,lyrics:`SS&S ${i}`}); } } return list.sort((a,b)=>a.no-b.no); };
-
-// --- INDEXEDDB FOR REAL LOCAL STORAGE ---
-const openDB=()=>new Promise<IDBDatabase>((res,rej)=>{
-  const r=indexedDB.open('TagLiveDB',1)
-  r.onupgradeneeded=()=>{ const db=r.result; if(!db.objectStoreNames.contains('intros')) db.createObjectStore('intros',{keyPath:'id'}); if(!db.objectStoreNames.contains('outros')) db.createObjectStore('outros',{keyPath:'id'}) }
-  r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error)
-})
-const saveToDB=async(store:string, item:any)=>{ const db=await openDB(); return new Promise<void>((res,rej)=>{ const tx=db.transaction(store,'readwrite'); tx.objectStore(store).put(item); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error) }) }
-const getAllFromDB=async(store:string)=>{ const db=await openDB(); return new Promise<any[]>((res,rej)=>{ const tx=db.transaction(store,'readonly'); const req=tx.objectStore(store).getAll(); req.onsuccess=()=>res(req.result); req.onerror=()=>rej(req.error) }) }
-const deleteFromDB=async(store:string, id:string)=>{ const db=await openDB(); return new Promise<void>((res,rej)=>{ const tx=db.transaction(store,'readwrite'); tx.objectStore(store).delete(id); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error) }) }
 
 export default function LiveStudio(){
 const [verse,setVerse]=useState("John 3:16 - For God so loved the world that He gave His only begotten Son...")
@@ -127,10 +95,6 @@ const [bibleQuery,setBibleQuery]=useState('Romans 1:20')
 const [bibleResult,setBibleResult]=useState('')
 const [bibleLoading,setBibleLoading]=useState(false)
 const [lowData,setLowData]=useState(false)
-const [bibleMode,setBibleMode]=useState<'bible'|'hymn'>('bible')
-const [hymnQuery,setHymnQuery]=useState('')
-const [hymnResult,setHymnResult]=useState('')
-const [hymnLoading,setHymnLoading]=useState(false)
 const tickerOffsetRef=useRef(720)
 const introFileRef=useRef<HTMLInputElement>(null)
 const outroFileRef=useRef<HTMLInputElement>(null)
@@ -162,6 +126,8 @@ document.body.appendChild(s)
 try{
 const sv=localStorage.getItem('taglive_saved'); if(sv) setSaved(JSON.parse(sv))
 const yk=localStorage.getItem('taglive_ytkey'); if(yk) setYtKey(yk)
+const si=localStorage.getItem('taglive_intros'); if(si) setIntros(JSON.parse(si).filter((x:any)=>x.type!=='animated'))
+const so=localStorage.getItem('taglive_outros'); if(so) setOutros(JSON.parse(so).filter((x:any)=>x.type!=='animated'))
 const ai=localStorage.getItem('taglive_active_intro'); if(ai) setActiveIntroId(ai)
 const ao=localStorage.getItem('taglive_active_outro'); if(ao) setActiveOutroId(ao)
 const tk=localStorage.getItem('taglive_ticker_text'); if(tk) setTickerText(tk)
@@ -173,16 +139,6 @@ const params=new URLSearchParams(window.location.search)
 if(params.get('admin')==='taglive2026'){ localStorage.setItem('taglive_admin','true'); setIsAdmin(true) }
 else if(localStorage.getItem('taglive_admin')==='true'){ setIsAdmin(true) }
 }catch{}
-const loadIDB=async()=>{
-  try{
-    const i=await getAllFromDB('intros'); const o=await getAllFromDB('outros')
-    if(i.length) setIntros(i); if(o.length) setOutros(o)
-  }catch{}
-}
-loadIDB()
-const handleVis=async()=>{ if(!document.hidden){ try{ const t=await navigator.clipboard.readText(); if(t && t.length>5 && t.length<500 && t!==verse) setVerse(t) }catch{} } }
-document.addEventListener('visibilitychange', handleVis)
-return()=>{ document.removeEventListener('visibilitychange', handleVis); if(timerRef.current) clearInterval(timerRef.current) }
 },[])
 
 useEffect(()=>{
@@ -210,6 +166,8 @@ setStats({ live: live||0, daily: daily||0, weekly: weekly||0, monthly: monthly||
 trackDevice(); const interval=setInterval(trackDevice,60000); return()=>clearInterval(interval)
 },[isAdmin])
 
+const saveIntros=(arr:any[])=>{ const filtered=arr.filter((x:any)=>x.type!=='animated'); setIntros(filtered); localStorage.setItem('taglive_intros', JSON.stringify(filtered)) }
+const saveOutros=(arr:any[])=>{ const filtered=arr.filter((x:any)=>x.type!=='animated'); setOutros(filtered); localStorage.setItem('taglive_outros', JSON.stringify(filtered)) }
 const fileToBase64=(file:File)=>new Promise<string>((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result as string); r.onerror=rej; r.readAsDataURL(file) })
 const getVideoDuration=(base64:string)=>new Promise<number>((res)=>{ const v=document.createElement('video'); v.src=base64; v.onloadedmetadata=()=>res(v.duration); setTimeout(()=>res(10),2000) })
 const handleIntroFile=async(e:any)=>{
@@ -218,9 +176,7 @@ const base64=await fileToBase64(file)
 let dur=5
 if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }
 const item={ id:`id_${Date.now()}`, type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }
-await saveToDB('intros', item)
-const all=await getAllFromDB('intros'); setIntros(all)
-setActiveIntroId(item.id); localStorage.setItem('taglive_active_intro', item.id); e.target.value=''; alert(`Intro Saved to Local Storage! ${Math.round(dur)}s - Permanent`)
+const n=[...intros,item]; saveIntros(n); setActiveIntroId(item.id); localStorage.setItem('taglive_active_intro', item.id); e.target.value=''; alert(`Intro Saved! ${Math.round(dur)}s`)
 }
 const handleOutroFile=async(e:any)=>{
 const file=e.target.files?.[0]; if(!file) return
@@ -228,24 +184,20 @@ const base64=await fileToBase64(file)
 let dur=5
 if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }
 const item={ id:`id_${Date.now()}`, type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }
-await saveToDB('outros', item)
-const all=await getAllFromDB('outros'); setOutros(all)
-setActiveOutroId(item.id); localStorage.setItem('taglive_active_outro', item.id); e.target.value=''; alert(`Outro Saved to Local Storage! ${Math.round(dur)}s - Permanent`)
+const n=[...outros,item]; saveOutros(n); setActiveOutroId(item.id); localStorage.setItem('taglive_active_outro', item.id); e.target.value=''; alert(`Outro Saved! ${Math.round(dur)}s`)
 }
 const startCamera=async(newFacing=facing)=>{
 try{
 if(streamRef.current) streamRef.current.getTracks().forEach(t=>t.stop())
 await new Promise(r=>setTimeout(r,300))
-const w=lowData?640:1280
-const h=lowData?480:720
-const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:newFacing,width:{ideal:w},height:{ideal:h}},audio:true})
+const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:newFacing,width:{ideal:1280},height:{ideal:720}},audio:true})
 streamRef.current=s; trackRef.current=s.getVideoTracks()[0]
 if(videoRef.current){ videoRef.current.srcObject=s; await videoRef.current.play() }
 setFacing(newFacing); setIsCam(true)
 }catch(e:any){ alert('Camera: '+e.message) }
 }
 const stopCamera=()=>{
-if(isRecording) stopRecording();
+if(isRecording) stopRecordingFinal();
 streamRef.current?.getTracks().forEach(t=>t.stop());
 if(videoRef.current) videoRef.current.srcObject=null;
 setIsCam(false); setIsLive(false); setTorch(false); setYtLive(false); stopTimer()
@@ -315,64 +267,6 @@ const parseChapterVerse=(q:string,bookName:string)=>{ const rest=q.substring(boo
 const filteredBooks=getFilteredBooks(bibleQuery)
 const detectedBook=detectBookFromQuery(bibleQuery)
 const parsed=detectedBook?parseChapterVerse(bibleQuery,detectedBook.name):{ ch: null, vs: null }
-const getFilteredHymns=(q:string)=>{ if(!q) return BUILD_348().slice(0,6); const lower=q.toLowerCase(); const num=parseInt(q); if(!isNaN(num)){ const byNo=BUILD_348().filter(h=>h.no===num); if(byNo.length) return byNo } return BUILD_348().filter(h=>h.title.toLowerCase().includes(lower)).slice(0,8) }
-const filteredHymns=getFilteredHymns(hymnQuery)
-const fetchHymnOnline = async (no: number) => {
-  setHymnLoading(true)
-  try{
-    const cache=JSON.parse(localStorage.getItem('taglive_hymn_cache')||'{}')
-    if(cache[no]){
-      setHymnResult(cache[no]+' [CACHED]')
-      setHymnLoading(false)
-      return
-    }
-  }catch{}
-  const realLocal = SS_HYMNS.find(h=>h.no===no)
-  if(realLocal){
-    const full=`${realLocal.no}. ${realLocal.title}\n\n${realLocal.lyrics}`
-    setHymnResult(full)
-    try{
-      const cache=JSON.parse(localStorage.getItem('taglive_hymn_cache')||'{}')
-      cache[no]=full
-      localStorage.setItem('taglive_hymn_cache', JSON.stringify(cache))
-    }catch{}
-    setHymnLoading(false)
-    try{
-      const res=await fetch(`/api/sss?no=${no}`)
-      const d=await res.json()
-      if(d && d.lyrics && d.lyrics.length>20 && !d.lyrics.includes(`SS&S ${no} - (Tap`)){
-        const full2=`${d.no}. ${d.title}\n\n${d.lyrics}`
-        setHymnResult(full2)
-        const cache=JSON.parse(localStorage.getItem('taglive_hymn_cache')||'{}')
-        cache[no]=full2
-        localStorage.setItem('taglive_hymn_cache', JSON.stringify(cache))
-      }
-    }catch{}
-    return
-  }
-  try {
-    const res = await fetch(`/api/sss?no=${no}`)
-    const d = await res.json()
-    if (d && d.lyrics && d.lyrics.length>10) {
-      const full=`${d.no}. ${d.title}\n\n${d.lyrics}`
-      setHymnResult(full)
-      try{
-        const cache=JSON.parse(localStorage.getItem('taglive_hymn_cache')||'{}')
-        cache[no]=full
-        localStorage.setItem('taglive_hymn_cache', JSON.stringify(cache))
-      }catch{}
-      setHymnLoading(false)
-      return
-    }
-  } catch {}
-  const fallback = BUILD_348().find(h=>h.no===no)
-  if(fallback){
-    setHymnResult(`${fallback.no}. ${fallback.title}\n\n${fallback.lyrics}`)
-  } else {
-    setHymnResult(`${no}. SS&S ${no}\n\nHymn not found. Add it to SS_HYMNS array.`)
-  }
-  setHymnLoading(false)
-}
 const pasteClipboard=async()=>{ try{ const t=await navigator.clipboard.readText(); if(t) setVerse(t); else alert('Clipboard empty') }catch{ alert('Allow clipboard') } }
 const saveVerse=()=>{ if(!verse.trim()) return; const ns=[verse,...saved.filter(s=>s!==verse)].slice(0,20); setSaved(ns); localStorage.setItem('taglive_saved', JSON.stringify(ns)); alert('Saved!') }
 const deleteSaved=(idx:number)=>{ const ns=saved.filter((_,i)=>i!==idx); setSaved(ns); localStorage.setItem('taglive_saved', JSON.stringify(ns)); }
@@ -592,130 +486,91 @@ draw()
 return()=>cancelAnimationFrame(a)
 },[isCam,verse,isLive,pos,bgMode,fontSize,align,bgImage,ytLive,textColor,boxColor,boxOpacity,logoImage,logoPos,isRecording,selected,showText,tickerOn,tickerText,tickerSize,tickerSpeed,churchName,showChurchName,liveSeconds,lowData,broadcastPlaying])
 
-return (
-<div style={{padding:16,maxWidth:480,margin:'0 auto'}}>
-{showBible&&(
-<div style={{position:'fixed',top:0,left:0,right:0,bottom:0,zIndex:9998,background:'rgba(0,0,0,0.92)',padding:12,display:'flex',flexDirection:'column'}}>
-<div style={{background:'#fff',borderRadius:16,padding:12,flex:1,display:'flex',flexDirection:'column',maxWidth:480,margin:'0 auto',width:'100%',overflow:'hidden'}}>
-<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:13}}>📖 Bible & Hymn {isCam&&<span style={{color:'#FF0000'}}>● LIVE {formatTime(liveSeconds)}</span>}</b><button onClick={()=>setShowBible(false)} style={{background:'#111',color:'#fff',border:'none',borderRadius:20,padding:'8px 12px',fontWeight:800}}>✕ Close</button></div>
-<div style={{display:'flex',gap:6,marginTop:10}}><button onClick={()=>setBibleMode('bible')} style={{flex:1,padding:8,borderRadius:20,border:'none',background:bibleMode==='bible'?'#111':'#eee',color:bibleMode==='bible'?'#fff':'#000',fontWeight:800,fontSize:12}}>Bible</button><button onClick={()=>setBibleMode('hymn')} style={{flex:1,padding:8,borderRadius:20,border:'none',background:bibleMode==='hymn'?'#7c3aed':'#eee',color:bibleMode==='hymn'?'#fff':'#000',fontWeight:800,fontSize:12}}>Hymn SS&S</button></div>
-{bibleMode==='bible'?(
-<>
-<div style={{display:'flex',gap:6,marginTop:10,flexWrap:'wrap'}}>{BIBLE_VERSIONS.map(v=>(<button key={v.id} onClick={()=>setBibleVer(v.id)} style={{padding:'6px 10px',borderRadius:20,border:'none',background:bibleVer===v.id?'#111':'#eee',color:bibleVer===v.id?'#fff':'#000',fontWeight:800,fontSize:10}}>{v.label}</button>))}</div>
-<div style={{display:'flex',gap:6,marginTop:10}}><input value={bibleQuery} onChange={e=>setBibleQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')fetchBible()}} placeholder="Type 1 Thes, John, Romans..." style={{flex:1,padding:12,borderRadius:10,border:'2px solid #7c3aed',fontSize:13,fontWeight:700}}/><button onClick={()=>fetchBible()} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:10,padding:'0 16px',fontWeight:800}}>{bibleLoading?'...':'Search'}</button></div>
-<div style={{maxHeight:200,overflowY:'auto',marginTop:8,display:'flex',flexDirection:'column',gap:6}}>
-{!detectedBook&&filteredBooks.length>0&&(<div style={{background:'#f9f5ff',borderRadius:10,padding:8,border:'1px solid #ddd'}}><div style={{fontSize:11,fontWeight:900}}>Books matching "{bibleQuery}":</div>{filteredBooks.map(b=>(<div key={b.name} onClick={()=>setBibleQuery(b.name+' ')} style={{padding:'8px 10px',borderRadius:8,background:'#fff',border:'1px solid #eee',marginTop:4,fontSize:13,fontWeight:700,cursor:'pointer'}}>{b.name} ({b.chapters} ch)</div>))}</div>)}
-{detectedBook&&!parsed.ch&&(<div style={{background:'#f9f5ff',borderRadius:10,padding:8,border:'1px solid #ddd'}}><div style={{fontSize:11,fontWeight:900}}>{detectedBook.name} — Select Chapter:</div><div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:6}}>{Array.from({length:detectedBook.chapters},(_,i)=>i+1).map(ch=>(<button key={ch} onClick={()=>setBibleQuery(`${detectedBook.name} ${ch}`)} style={{padding:'8px 12px',borderRadius:8,border:'1px solid #ddd',background:'#fff',fontWeight:800,fontSize:12}}>{ch}</button>))}</div></div>)}
-{detectedBook&&parsed.ch&&!parsed.vs&&(<div style={{background:'#f0fdf4',borderRadius:10,padding:8,border:'1px solid #bbf7d0'}}><div style={{fontSize:11,fontWeight:900}}>{detectedBook.name} {parsed.ch} — Select Verse:</div><div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:6}}><button onClick={()=>fetchBible(`${detectedBook.name} ${parsed.ch}`)} style={{padding:'8px 12px',borderRadius:8,border:'none',background:'#16a34a',color:'#fff',fontWeight:800,fontSize:12}}>All Chapter</button>{Array.from({length:30},(_,i)=>i+1).map(v=>(<button key={v} onClick={()=>{const q=`${detectedBook.name} ${parsed.ch}:${v}`;setBibleQuery(q);fetchBible(q)}} style={{padding:'8px 12px',borderRadius:8,border:'1px solid #ddd',background:'#fff',fontWeight:800,fontSize:12}}>{v}</button>))}</div></div>)}
-</div>
-<div style={{marginTop:8,background:'#f9f5ff',borderRadius:12,padding:12,flex:1,overflowY:'auto',border:'1px solid #ddd'}}>{bibleLoading?<div style={{opacity:.6,fontSize:12}}>Searching...</div>:bibleResult?<div style={{fontSize:14,lineHeight:1.5,fontWeight:600,whiteSpace:'pre-wrap'}}>{bibleResult}</div>:<div style={{opacity:.6,fontSize:12}}>Type 1 Thes → pick book → chapter → verse.</div>}</div>
-<button onClick={useBibleVerse} disabled={!bibleResult} style={{marginTop:10,background:bibleResult?'#16a34a':'#ccc',color:'#fff',padding:14,borderRadius:12,fontWeight:900,border:'none'}}>Use This Verse On Screen</button>
-</>
-):(
-<>
-<div style={{display:'flex',gap:6,marginTop:10}}><input value={hymnQuery} onChange={e=>setHymnQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){const num=parseInt(hymnQuery);if(!isNaN(num))fetchHymnOnline(num)}}} placeholder="Type Hymn No." style={{flex:1,padding:12,borderRadius:10,border:'2px solid #7c3aed',fontSize:13,fontWeight:700}}/><button onClick={()=>{const num=parseInt(hymnQuery);if(!isNaN(num))fetchHymnOnline(num)}} style={{background:'#7c3aed',color:'#fff',padding:'10px 16px',borderRadius:10,border:0,fontWeight:700}}>{hymnLoading?'...':'Search'}</button></div>
-<div style={{maxHeight:200,overflowY:'auto',marginTop:8,background:'#f9f5ff',borderRadius:10,padding:8,border:'1px solid #ddd'}}><div style={{fontSize:11,fontWeight:900,marginBottom:6}}>SS&S Hymns:</div>{filteredHymns.map(h=>(
-<div key={h.no} onClick={()=>fetchHymnOnline(h.no)} style={{padding:'8px 10px',background:'#fff',border:'1px solid #eee',borderRadius:8,marginTop:4,cursor:'pointer'}}>
-<b style={{fontSize:13}}>{h.no}. {h.title}</b><div style={{fontSize:11,opacity:.7,marginTop:2}}>{h.lyrics.substring(0,60)}...</div>
-</div>
-))}</div>
-<div style={{marginTop:8,background:'#fffef0',borderRadius:12,padding:12,flex:1,overflowY:'auto',border:'1px solid #ddd'}}>{hymnLoading?<div style={{opacity:.6,fontSize:12}}>Fetching...</div>:hymnResult?<div style={{fontSize:14,lineHeight:1.5,fontWeight:600,whiteSpace:'pre-wrap'}}>{hymnResult}</div>:<div style={{opacity:.6,fontSize:12}}>Search by number - works offline like Bible.</div>}</div>
-<button onClick={()=>{if(hymnResult){setVerse(hymnResult);setShowBible(false)}}} disabled={!hymnResult} style={{marginTop:10,background:hymnResult?'#7c3aed':'#ccc',color:'#fff',padding:14,borderRadius:12,fontWeight:900,border:'none'}}>Use This Hymn On Screen</button>
-</>
-)}
-</div>
-</div>
-)}
-
-<div style={{display:'flex',alignItems:'center',gap:12}}><div style={{width:52,height:52,background:'#111',borderRadius:14,display:'flex',alignItems:'center',justifyContent:'center',position:'relative'}}><div style={{width:28,height:28,border:'3px solid #fff',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center'}}><div style={{width:0,height:0,borderLeft:'8px solid #7c3aed',borderTop:'5px solid transparent',borderBottom:'5px solid transparent',marginLeft:2}}/></div><div style={{position:'absolute',right:-10,top:6,background:'#7c3aed',padding:'3px 4px',borderRadius:4,transform:'rotate(12deg)'}}><div style={{width:14,height:2,background:'#000',marginBottom:2}}/><div style={{width:14,height:2,background:'#000',marginBottom:2}}/><div style={{width:14,height:2,background:'#000'}}/></div></div><div><div style={{fontSize:26,fontWeight:900}}>Tag<span style={{color:'#7c3aed'}}>Live</span></div><div style={{fontSize:10,letterSpacing:2,fontWeight:800,color:'#666'}}>TAG YOUR LIVE</div></div>{(isLive||ytLive||isRecording)&&(<div style={{marginLeft:'auto',color:'#FF0000',padding:'6px 12px',fontSize:16,fontWeight:900}}>● LIVE {formatTime(liveSeconds)}</div>)}</div>
-
-{isAdmin&&(<div style={{marginTop:10,background:'#000',border:'2px solid #00ff00',borderRadius:16,padding:12}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:12,color:'#00ff00'}}>ADMIN DASHBOARD</b><button onClick={()=>setShowAdmin(!showAdmin)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:showAdmin?'#00ff00':'#111',color:showAdmin?'#000':'#00ff00',fontWeight:800,fontSize:11}}>Open</button></div>{showAdmin&&(<div style={{marginTop:10}}><div style={{display:'grid',gridTemplateColumns:'repeat(5, 1fr)',gap:6,textAlign:'center'}}><div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>LIVE</div><div style={{fontSize:18,fontWeight:900,color:'#00ff00'}}>{stats.live}</div></div><div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>DAILY</div><div style={{fontSize:18,fontWeight:900,color:'#ffeb00'}}>{stats.daily}</div></div><div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>WEEKLY</div><div style={{fontSize:18,fontWeight:900,color:'#00d4ff'}}>{stats.weekly}</div></div><div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>MONTHLY</div><div style={{fontSize:18,fontWeight:900,color:'#ff00ff'}}>{stats.monthly}</div></div><div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>TOTAL</div><div style={{fontSize:18,fontWeight:900,color:'#fff'}}>{stats.total}</div></div></div></div>)}</div>)}
-
-<div style={{marginTop:12,border:'2px solid #111',borderRadius:16,padding:12,background:'#ffffff'}}>
+const LeftPanel = (
+<div style={{display:'flex',flexDirection:'column',gap:12}}>
+<div style={{border:'2px solid #111',borderRadius:16,padding:12,background:'#fff'}}>
 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:14}}>⚙️ Settings & Studio</b><button onClick={()=>setShowSettings(!showSettings)} style={{padding:'8px 14px',borderRadius:20,border:'none',background:showSettings?'#111':'#eee',color:showSettings?'#fff':'#000',fontWeight:900,fontSize:11}}>{showSettings?'Hide':'Open'}</button></div>
 {showSettings&&(
 <div style={{marginTop:12,display:'flex',flexDirection:'column',gap:12}}>
-<div style={{border:'2px solid #FF0000',borderRadius:12,padding:10,background:lowData?'#fef2f2':'#fff',display:'flex',justifyContent:'space-between',alignItems:'center'}}><div><b style={{fontSize:12}}>Data Saver Mode</b><div style={{fontSize:10,opacity:.7}}>{lowData?'480p - Uses less data':'720p - High Quality'}</div></div><button onClick={()=>{const v=!lowData;setLowData(v);localStorage.setItem('taglive_lowdata',v.toString());if(isCam)setTimeout(()=>startCamera(),300)}} style={{padding:'8px 14px',borderRadius:20,border:'none',background:lowData?'#16a34a':'#111',color:'#fff',fontWeight:900,fontSize:11}}>{lowData?'480p ON':'720p'}</button></div>
-<div style={{border:'2px solid #7c3aed',borderRadius:16,padding:12,background:'#f9f5ff'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:14}}>Intro / Outro Studio - SAVED TO LOCAL STORAGE</b><button onClick={()=>setShowStudio(!showStudio)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:'#111',color:'#fff',fontWeight:800,fontSize:11}}>{showStudio?'Hide':'Open'}</button></div>
+<div style={{border:'2px solid #FF0000',borderRadius:12,padding:10,background:lowData?'#fef2f2':'#fff',display:'flex',justifyContent:'space-between',alignItems:'center'}}><div><b style={{fontSize:12}}>Data Saver Mode</b><div style={{fontSize:10,opacity:.7}}>{lowData?'480p':'720p'}</div></div><button onClick={()=>{const v=!lowData;setLowData(v);localStorage.setItem('taglive_lowdata',v.toString());if(isCam)setTimeout(()=>startCamera(),300)}} style={{padding:'8px 14px',borderRadius:20,border:'none',background:lowData?'#16a34a':'#111',color:'#fff',fontWeight:900,fontSize:11}}>{lowData?'480p ON':'720p'}</button></div>
+<div style={{border:'2px solid #7c3aed',borderRadius:16,padding:12,background:'#f9f5ff'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:14}}>Intro / Outro Studio</b><button onClick={()=>setShowStudio(!showStudio)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:'#111',color:'#fff',fontWeight:800,fontSize:11}}>{showStudio?'Hide':'Open'}</button></div>
 {showStudio&&(<div style={{marginTop:10}}>
-<div style={{display:'flex',gap:6,marginTop:8}}><label style={{flex:1,background:'#7c3aed',color:'#fff',padding:12,borderRadius:10,fontWeight:800,fontSize:12,textAlign:'center',cursor:'pointer'}}>Upload Intro Video<input ref={introFileRef} type="file" accept="video/*,image/*" onChange={handleIntroFile} style={{display:'none'}}/></label><label style={{flex:1,background:'#111',color:'#fff',padding:12,borderRadius:10,fontWeight:800,fontSize:12,textAlign:'center',cursor:'pointer'}}>Upload Outro Video<input ref={outroFileRef} type="file" accept="video/*,image/*" onChange={handleOutroFile} style={{display:'none'}}/></label></div>
-<div style={{marginTop:12}}>
-{intros.length>0&&<div style={{marginBottom:10}}><b style={{fontSize:12}}>Active Intro (Permanent):</b><div style={{display:'flex',flexDirection:'column',gap:4,marginTop:6}}>{intros.map((it:any)=><div key={it.id} style={{display:'flex',gap:4}}><button onClick={()=>{setActiveIntroId(it.id);localStorage.setItem('taglive_active_intro',it.id)}} style={{flex:1,padding:8,borderRadius:8,border:'none',background:activeIntroId===it.id?'#16a34a':'#eee',color:activeIntroId===it.id?'#fff':'#000',fontWeight:700,fontSize:11,textAlign:'left'}}>{activeIntroId===it.id?'✓ ':''}{it.title} ({Math.round(it.duration)}s)</button><button onClick={async()=>{await deleteFromDB('intros', it.id); const all=await getAllFromDB('intros'); setIntros(all); if(activeIntroId===it.id){setActiveIntroId(null);localStorage.removeItem('taglive_active_intro')}}} style={{padding:8,borderRadius:8,border:'none',background:'#ff0000',color:'#fff',fontSize:11}}>X</button></div>)}</div></div>}
-{outros.length>0&&<div><b style={{fontSize:12}}>Active Outro (Permanent):</b><div style={{display:'flex',flexDirection:'column',gap:4,marginTop:6}}>{outros.map((ot:any)=><div key={ot.id} style={{display:'flex',gap:4}}><button onClick={()=>{setActiveOutroId(ot.id);localStorage.setItem('taglive_active_outro',ot.id)}} style={{flex:1,padding:8,borderRadius:8,border:'none',background:activeOutroId===ot.id?'#16a34a':'#eee',color:activeOutroId===ot.id?'#fff':'#000',fontWeight:700,fontSize:11,textAlign:'left'}}>{activeOutroId===ot.id?'✓ ':''}{ot.title} ({Math.round(ot.duration)}s)</button><button onClick={async()=>{await deleteFromDB('outros', ot.id); const all=await getAllFromDB('outros'); setOutros(all); if(activeOutroId===ot.id){setActiveOutroId(null);localStorage.removeItem('taglive_active_outro')}}} style={{padding:8,borderRadius:8,border:'none',background:'#ff0000',color:'#fff',fontSize:11}}>X</button></div>)}</div></div>}
-{intros.length===0&&outros.length===0&&<div style={{fontSize:11,opacity:0.6,marginTop:10}}>No intro/outro saved yet. Upload videos - they will be saved permanently to local storage (IndexedDB) and will not disappear after refresh.</div>}
-</div>
+<div style={{display:'flex',gap:6}}><label style={{flex:1,background:'#7c3aed',color:'#fff',padding:12,borderRadius:10,fontWeight:800,fontSize:12,textAlign:'center',cursor:'pointer'}}>Upload Intro<input ref={introFileRef} type="file" accept="video/*,image/*" onChange={handleIntroFile} style={{display:'none'}}/></label><label style={{flex:1,background:'#111',color:'#fff',padding:12,borderRadius:10,fontWeight:800,fontSize:12,textAlign:'center',cursor:'pointer'}}>Upload Outro<input ref={outroFileRef} type="file" accept="video/*,image/*" onChange={handleOutroFile} style={{display:'none'}}/></label></div>
+<div style={{marginTop:12}}>{intros.map((it:any)=><div key={it.id} style={{display:'flex',gap:4,marginTop:4}}><button onClick={()=>{setActiveIntroId(it.id);localStorage.setItem('taglive_active_intro',it.id)}} style={{flex:1,padding:8,borderRadius:8,border:'none',background:activeIntroId===it.id?'#16a34a':'#eee',color:activeIntroId===it.id?'#fff':'#000',fontWeight:700,fontSize:11}}>{activeIntroId===it.id?'✓ ':''}{it.title} ({Math.round(it.duration)}s)</button><button onClick={()=>{const n=intros.filter((x:any)=>x.id!==it.id);saveIntros(n)}} style={{padding:8,borderRadius:8,border:'none',background:'#ff0000',color:'#fff'}}>X</button></div>)}
+{outros.map((ot:any)=><div key={ot.id} style={{display:'flex',gap:4,marginTop:4}}><button onClick={()=>{setActiveOutroId(ot.id);localStorage.setItem('taglive_active_outro',ot.id)}} style={{flex:1,padding:8,borderRadius:8,border:'none',background:activeOutroId===ot.id?'#16a34a':'#eee',color:activeOutroId===ot.id?'#fff':'#000',fontWeight:700,fontSize:11}}>{activeOutroId===ot.id?'✓ ':''}{ot.title} ({Math.round(ot.duration)}s)</button><button onClick={()=>{const n=outros.filter((x:any)=>x.id!==ot.id);saveOutros(n)}} style={{padding:8,borderRadius:8,border:'none',background:'#ff0000',color:'#fff'}}>X</button></div>)}</div>
 </div>)}
 </div>
-<div style={{border:'2px solid #111',borderRadius:16,padding:12,background:'#ffffff'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><b style={{fontSize:13,color:'#111',flex:1}}>Scrolling Ticker</b><div style={{display:'flex',gap:6}}><button onClick={()=>setTickerOn(!tickerOn)} style={{padding:'8px 14px',borderRadius:20,border:'none',background:tickerOn?'#16a34a':'#111',color:'#fff',fontWeight:900,fontSize:11}}>{tickerOn?'ON':'OFF'}</button><button onClick={()=>setShowTickerStudio(!showTickerStudio)} style={{padding:'8px 12px',borderRadius:20,border:'none',background:showTickerStudio?'#111':'#eee',color:showTickerStudio?'#fff':'#000',fontWeight:800,fontSize:11}}>{showTickerStudio?'Hide':'Open'}</button></div></div>{showTickerStudio&&(<div style={{marginTop:10}}><input value={tickerText} onChange={e=>{setTickerText(e.target.value);localStorage.setItem('taglive_ticker_text',e.target.value);tickerOffsetRef.current=720}} placeholder="Type announcement..." style={{width:'100%',padding:10,borderRadius:10,border:'2px solid #111',fontSize:12,fontWeight:700,background:'#000',color:'#FFFF00',boxSizing:'border-box'}}/></div>)}</div>
-<div style={{border:'2px solid #7c3aed',borderRadius:16,padding:12,background:'#fff'}}>
-<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:13}}>Church Name</b><button onClick={()=>setShowChurchName(!showChurchName)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:showChurchName?'#7c3aed':'#111',color:'#fff',fontWeight:800,fontSize:11}}>{showChurchName?'ON':'OFF'}</button></div>
-<input value={churchName} onChange={e=>{setChurchName(e.target.value);localStorage.setItem('taglive_church_name',e.target.value)}} placeholder="SALEM GANA JA CITY" style={{width:'100%',marginTop:8,padding:10,borderRadius:10,border:'2px solid #7c3aed',fontSize:12,fontWeight:800,boxSizing:'border-box'}}/>
-<div style={{marginTop:10,border:'1px dashed #7c3aed',borderRadius:10,padding:10,background:'#f9f5ff'}}>
-<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:11}}>SAVED LOGO</b>{logoImage&&<button onClick={removeChurchLogo} style={{padding:'4px 8px',borderRadius:6,border:'none',background:'red',color:'#fff',fontWeight:800,fontSize:10}}>Remove</button>}</div>
-<div style={{display:'flex',gap:8,alignItems:'center',marginTop:8}}>
-{logoImage&&<img src={logoImage} style={{width:50,height:50,objectFit:'contain',borderRadius:8,border:'1px solid #ddd',background:'#fff'}}/>}
-<div style={{flex:1}}>
-<input ref={churchLogoInputRef} type="file" accept="image/*" onChange={handleChurchLogoPick} style={{width:'100%',fontSize:11}}/>
-<div style={{fontSize:9,opacity:0.7,marginTop:2}}>{logoImage?'Logo saved':'No logo saved'}</div>
-</div>
-</div>
-</div>
-</div>
+<div style={{border:'2px solid #111',borderRadius:16,padding:12,background:'#fff'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:13}}>Scrolling Ticker</b><button onClick={()=>setTickerOn(!tickerOn)} style={{padding:'8px 14px',borderRadius:20,border:'none',background:tickerOn?'#16a34a':'#111',color:'#fff',fontWeight:900,fontSize:11}}>{tickerOn?'ON':'OFF'}</button></div><input value={tickerText} onChange={e=>{setTickerText(e.target.value);localStorage.setItem('taglive_ticker_text',e.target.value)}} placeholder="Announcement..." style={{width:'100%',marginTop:8,padding:10,borderRadius:10,border:'2px solid #111',fontSize:12,background:'#000',color:'#FFFF00'}}/><div style={{display:'flex',gap:6,marginTop:6}}><span style={{fontSize:10}}>Size</span><input type="range" min={18} max={40} value={tickerSize} onChange={e=>setTickerSize(parseInt(e.target.value))} style={{flex:1}}/><span style={{fontSize:10}}>Speed</span><input type="range" min={1} max={5} value={tickerSpeed} onChange={e=>setTickerSpeed(parseInt(e.target.value))} style={{flex:1}}/></div></div>
+<div style={{border:'2px solid #7c3aed',borderRadius:16,padding:12,background:'#fff'}}><div style={{display:'flex',justifyContent:'space-between'}}><b style={{fontSize:13}}>Church Name</b><button onClick={()=>setShowChurchName(!showChurchName)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:showChurchName?'#7c3aed':'#111',color:'#fff',fontSize:11}}>{showChurchName?'ON':'OFF'}</button></div><input value={churchName} onChange={e=>{setChurchName(e.target.value);localStorage.setItem('taglive_church_name',e.target.value)}} style={{width:'100%',marginTop:8,padding:10,borderRadius:10,border:'2px solid #7c3aed',fontSize:12}}/><input ref={churchLogoInputRef} type="file" accept="image/*" onChange={handleChurchLogoPick} style={{marginTop:8,fontSize:11}}/>{logoImage&&<button onClick={removeChurchLogo} style={{marginTop:6,background:'red',color:'#fff',border:'none',borderRadius:6,padding:'4px 8px',fontSize:10}}>Remove Logo</button>}</div>
 </div>
 )}
+<div style={{display:'flex',gap:6}}><button onClick={()=>setBgMode('face')} style={{flex:1,padding:8,borderRadius:20,border:'none',background:bgMode==='face'?'#111':'#eee',color:bgMode==='face'?'#fff':'#000',fontSize:12,fontWeight:800}}>Face</button><button onClick={()=>setBgMode('black')} style={{flex:1,padding:8,borderRadius:20,border:'none',background:bgMode==='black'?'#111':'#eee',color:bgMode==='black'?'#fff':'#000',fontSize:12,fontWeight:800}}>Black</button><button onClick={()=>setBgMode('image')} style={{flex:1,padding:8,borderRadius:20,border:'none',background:bgMode==='image'?'#111':'#eee',color:bgMode==='image'?'#fff':'#000',fontSize:12,fontWeight:800}}>Image</button><button onClick={()=>setBgMode('split')} style={{flex:1,padding:8,borderRadius:20,border:'none',background:bgMode==='split'?'#7c3aed':'#eee',color:bgMode==='split'?'#fff':'#000',fontSize:12,fontWeight:800}}>Split</button></div>
+<div style={{display:'flex',gap:6,alignItems:'center',background:'#f3f0ff',padding:8,borderRadius:10}}><span style={{fontSize:10,fontWeight:800}}>A-</span><input type="range" min={20} max={60} value={fontSize} onChange={e=>setFontSize(parseInt(e.target.value))} style={{flex:1}}/><span style={{fontSize:10,fontWeight:800}}>A+</span><button onClick={pickMedia} style={{padding:'8px 10px',borderRadius:10,border:'none',background:'#7c3aed',color:'#fff',fontSize:10,fontWeight:800}}>Media</button><input ref={fileInputRef} type="file" accept="image/*" onChange={onFilePick} style={{display:'none'}}/></div>
+<div style={{display:'flex',gap:6,alignItems:'center',background:'#fff',border:'1px solid #eee',padding:8,borderRadius:10}}><input type="color" value={textColor} onChange={e=>setTextColor(e.target.value)} style={{width:28,height:28}}/><input type="color" value={boxColor} onChange={e=>setBoxColor(e.target.value)} style={{width:28,height:28}}/><input type="range" min={0} max={1} step={0.05} value={boxOpacity} onChange={e=>setBoxOpacity(parseFloat(e.target.value))} style={{flex:1}}/><button onClick={pickLogo} style={{padding:'6px 10px',borderRadius:8,border:'none',background:logoImage?'#16a34a':'#111',color:'#fff',fontSize:10}}>{logoImage?'Logo':'Add Logo'}</button><input ref={logoInputRef} type="file" accept="image/*" onChange={onLogoPick} style={{display:'none'}}/></div>
 </div>
+)
 
-<div style={{display:'flex',gap:6,marginTop:12}}><button onClick={()=>setBgMode('face')} style={{flex:1,padding:8,borderRadius:20,border:'none',background:bgMode==='face'?'#111':'#eee',color:bgMode==='face'?'#fff':'#000',fontWeight:800,fontSize:12}}>Face</button><button onClick={()=>setBgMode('black')} style={{flex:1,padding:8,borderRadius:20,border:'none',background:bgMode==='black'?'#111':'#eee',color:bgMode==='black'?'#fff':'#000',fontWeight:800,fontSize:12}}>Black</button><button onClick={()=>setBgMode('image')} style={{flex:1,padding:8,borderRadius:20,border:'none',background:bgMode==='image'?'#111':'#eee',color:bgMode==='image'?'#fff':'#000',fontWeight:800,fontSize:12}}>Image</button><button onClick={()=>setBgMode('split')} style={{flex:1,padding:8,borderRadius:20,border:'none',background:bgMode==='split'?'#7c3aed':'#eee',color:bgMode==='split'?'#fff':'#000',fontWeight:800,fontSize:12}}>Top/Bottom</button></div>
-
-<div style={{display:'flex',alignItems:'center',gap:6,marginTop:10,flexWrap:'wrap'}}><div style={{flex:1,minWidth:140,display:'flex',alignItems:'center',gap:6,background:'#f3f0ff',padding:'6px 10px',borderRadius:10}}><span style={{fontSize:10,fontWeight:800}}>A-</span><input type="range" min={20} max={60} value={fontSize} onChange={e=>setFontSize(parseInt(e.target.value))} style={{flex:1}}/><span style={{fontSize:10,fontWeight:800}}>A+</span><span style={{fontSize:10,fontWeight:800,background:'#111',color:'#fff',padding:'3px 6px',borderRadius:20}}>{fontSize}</span></div><button onClick={()=>setAlign(align==='justify'?'center':'justify')} style={{padding:'8px 10px',borderRadius:10,border:'none',background:align==='justify'?'#111':'#ddd',color:align==='justify'?'#fff':'#000',fontWeight:800,fontSize:10}}>{align==='justify'?'Justify':'Center'}</button><button onClick={pickMedia} style={{padding:'8px 10px',borderRadius:10,border:'none',background:'#7c3aed',color:'#fff',fontWeight:800,fontSize:10}}>Media</button><input ref={fileInputRef} type="file" accept="image/*" onChange={onFilePick} style={{display:'none'}}/></div>
-
-<div style={{display:'flex',gap:6,marginTop:8,alignItems:'center',background:'#fff',border:'1px solid #eee',padding:8,borderRadius:10,flexWrap:'wrap'}}><div style={{display:'flex',alignItems:'center',gap:4}}><span style={{fontSize:10,fontWeight:800}}>Text</span><input type="color" value={textColor} onChange={e=>setTextColor(e.target.value)} style={{width:28,height:28,border:'none',borderRadius:6}}/></div><div style={{display:'flex',alignItems:'center',gap:4}}><span style={{fontSize:10,fontWeight:800}}>Box</span><input type="color" value={boxColor} onChange={e=>setBoxColor(e.target.value)} style={{width:28,height:28,border:'none',borderRadius:6}}/></div><div style={{display:'flex',alignItems:'center',gap:4,flex:1}}><span style={{fontSize:10,fontWeight:800}}>Opac</span><input type="range" min={0} max={1} step={0.05} value={boxOpacity} onChange={e=>setBoxOpacity(parseFloat(e.target.value))} style={{flex:1}}/></div><button onClick={pickLogo} style={{padding:'6px 10px',borderRadius:8,border:'none',background:logoImage?'#16a34a':'#111',color:'#fff',fontWeight:800,fontSize:10}}>{logoImage?'Logo':'Add Logo'}</button><input ref={logoInputRef} type="file" accept="image/*" onChange={onLogoPick} style={{display:'none'}}/><button onClick={()=>setShowText(!showText)} style={{padding:'6px 10px',borderRadius:8,border:'none',background:showText?'#111':'#ddd',color:showText?'#fff':'#000',fontWeight:800,fontSize:10}}>{showText?'Text':'No Text'}</button></div>
-
-<div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{marginTop:10,background:'#000',borderRadius:18,overflow:'hidden',position:'relative',aspectRatio:'9/16',touchAction:'none'}}><video ref={videoRef} muted playsInline autoPlay style={{width:'100%',height:'100%',objectFit:'cover',display:isCam&&bgMode==='face'?'block':'none'}}/>{!isCam&&<div style={{color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',height:420}}>Camera off - {lowData?'480p ON':'720p'}</div>}<canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%'}}/>
+const CenterPanel = (
+<div>
+<div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{background:'#000',borderRadius:18,overflow:'hidden',position:'relative',aspectRatio:'9/16',touchAction:'none'}}><video ref={videoRef} muted playsInline autoPlay style={{width:'100%',height:'100%',objectFit:'cover',display:isCam&&bgMode==='face'?'block':'none'}}/>{!isCam&&<div style={{color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',height:420}}>Camera off</div>}<canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%'}}/>
 <video ref={broadcastVideoRef} muted={false} playsInline crossOrigin="anonymous" style={{display:'none'}}/>
-{isCam&&(
-<div style={{
-  position:'absolute',
-  top: bgMode==='split'?'auto':'12px',
-  bottom: bgMode==='split'?'50px':'auto',
-  right:12,
-  display:'flex',
-  gap:8,
-  zIndex:50
-}}>
-  <button onClick={toggleCamera} style={{background:'rgba(0,0,0,0.85)',color:'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>Flip</button>
-  <button onClick={toggleTorch} style={{background:torch?'#fbbf24':'rgba(0,0,0,0.85)',color:torch?'#000':'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>{torch?'Flash On':'Flash'}</button>
+{isCam&&<div style={{position:'absolute',top:bgMode==='split'?'auto':'12px',bottom:bgMode==='split'?'50px':'auto',right:12,display:'flex',gap:8,zIndex:50}}><button onClick={toggleCamera} style={{background:'rgba(0,0,0,0.85)',color:'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>Flip</button><button onClick={toggleTorch} style={{background:torch?'#fbbf24':'rgba(0,0,0,0.85)',color:torch?'#000':'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>{torch?'On':'Flash'}</button></div>}
+</div>
+<div style={{display:'flex',gap:8,marginTop:12}}>{!isCam?<button onClick={()=>startCamera()} style={{flex:1,background:'#111',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Start Camera</button>:<><button onClick={toggleCamera} style={{flex:1,background:'#7c3aed',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Switch</button><button onClick={stopCamera} style={{flex:1,background:'#444',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Stop</button></>}</div>
+<div style={{display:'flex',gap:6,marginTop:10}}>{!isRecording?<button onClick={startRecording} disabled={!isCam} style={{flex:1,background:isCam?'#a21caf':'#ccc',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Record MP4 {activeIntroId?'+ Intro':''}</button>:<button onClick={stopRecording} style={{flex:1,background:'#111',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Stop + Outro ({formatTime(liveSeconds)})</button>}{recordedUrl&&<a href={recordedUrl} download={`taglive-${Date.now()}.mp4`} style={{flex:1,background:'#16a34a',color:'#fff',padding:12,borderRadius:10,fontWeight:800,textAlign:'center',textDecoration:'none',fontSize:12}}>Download MP4</a>}</div>
+{recordedUrl&&<video src={recordedUrl} controls style={{width:'100%',marginTop:8,borderRadius:12}}/>}
+</div>
+)
+
+const RightPanel = (
+<div style={{display:'flex',flexDirection:'column',gap:12}}>
+<textarea value={verse} onChange={e=>setVerse(e.target.value)} style={{width:'100%',height:90,padding:12,borderRadius:12,border:'1px solid #ddd'}}/>
+<div style={{display:'flex',gap:6}}><button onClick={openBibleApp} style={{flex:1,background:'#2563eb',color:'#fff',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Bible App</button><button onClick={pasteClipboard} style={{flex:1,background:'#059669',color:'#fff',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Paste</button><button onClick={saveVerse} style={{flex:1,background:'#f59e0b',color:'#000',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Save</button></div>
+{saved.length>0&&<div style={{border:'1px solid #eee',borderRadius:12,padding:8,background:'#fff'}}><b style={{fontSize:12}}>📁 Saved ({saved.length})</b>{saved.map((s,i)=><div key={i} style={{display:'flex',justifyContent:'space-between',background:'#f3f0ff',padding:'8px 10px',borderRadius:20,marginTop:6}}><span onClick={()=>setVerse(s)} style={{fontSize:11,flex:1,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.substring(0,40)}...</span><button onClick={()=>deleteSaved(i)} style={{background:'#ff0000',color:'#fff',border:'none',borderRadius:50,width:22,height:22}}>×</button></div>)}</div>}
+<div style={{border:'2px solid #111',borderRadius:14,padding:12}}><b>Connect Facebook</b><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={loginFacebook} style={{flex:1,background:fbUser?'#16a34a':'#1877F2',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{fbUser?`✓ ${fbUser.name}`:'Login FB'}</button><button onClick={()=>loadPages()} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Load Pages</button></div>{pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6,padding:10,background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff',color:selectedPage?.id===p.id?'#fff':'#000',borderRadius:8,fontSize:13,fontWeight:700,cursor:'pointer'}}>{p.name} {selectedPage?.id===p.id?`LIVE ${formatTime(liveSeconds)}`:'(Go Live)'}</div>)}</div>
+<div style={{border:'2px solid #ff0000',borderRadius:14,padding:12}}><b>Connect YouTube Live</b><input value={ytKey} onChange={e=>{setYtKey(e.target.value);localStorage.setItem('taglive_ytkey',e.target.value)}} placeholder="YouTube Stream Key" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={()=>{if(!ytKey)return alert('Paste key'); setYtLive(true); setIsLive(true); startTimer()}} style={{flex:1,background:ytLive?'#16a34a':'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{ytLive?`LIVE ${formatTime(liveSeconds)}`:'Go Live YT + Intro'}</button><button onClick={()=>{setYtLive(false); if(!fbStreamUrl)setIsLive(false); stopTimer()}} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Stop YT + Outro</button></div></div>
+</div>
+)
+
+return (
+<div style={{minHeight:'100vh',background:'#f5f5f7'}}>
+{showBible&&(
+<div style={{position:'fixed',top:0,left:0,right:0,bottom:0,zIndex:9998,background:'rgba(0,0,0,0.92)',padding:12,display:'flex',flexDirection:'column'}}>
+<div style={{background:'#fff',borderRadius:16,padding:12,flex:1,display:'flex',flexDirection:'column',maxWidth:480,margin:'0 auto',width:'100%',overflow:'hidden'}}>
+<div style={{display:'flex',justifyContent:'space-between'}}><b style={{fontSize:13}}>📖 Bible {isCam&&<span style={{color:'#FF0000'}}>● LIVE {formatTime(liveSeconds)}</span>}</b><button onClick={()=>setShowBible(false)} style={{background:'#111',color:'#fff',border:'none',borderRadius:20,padding:'8px 12px',fontWeight:800}}>✕</button></div>
+<div style={{display:'flex',gap:6,marginTop:10,flexWrap:'wrap'}}>{BIBLE_VERSIONS.map(v=>(<button key={v.id} onClick={()=>setBibleVer(v.id)} style={{padding:'6px 10px',borderRadius:20,border:'none',background:bibleVer===v.id?'#111':'#eee',color:bibleVer===v.id?'#fff':'#000',fontSize:10,fontWeight:800}}>{v.label}</button>))}</div>
+<div style={{display:'flex',gap:6,marginTop:10}}><input value={bibleQuery} onChange={e=>setBibleQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')fetchBible()}} placeholder="John 3:16..." style={{flex:1,padding:12,borderRadius:10,border:'2px solid #7c3aed',fontSize:13,fontWeight:700}}/><button onClick={()=>fetchBible()} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:10,padding:'0 16px',fontWeight:800}}>{bibleLoading?'...':'Search'}</button></div>
+<div style={{marginTop:8,background:'#f9f5ff',borderRadius:12,padding:12,flex:1,overflowY:'auto',border:'1px solid #ddd'}}>{bibleLoading?<div>Searching...</div>:bibleResult?<div style={{fontSize:14,whiteSpace:'pre-wrap'}}>{bibleResult}</div>:<div style={{opacity:.6,fontSize:12}}>Type book chapter verse</div>}</div>
+<button onClick={useBibleVerse} disabled={!bibleResult} style={{marginTop:10,background:bibleResult?'#16a34a':'#ccc',color:'#fff',padding:14,borderRadius:12,fontWeight:900,border:'none'}}>Use This Verse</button>
+</div>
 </div>
 )}
+
+<div style={{background:'#fff',borderBottom:'2px solid #111',padding:'12px 16px',display:'flex',alignItems:'center',gap:12,position:'sticky',top:0,zIndex:100}}>
+<div style={{width:48,height:48,background:'#111',borderRadius:14,display:'flex',alignItems:'center',justifyContent:'center'}}><div style={{width:26,height:26,border:'3px solid #fff',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center'}}><div style={{width:0,height:0,borderLeft:'8px solid #7c3aed',borderTop:'5px solid transparent',borderBottom:'5px solid transparent',marginLeft:2}}/></div></div>
+<div><div style={{fontSize:22,fontWeight:900}}>Tag<span style={{color:'#7c3aed'}}>Live</span> <span style={{fontSize:10,background:'#111',color:'#fff',padding:'2px 6px',borderRadius:4}}>PRO STUDIO</span></div><div style={{fontSize:9,letterSpacing:2,fontWeight:800,color:'#666'}}>TAG YOUR LIVE</div></div>
+{(isLive||ytLive||isRecording)&&(<div style={{marginLeft:'auto',color:'#FF0000',padding:'6px 12px',fontSize:12,fontWeight:900,border:'2px solid red',borderRadius:20}}>● LIVE {formatTime(liveSeconds)}</div>)}
 </div>
 
-<div style={{display:'flex',gap:8,marginTop:12}}>{!isCam?<button onClick={()=>startCamera()} style={{flex:1,background:'#111',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Start Camera {lowData?'(480p)':''}</button>:<><button onClick={toggleCamera} style={{flex:1,background:'#7c3aed',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Switch Camera</button><button onClick={stopCamera} style={{flex:1,background:'#444',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Stop</button></>}</div>
+{isAdmin&&(<div style={{margin:12,background:'#000',border:'2px solid #00ff00',borderRadius:16,padding:12}}><div style={{display:'flex',justifyContent:'space-between'}}><b style={{fontSize:12,color:'#00ff00'}}>ADMIN</b><button onClick={()=>setShowAdmin(!showAdmin)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:showAdmin?'#00ff00':'#111',color:showAdmin?'#000':'#00ff00',fontSize:11,fontWeight:800}}>Open</button></div>{showAdmin&&(<div style={{marginTop:10,display:'grid',gridTemplateColumns:'repeat(5, 1fr)',gap:6,textAlign:'center'}}><div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>LIVE</div><div style={{fontSize:16,fontWeight:900,color:'#00ff00'}}>{stats.live}</div></div><div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>DAILY</div><div style={{fontSize:16,fontWeight:900,color:'#ffeb00'}}>{stats.daily}</div></div><div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>WEEKLY</div><div style={{fontSize:16,fontWeight:900,color:'#00d4ff'}}>{stats.weekly}</div></div><div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>MONTHLY</div><div style={{fontSize:16,fontWeight:900,color:'#ff00ff'}}>{stats.monthly}</div></div><div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>TOTAL</div><div style={{fontSize:16,fontWeight:900,color:'#fff'}}>{stats.total}</div></div></div>)}</div>)}
 
-<div style={{display:'flex',gap:6,marginTop:10}}>
-{!isRecording?<button onClick={startRecording} disabled={!isCam} style={{flex:1,background:isCam?'#a21caf':'#ccc',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Record MP4 {activeIntroId?'+ Intro':''}</button>
-:<button onClick={stopRecording} style={{flex:1,background:'#111',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Stop + Outro ({formatTime(liveSeconds)})</button>}
-{recordedUrl&&<a href={recordedUrl} download={`taglive-${Date.now()}.mp4`} style={{flex:1,background:'#16a34a',color:'#fff',padding:12,borderRadius:10,fontWeight:800,textAlign:'center',textDecoration:'none',fontSize:12}}>Download MP4</a>}
+{/* MOBILE */}
+<div className="mobile-only" style={{padding:16,maxWidth:480,margin:'0 auto'}}>
+<div>{LeftPanel}</div>
+<div style={{marginTop:16}}>{CenterPanel}</div>
+<div style={{marginTop:16}}>{RightPanel}</div>
 </div>
-{recordedUrl&&<video src={recordedUrl} controls style={{width:'100%',marginTop:8,borderRadius:12}}/>}
 
-<div style={{display:'flex',gap:6,marginTop:10}}><button onClick={openBibleApp} style={{flex:1,background:'#2563eb',color:'#fff',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Open Bible App</button><button onClick={pasteClipboard} style={{flex:1,background:'#059669',color:'#fff',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Paste Verse</button><button onClick={saveVerse} style={{flex:1,background:'#f59e0b',color:'#000',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Save</button></div>
-<textarea value={verse} onChange={e=>setVerse(e.target.value)} style={{width:'100%',height:90,marginTop:10,padding:12,borderRadius:12,border:'1px solid #ddd'}} placeholder={"Ministering:\nNAME OF PRESENTER"}/>
-{saved.length>0&&<div style={{marginTop:8,border:'1px solid #eee',borderRadius:12,padding:8,background:'#fff'}}>
-<details open>
-<summary style={{fontSize:12,fontWeight:900,cursor:'pointer',padding:4}}>📁 Saved Folder ({saved.length})</summary>
-<div style={{marginTop:8,display:'flex',flexDirection:'column',gap:6}}>
-{saved.map((s,i)=>
-<div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'#f3f0ff',border:'1px solid #e5e7eb',padding:'8px 10px',borderRadius:20}}>
-<span onClick={()=>setVerse(s)} style={{fontSize:11,flex:1,cursor:'pointer',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',fontWeight:600}}>{s.substring(0,40)}...</span>
-<button onClick={()=>deleteSaved(i)} style={{marginLeft:8,background:'#ff0000',color:'#fff',border:'none',borderRadius:50,width:22,height:22,fontWeight:900,fontSize:12,lineHeight:'22px'}}>×</button>
-</div>)}
+{/* DESKTOP PRO STUDIO */}
+<style>{`
+@media (max-width: 1023px){ .desktop-only{display:none !important} }
+@media (min-width: 1024px){ .mobile-only{display:none !important} .desktop-only{display:grid !important; grid-template-columns:380px 1fr 380px; height:calc(100vh - 73px)} }
+`}</style>
+<div className="desktop-only">
+<div style={{background:'#f9f9fb',borderRight:'2px solid #111',padding:16,overflowY:'auto'}}>{LeftPanel}</div>
+<div style={{background:'#0a0a0a',padding:24,overflowY:'auto',display:'flex',justifyContent:'center'}}><div style={{width:'100%',maxWidth:460}}>{CenterPanel}</div></div>
+<div style={{background:'#f9f9fb',borderLeft:'2px solid #111',padding:16,overflowY:'auto'}}>{RightPanel}</div>
 </div>
-</details>
-</div>}
-
-<div style={{marginTop:14,border:'2px solid #111',borderRadius:14,padding:12}}><b>Connect Facebook</b><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={loginFacebook} style={{flex:1,background:fbUser?'#16a34a':'#1877F2',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{fbUser?`✓ ${fbUser.name}`:'Login Facebook'}</button><button onClick={()=>loadPages()} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Load My Pages</button></div>{pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6,padding:10,background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff',color:selectedPage?.id===p.id?'#fff':'#000',borderRadius:8,fontSize:13,fontWeight:700,cursor:'pointer'}}>{p.name} {selectedPage?.id===p.id?`LIVE ${formatTime(liveSeconds)}`:'(Go Live)'}</div>)} {fbStreamUrl&&<div style={{marginTop:10,padding:10,background:'#dcfce7',borderRadius:8,fontSize:11,wordBreak:'break-all'}}>FB: {fbStreamUrl.substring(0,70)}...</div>}</div>
-
-<div style={{marginTop:14,border:'2px solid #ff0000',borderRadius:14,padding:12}}><b>Connect YouTube Live</b><input value={ytKey} onChange={e=>{setYtKey(e.target.value);localStorage.setItem('taglive_ytkey',e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={()=>{if(!ytKey)return alert('Paste YouTube key first'); const active=intros.find(i=>i.id===activeIntroId); if(active){setBroadcastPlaying(active); if(active.type==='image'){const img=new Image();img.src=active.data;img.onload=()=>{broadcastImageRef.current=img}} if(active.type==='video'&&broadcastVideoRef.current){broadcastVideoRef.current.src=active.data;broadcastVideoRef.current.muted=false;broadcastVideoRef.current.play().catch(()=>{})} setTimeout(()=>{setBroadcastPlaying(null);broadcastImageRef.current=null;setYtLive(true);setIsLive(true);startTimer()},(active.duration||5)*1000)} else {setYtLive(true);setIsLive(true);startTimer()}}} style={{flex:1,background:ytLive?'#16a34a':'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{ytLive?`YouTube LIVE ${formatTime(liveSeconds)}`:'Go Live YouTube + Intro'}</button><button onClick={()=>{const active=outros.find(o=>o.id===activeOutroId); if(active){setBroadcastPlaying(active); if(active.type==='video'&&broadcastVideoRef.current){broadcastVideoRef.current.src=active.data;broadcastVideoRef.current.muted=false;broadcastVideoRef.current.play()} setTimeout(()=>{setBroadcastPlaying(null);setYtLive(false);if(!fbStreamUrl)setIsLive(false);stopTimer()},(active.duration||5)*1000)} else {setYtLive(false);if(!fbStreamUrl)setIsLive(false);stopTimer()}}} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Stop YT + Outro</button></div></div>
 
 </div>
 )
