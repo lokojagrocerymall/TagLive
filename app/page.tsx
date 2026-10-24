@@ -472,11 +472,14 @@ tickerOffsetRef.current-=tickerSpeed
 if(tickerOffsetRef.current<0-w){ tickerOffsetRef.current=c.width }
 ctx.fillText(txt,tickerOffsetRef.current,c.height-tickerH/2)
 }
+}
+}
+}
 a=requestAnimationFrame(draw)
 }
 draw()
 return()=>cancelAnimationFrame(a)
-}, [isCam, verse, isLive, pos, bgMode, fontSize, align, bgImage, ytLive, textColor, boxColor, boxOpacity, logoImage, logoPos, isRecording, selected, showText, tickerOn, tickerText, tickerSize, tickerSpeed, churchName, showChurchName, liveSeconds, lowData, broadcastPlaying])
+},[isCam,verse,isLive,pos,bgMode,fontSize,align,bgImage,ytLive,textColor,boxColor,boxOpacity,logoImage,logoPos,isRecording,selected,showText,tickerOn,tickerText,tickerSize,tickerSpeed,churchName,showChurchName,liveSeconds,lowData,broadcastPlaying])
 return (
 <div style={{padding:16,maxWidth:480,margin:'0 auto'}}>
 {showBible&&(
@@ -585,29 +588,8 @@ return (
 </div>
 </details>
 </div>}
-<div style={{marginTop:14,border:'2px solid #ff0000',borderRadius:14,padding:12}}>
-<b>Connect YouTube Live</b>
-<input value={ytKey} onChange={e=>{setYtKey(e.target.value);localStorage.setItem('taglive_ytkey',e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/>
-<div style={{display:'flex',gap:8,marginTop:8}}>
-<button onClick={()=>{
-if(!ytKey) return alert('Paste YouTube key first');
-const active=intros.find((i:any)=>i.id===activeIntroId);
-if(active){
-setBroadcastPlaying(active);
-if(active.type==='image'){const img=new Image();img.src=active.data;img.onload=()=>{broadcastImageRef.current=img}}
-if(active.type==='video'&&broadcastVideoRef.current){broadcastVideoRef.current.src=active.data;broadcastVideoRef.current.muted=false;broadcastVideoRef.current.play().catch(()=>{})}
-setTimeout(()=>{setBroadcastPlaying(null);broadcastImageRef.current=null;setYtLive(true);setIsLive(true);startTimer()},(active.duration||5)*1000)
-}else{setYtLive(true);setIsLive(true);startTimer()}
-}} style={{flex:1,background:ytLive?'#16a34a':'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{ytLive?`YouTube LIVE ${formatTime(liveSeconds)}`:'Go Live YouTube + Intro'}</button>
-<button onClick={()=>{
-const active=outros.find((o:any)=>o.id===activeOutroId);
-if(active){
-setBroadcastPlaying(active);
-if(active.type==='video'&&broadcastVideoRef.current){broadcastVideoRef.current.src=active.data;broadcastVideoRef.current.muted=false;broadcastVideoRef.current.play().catch(()=>{})}
-setTimeout(()=>{setBroadcastPlaying(null);setYtLive(false);if(!fbStreamUrl)setIsLive(false);stopTimer()},(active.duration||5)*1000)
-}else{setYtLive(false);if(!fbStreamUrl)setIsLive(false);stopTimer()}
-}} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Stop YT + Outro</button>
-</div>
+<div style={{marginTop:14,border:'2px solid #111',borderRadius:14,padding:12}}><b>Connect Facebook</b><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={loginFacebook} style={{flex:1,background:fbUser?'#16a34a':'#1877F2',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{fbUser?`✓ ${fbUser.name}`:'Login Facebook'}</button><button onClick={()=>loadPages()} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Load My Pages</button></div>{pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6,padding:10,background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff',color:selectedPage?.id===p.id?'#fff':'#000',borderRadius:8,fontSize:13,fontWeight:700,cursor:'pointer'}}>{p.name} {selectedPage?.id===p.id?`LIVE ${formatTime(liveSeconds)}`:'(Go Live)'}</div>)} {fbStreamUrl&&<div style={{marginTop:10,padding:10,background:'#dcfce7',borderRadius:8,fontSize:11,wordBreak:'break-all'}}>FB: {fbStreamUrl.substring(0,70)}...</div>}</div>
+<div style={{marginTop:14,border:'2px solid #ff0000',borderRadius:14,padding:12}}><b>Connect YouTube Live</b><input value={ytKey} onChange={e=>{setYtKey(e.target.value);localStorage.setItem('taglive_ytkey',e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={()=>{if(!ytKey)return alert('Paste YouTube key first'); const active=intros.find(i=>i.id===activeIntroId); if(active){setBroadcastPlaying(active); if(active.type==='image'){const img=new Image();img.src=active.data;img.onload=()=>{broadcastImageRef.current=img}} if(active.type==='video'&&broadcastVideoRef.current){broadcastVideoRef.current.src=active.data;broadcastVideoRef.current.muted=false;broadcastVideoRef.current.play().catch(()=>{})} setTimeout(()=>{setBroadcastPlaying(null);broadcastImageRef.current=null;setYtLive(true);setIsLive(true);startTimer()},(active.duration||5)*1000)} else {setYtLive(true);setIsLive(true);startTimer()}}} style={{flex:1,background:ytLive?'#16a34a':'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{ytLive?`YouTube LIVE ${formatTime(liveSeconds)}`:'Go Live YouTube + Intro'}</button><button onClick={()=>{const active=outros.find(o=>o.id===activeOutroId); if(active){setBroadcastPlaying(active); if(active.type==='video'&&broadcastVideoRef.current){broadcastVideoRef.current.src=active.data;broadcastVideoRef.current.muted=false;broadcastVideoRef.current.play()} setTimeout(()=>{setBroadcastPlaying(null);setYtLive(false);if(!fbStreamUrl)setIsLive(false);stopTimer()},(active.duration||5)*1000)} else {setYtLive(false);if(!fbStreamUrl)setIsLive(false);stopTimer()}}} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Stop YT + Outro</button></div></div>
 </div>
 )
 }
