@@ -83,6 +83,7 @@ const bgImageRef=useRef<HTMLImageElement|null>(null)
 const logoImageRef=useRef<HTMLImageElement|null>(null)
 const recorderRef=useRef<MediaRecorder|null>(null)
 const chunksRef=useRef<Blob[]>([])
+const recordedChunksRef=useRef<Blob[]>([])
 const churchLogoInputRef=useRef<HTMLInputElement>(null)
 const audioCtxRef=useRef<AudioContext|null>(null)
 const formatTime=(sec:number)=>{ const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60; return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}` }
@@ -141,8 +142,24 @@ setStats({ live: live||0, daily: daily||0, weekly: weekly||0, monthly: monthly||
 }
 trackDevice(); const interval=setInterval(trackDevice,60000); return()=>clearInterval(interval)
 },[isAdmin])
-const saveIntros=(arr:any[])=>{ const filtered=arr.filter((x:any)=>x.type!=='animated'); setIntros(filtered); localStorage.setItem('taglive_intros', JSON.stringify(filtered)) }
-const saveOutros=(arr:any[])=>{ const filtered=arr.filter((x:any)=>x.type!=='animated'); setOutros(filtered); localStorage.setItem('taglive_outros', JSON.stringify(filtered)) }
+const saveIntros=(arr:any[])=>{ 
+  const filtered=arr.filter((x:any)=>x.type!=='animated'); 
+  try{
+    localStorage.setItem('taglive_intros', JSON.stringify(filtered));
+    setIntros(filtered);
+  }catch(e){
+    alert('Intro too large! Use video under 8s or <3MB. Your file is too big for storage. Try compress it.');
+  }
+}
+const saveOutros=(arr:any[])=>{ 
+  const filtered=arr.filter((x:any)=>x.type!=='animated'); 
+  try{
+    localStorage.setItem('taglive_outros', JSON.stringify(filtered));
+    setOutros(filtered);
+  }catch(e){
+    alert('Outro too large! Use video under 8s or <3MB.');
+  }
+}
 const fileToBase64=(file:File)=>new Promise<string>((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result as string); r.onerror=rej; r.readAsDataURL(file) })
 const getVideoDuration=(base64:string)=>new Promise<number>((res)=>{ const v=document.createElement('video'); v.src=base64; v.onloadedmetadata=()=>res(v.duration); setTimeout(()=>res(10),2000) })
 const handleIntroFile=async(e:any)=>{
