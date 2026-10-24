@@ -510,7 +510,6 @@ const LeftPanel = (
 <div style={{display:'flex',gap:6,alignItems:'center',background:'#fff',border:'1px solid #eee',padding:8,borderRadius:10}}><input type="color" value={textColor} onChange={e=>setTextColor(e.target.value)} style={{width:28,height:28}}/><input type="color" value={boxColor} onChange={e=>setBoxColor(e.target.value)} style={{width:28,height:28}}/><input type="range" min={0} max={1} step={0.05} value={boxOpacity} onChange={e=>setBoxOpacity(parseFloat(e.target.value))} style={{flex:1}}/><button onClick={pickLogo} style={{padding:'6px 10px',borderRadius:8,border:'none',background:logoImage?'#16a34a':'#111',color:'#fff',fontSize:10}}>{logoImage?'Logo':'Add Logo'}</button><input ref={logoInputRef} type="file" accept="image/*" onChange={onLogoPick} style={{display:'none'}}/></div>
 </div>
 )
-
 const CenterPanel = (
 <div>
 <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{background:'#000',borderRadius:18,overflow:'hidden',position:'relative',aspectRatio:'9/16',touchAction:'none'}}><video ref={videoRef} muted playsInline autoPlay style={{width:'100%',height:'100%',objectFit:'cover',display:isCam&&bgMode==='face'?'block':'none'}}/>{!isCam&&<div style={{color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',height:420}}>Camera off</div>}<canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%'}}/>
@@ -522,7 +521,6 @@ const CenterPanel = (
 {recordedUrl&&<video src={recordedUrl} controls style={{width:'100%',marginTop:8,borderRadius:12}}/>}
 </div>
 )
-
 const RightPanel = (
 <div style={{display:'flex',flexDirection:'column',gap:12}}>
 <textarea value={verse} onChange={e=>setVerse(e.target.value)} style={{width:'100%',height:90,padding:12,borderRadius:12,border:'1px solid #ddd'}}/>
