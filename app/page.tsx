@@ -89,6 +89,9 @@ const audioCtxRef=useRef<AudioContext|null>(null)
 const formatTime=(sec:number)=>{ const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60; return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}` }
 const startTimer=()=>{ if(timerRef.current) clearInterval(timerRef.current); setLiveSeconds(0); timerRef.current=setInterval(()=>setLiveSeconds(p=>p+1),1000) }
 const stopTimer=()=>{ if(timerRef.current) clearInterval(timerRef.current); timerRef.current=null; setLiveSeconds(0) }
+const openDB=()=>new Promise<any>((res,rej)=>{ const req=indexedDB.open('taglive_db',1); req.onupgradeneeded=()=>{ const db=req.result; if(!db.objectStoreNames.contains('media')) db.createObjectStore('media',{keyPath:'id'}) }; req.onsuccess=()=>res(req.result); req.onerror=()=>rej(req.error) })
+const saveToDB=async(item:any)=>{ const db=await openDB(); return new Promise<void>((res,rej)=>{ const tx=db.transaction('media','readwrite'); tx.objectStore('media').put(item); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error) }) }
+const getAllFromDB=async():Promise<any[]>=>{ const db=await openDB(); return new Promise((res,rej)=>{ const tx=db.transaction('media','readonly'); const req=tx.objectStore('media').getAll(); req.onsuccess=()=>res(req.result||[]); req.onerror=()=>rej(req.error) }) }
 useEffect(()=>{
 const fbAppId='1951327349161990'
 if(!document.getElementById('fb-sdk')){
@@ -99,8 +102,6 @@ document.body.appendChild(s)
 try{
 const sv=localStorage.getItem('taglive_saved'); if(sv) setSaved(JSON.parse(sv))
 const yk=localStorage.getItem('taglive_ytkey'); if(yk) setYtKey(yk)
-const si=localStorage.getItem('taglive_intros'); if(si) setIntros(JSON.parse(si).filter((x:any)=>x.type!=='animated'))
-const so=localStorage.getItem('taglive_outros'); if(so) setOutros(JSON.parse(so).filter((x:any)=>x.type!=='animated'))
 const ai=localStorage.getItem('taglive_active_intro'); if(ai) setActiveIntroId(ai)
 const ao=localStorage.getItem('taglive_active_outro'); if(ao) setActiveOutroId(ao)
 const tk=localStorage.getItem('taglive_ticker_text'); if(tk) setTickerText(tk)
@@ -114,6 +115,19 @@ const params=new URLSearchParams(window.location.search)
 if(params.get('admin')==='taglive2026'){ localStorage.setItem('taglive_admin','true'); setIsAdmin(true) }
 else if(localStorage.getItem('taglive_admin')==='true'){ setIsAdmin(true) }
 }catch{}
+;(async()=>{
+  try{
+    const all=await getAllFromDB();
+    const introList=all.filter((x:any)=>x.kind==='intro').map((x:any)=>x.data);
+    const outroList=all.filter((x:any)=>x.kind==='outro').map((x:any)=>x.data);
+    if(introList.length) setIntros(introList);
+    if(outroList.length) setOutros(outroList);
+  }catch{}
+  try{
+    const si=localStorage.getItem('taglive_intros'); if(si){ const arr=JSON.parse(si); for(const it of arr){ await saveToDB({id:it.id,kind:'intro',data:it}) } }
+    const so=localStorage.getItem('taglive_outros'); if(so){ const arr=JSON.parse(so); for(const it of arr){ await saveToDB({id:it.id,kind:'outro',data:it}) } }
+  }catch{}
+})()
 const handleVis=async()=>{ if(!document.hidden){ try{ const t=await navigator.clipboard.readText(); if(t && t.length>5 && t.length<500 && t!==verse) setVerse(t) }catch{} } }
 document.addEventListener('visibilitychange', handleVis)
 return()=>{ document.removeEventListener('visibilitychange', handleVis); if(timerRef.current) clearInterval(timerRef.current) }
@@ -142,59 +156,14 @@ setStats({ live: live||0, daily: daily||0, weekly: weekly||0, monthly: monthly||
 }
 trackDevice(); const interval=setInterval(trackDevice,60000); return()=>clearInterval(interval)
 },[isAdmin])
-const saveIntros=(arr:any[])=>{ 
-  const filtered=arr.filter((x:any)=>x.type!=='animated'); 
-  try{
-    localStorage.setItem('taglive_intros', JSON.stringify(filtered));
-    setIntros(filtered);
-  }catch(e){
-    alert('Intro too large! Use video under 8s or <3MB. Your file is too big for storage. Try compress it.');
-  }
-}
-const saveOutros=(arr:any[])=>{ 
-  const filtered=arr.filter((x:any)=>x.type!=='animated'); 
-  try{
-    localStorage.setItem('taglive_outros', JSON.stringify(filtered));
-    setOutros(filtered);
-  }catch(e){
-    alert('Outro too large! Use video under 8s or <3MB.');
-  }
-}
+const saveIntros=async(arr:any[])=>{ const filtered=arr.filter((x:any)=>x.type!=='animated'); setIntros(filtered); for(const it of filtered){ await saveToDB({id:it.id,kind:'intro',data:it}) } try{ localStorage.removeItem('taglive_intros') }catch{} }
+const saveOutros=async(arr:any[])=>{ const filtered=arr.filter((x:any)=>x.type!=='animated'); setOutros(filtered); for(const it of filtered){ await saveToDB({id:it.id,kind:'outro',data:it}) } try{ localStorage.removeItem('taglive_outros') }catch{} }
 const fileToBase64=(file:File)=>new Promise<string>((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result as string); r.onerror=rej; r.readAsDataURL(file) })
 const getVideoDuration=(base64:string)=>new Promise<number>((res)=>{ const v=document.createElement('video'); v.src=base64; v.onloadedmetadata=()=>res(v.duration); setTimeout(()=>res(10),2000) })
-const handleIntroFile=async(e:any)=>{
-const file=e.target.files?.[0]; if(!file) return
-const base64=await fileToBase64(file)
-let dur=5
-if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }
-const item={ id:`id_${Date.now()}`, type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }
-const n=[...intros,item]; saveIntros(n); setActiveIntroId(item.id); localStorage.setItem('taglive_active_intro', item.id); e.target.value=''; alert(`Intro Saved! ${Math.round(dur)}s - stays after refresh`)
-}
-const handleOutroFile=async(e:any)=>{
-const file=e.target.files?.[0]; if(!file) return
-const base64=await fileToBase64(file)
-let dur=5
-if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }
-const item={ id:`id_${Date.now()}`, type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }
-const n=[...outros,item]; saveOutros(n); setActiveOutroId(item.id); localStorage.setItem('taglive_active_outro', item.id); e.target.value=''; alert(`Outro Saved! ${Math.round(dur)}s - stays after refresh`)
-}
-const startCamera=async(newFacing=facing)=>{
-try{
-if(streamRef.current) streamRef.current.getTracks().forEach(t=>t.stop())
-await new Promise(r=>setTimeout(r,300))
-const w=lowData?640:1280
-const h=lowData?480:720
-const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:newFacing,width:{ideal:w},height:{ideal:h}},audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}})
-streamRef.current=s; trackRef.current=s.getVideoTracks()[0]
-if(videoRef.current){ videoRef.current.srcObject=s; await videoRef.current.play() }
-setFacing(newFacing); setIsCam(true)
-}catch(e:any){ alert('Camera: '+e.message) }
-}
-const stopCamera=()=>{
-if(isRecording) stopRecording();
-streamRef.current?.getTracks().forEach(t=>t.stop());
-if(videoRef.current) videoRef.current.srcObject=null;
-setIsCam(false); setIsLive(false); setTorch(false); setYtLive(false); stopTimer()
+const handleIntroFile=async(e:any)=>{ const file=e.target.files?.[0]; if(!file) return; const base64=await fileToBase64(file); let dur=5; if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) } const item={ id:`id_${Date.now()}`, type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }; const n=[...intros,item]; await saveIntros(n); setActiveIntroId(item.id); localStorage.setItem('taglive_active_intro', item.id); e.target.value=''; alert(`Intro Saved! ${Math.round(dur)}s - stays after refresh`) }
+const handleOutroFile=async(e:any)=>{ const file=e.target.files?.[0]; if(!file) return; const base64=await fileToBase64(file); let dur=5; if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) } const item={ id:`id_${Date.now()}`, type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }; const n=[...outros,item]; await saveOutros(n); setActiveOutroId(item.id); localStorage.setItem('taglive_active_outro', item.id); e.target.value=''; alert(`Outro Saved! ${Math.round(dur)}s - stays after refresh`) }
+const startCamera=async(newFacing=facing)=>{ try{ if(streamRef.current) streamRef.current.getTracks().forEach(t=>t.stop()); await new Promise(r=>setTimeout(r,300)); const w=lowData?640:1280; const h=lowData?480:720; const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:newFacing,width:{ideal:w},height:{ideal:h}},audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}}); streamRef.current=s; trackRef.current=s.getVideoTracks()[0]; if(videoRef.current){ videoRef.current.srcObject=s; await videoRef.current.play() } setFacing(newFacing); setIsCam(true) }catch(e:any){ alert('Camera: '+e.message) } }
+const stopCamera=()=>{ if(isRecording) stopRecording(); streamRef.current?.getTracks().forEach(t=>t.stop()); if(videoRef.current) videoRef.current.srcObject=null; setIsCam(false); setIsLive(false); setTorch(false); setYtLive(false); stopTimer() }
 }
 const toggleCamera=async()=>{ await startCamera(facing==='user'?'environment':'user') }
 const toggleTorch=async()=>{ try{ const track:any=trackRef.current; if(!track?.getCapabilities?.()?.torch) return alert('Torch not supported'); await track.applyConstraints({advanced:[{torch:!torch}] as any}); setTorch(!torch) }catch(e:any){ alert(e.message) } }
