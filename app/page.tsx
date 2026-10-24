@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@supabase/supabase-js'
 const supabase = createClient('https://gqifluvkrjzsebfdjcio.supabase.co','eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdxaWZsdXZrcmp6c2ViZmRqY2lvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIzNzY4NDgsImV4cCI6MjEwNzk1Mjg0OH0.zonQMk22nXN0VsbHyI88hT27ntl-VxEEi8k2G8-k5lc')
 declare global { interface Window { FB: any } }
-const OFFLINE_KJV: Record<string,string> = {"john 3:16":"John 3:16 - For God so loved the world that He gave His only begotten Son...","romans 1:20":"Romans 1:20 - For the invisible things of Him from the creation...","romans 8:28":"Romans 8:28 - And we know that all things work together...","psalm 23":"Psalm 23 - The LORD is my shepherd...","jeremiah 29:11":"Jeremiah 29:11 - For I know the thoughts that I think...","philippians 4:13":"Philippians 4:13 - I can do all things through Christ...","isaiah 41:10":"Isaiah 41:10 - Fear thou not; for I am with thee...","john 14:6":"John 14:6 - I am the way, the truth, and the life...","2 timothy 1:7":"2 Timothy 1:7 - For God hath not given us the spirit of fear...","psalm 91:1":"Psalm 91:1 - He that dwelleth in the secret place...","matthew 28:19":"Matthew 28:19 - Go ye therefore, and teach all nations...","genesis 1:1":"Genesis 1:1 - In the beginning God created...","proverbs 3:5":"Proverbs 3:5 - Trust in the LORD with all thine heart...","john 1:1":"John 1:1 - In the beginning was the Word...","romans 10:9":"Romans 10:9 - That if thou shalt confess with thy mouth..."}
+const OFFLINE_KJV: Record<string,string> = {"john 3:16":"John 3:16 - For God so loved the world...","romans 1:20":"Romans 1:20 - For the invisible things...","romans 8:28":"Romans 8:28 - And we know that all things...","psalm 23":"Psalm 23 - The LORD is my shepherd...","jeremiah 29:11":"Jeremiah 29:11 - For I know...","philippians 4:13":"Philippians 4:13 - I can do all things...","isaiah 41:10":"Isaiah 41:10 - Fear thou not...","john 14:6":"John 14:6 - I am the way...","2 timothy 1:7":"2 Timothy 1:7 - For God hath not given...","psalm 91:1":"Psalm 91:1 - He that dwelleth...","matthew 28:19":"Matthew 28:19 - Go ye therefore...","genesis 1:1":"Genesis 1:1 - In the beginning...","proverbs 3:5":"Proverbs 3:5 - Trust in the LORD...","john 1:1":"John 1:1 - In the beginning was the Word...","romans 10:9":"Romans 10:9 - That if thou shalt confess..."}
 const BIBLE_VERSIONS = [{ id: 'kjv', label: 'KJV' },{ id: 'akjv', label: 'NKJV-like' },{ id: 'web', label: 'NIV-like' },{ id: 'bbe', label: 'GNB-like' },{ id: 'asv', label: 'RSV-like' },{ id: 'lsv', label: 'ESV-like' },{ id: 'oeb-cw', label: 'AMP-like' },{ id: 'webbe', label: 'WEBBE' },]
 const BIBLE_BOOKS = [{ name: "Genesis", chapters: 50 },{ name: "Exodus", chapters: 40 },{ name: "Leviticus", chapters: 27 },{ name: "Numbers", chapters: 36 },{ name: "Deuteronomy", chapters: 34 },{ name: "Joshua", chapters: 24 },{ name: "Judges", chapters: 21 },{ name: "Ruth", chapters: 4 },{ name: "1 Samuel", chapters: 31 },{ name: "2 Samuel", chapters: 24 },{ name: "1 Kings", chapters: 22 },{ name: "2 Kings", chapters: 25 },{ name: "1 Chronicles", chapters: 29 },{ name: "2 Chronicles", chapters: 36 },{ name: "Ezra", chapters: 10 },{ name: "Nehemiah", chapters: 13 },{ name: "Esther", chapters: 10 },{ name: "Job", chapters: 42 },{ name: "Psalm", chapters: 150 },{ name: "Proverbs", chapters: 31 },{ name: "Ecclesiastes", chapters: 12 },{ name: "Song of Solomon", chapters: 8 },{ name: "Isaiah", chapters: 66 },{ name: "Jeremiah", chapters: 52 },{ name: "Lamentations", chapters: 5 },{ name: "Ezekiel", chapters: 48 },{ name: "Daniel", chapters: 12 },{ name: "Hosea", chapters: 14 },{ name: "Joel", chapters: 3 },{ name: "Amos", chapters: 9 },{ name: "Obadiah", chapters: 1 },{ name: "Jonah", chapters: 4 },{ name: "Micah", chapters: 7 },{ name: "Nahum", chapters: 3 },{ name: "Habakkuk", chapters: 3 },{ name: "Zephaniah", chapters: 3 },{ name: "Haggai", chapters: 2 },{ name: "Zechariah", chapters: 14 },{ name: "Malachi", chapters: 4 },{ name: "Matthew", chapters: 28 },{ name: "Mark", chapters: 16 },{ name: "Luke", chapters: 24 },{ name: "John", chapters: 21 },{ name: "Acts", chapters: 28 },{ name: "Romans", chapters: 16 },{ name: "1 Corinthians", chapters: 16 },{ name: "2 Corinthians", chapters: 13 },{ name: "Galatians", chapters: 6 },{ name: "Ephesians", chapters: 6 },{ name: "Philippians", chapters: 4 },{ name: "Colossians", chapters: 4 },{ name: "1 Thessalonians", chapters: 5 },{ name: "2 Thessalonians", chapters: 3 },{ name: "1 Timothy", chapters: 6 },{ name: "2 Timothy", chapters: 4 },{ name: "Titus", chapters: 3 },{ name: "Philemon", chapters: 1 },{ name: "Hebrews", chapters: 13 },{ name: "James", chapters: 5 },{ name: "1 Peter", chapters: 5 },{ name: "2 Peter", chapters: 3 },{ name: "1 John", chapters: 5 },{ name: "2 John", chapters: 1 },{ name: "3 John", chapters: 1 },{ name: "Jude", chapters: 1 },{ name: "Revelation", chapters: 22 }]
 
@@ -18,11 +18,11 @@ const [pages,setPages]=useState<any[]>([])
 const [selectedPage,setSelectedPage]=useState<any>(null)
 const [fbStreamUrl,setFbStreamUrl]=useState('')
 const [liveId,setLiveId]=useState('')
-const [pos,setPos]=useState({ x: 360, y: 1050, scale: 0.95, rotation: 0 })
+const [pos,setPos]=useState({ x: 360, y: 900, scale: 0.85, rotation: 0 })
 const [bgMode,setBgMode]=useState<'face'|'black'|'image'|'split'>('face')
 const [saved,setSaved]=useState<string[]>([])
 const [dragging,setDragging]=useState(false)
-const [fontSize,setFontSize]=useState(28)
+const [fontSize,setFontSize]=useState(22)
 const [align,setAlign]=useState<'center'|'justify'>('justify')
 const [bgImage,setBgImage]=useState<string|null>(null)
 const [ytKey,setYtKey]=useState('')
@@ -31,7 +31,7 @@ const [textColor,setTextColor]=useState('#00ff00')
 const [boxColor,setBoxColor]=useState('#000000')
 const [boxOpacity,setBoxOpacity]=useState(0.85)
 const [logoImage,setLogoImage]=useState<string|null>(null)
-const [logoPos,setLogoPos]=useState({ x: 360, y: 300, scale: 0.7, rotation: 0 })
+const [logoPos,setLogoPos]=useState({ x: 360, y: 260, scale: 0.6, rotation: 0 })
 const [isRecording,setIsRecording]=useState(false)
 const [recordedUrl,setRecordedUrl]=useState<string|null>(null)
 const [selected,setSelected]=useState<'text'|'logo'>('text')
@@ -49,7 +49,7 @@ const [showSettings,setShowSettings]=useState(false)
 const [broadcastPlaying,setBroadcastPlaying]=useState<any>(null)
 const [tickerText,setTickerText]=useState('📢 ANNOUNCEMENT: Sunday Service 9AM | Midweek Service Wednesday 6PM | Invite Someone!')
 const [tickerOn,setTickerOn]=useState(false)
-const [tickerSize,setTickerSize]=useState(26)
+const [tickerSize,setTickerSize]=useState(18)
 const [tickerSpeed,setTickerSpeed]=useState(2)
 const [churchName,setChurchName]=useState("KPAKO NYANKPA INT'L MINISTRY")
 const [showChurchName,setShowChurchName]=useState(true)
@@ -92,8 +92,8 @@ document.body.appendChild(s)
 try{
 const sv=localStorage.getItem('taglive_saved'); if(sv) setSaved(JSON.parse(sv))
 const yk=localStorage.getItem('taglive_ytkey'); if(yk) setYtKey(yk)
-const si=localStorage.getItem('taglive_intros'); if(si) setIntros(JSON.parse(si).filter((x:any)=>x.type!=='animated'))
-const so=localStorage.getItem('taglive_outros'); if(so) setOutros(JSON.parse(so).filter((x:any)=>x.type!=='animated'))
+const si=localStorage.getItem('taglive_intros'); if(si) setIntros(JSON.parse(si))
+const so=localStorage.getItem('taglive_outros'); if(so) setOutros(JSON.parse(so))
 const ai=localStorage.getItem('taglive_active_intro'); if(ai) setActiveIntroId(ai)
 const ao=localStorage.getItem('taglive_active_outro'); if(ao) setActiveOutroId(ao)
 const tk=localStorage.getItem('taglive_ticker_text'); if(tk) setTickerText(tk)
@@ -136,32 +136,53 @@ setStats({ live: live||0, daily: daily||0, weekly: weekly||0, monthly: monthly||
 trackDevice(); const interval=setInterval(trackDevice,60000); return()=>clearInterval(interval)
 },[isAdmin])
 
-const saveIntros=(arr:any[])=>{ const filtered=arr.filter((x:any)=>x.type!=='animated'); setIntros(filtered); localStorage.setItem('taglive_intros', JSON.stringify(filtered)) }
-const saveOutros=(arr:any[])=>{ const filtered=arr.filter((x:any)=>x.type!=='animated'); setOutros(filtered); localStorage.setItem('taglive_outros', JSON.stringify(filtered)) }
+const saveIntros=(arr:any[])=>{
+  try{
+    const filtered=arr.filter((x:any)=>x.type!=='animated')
+    setIntros(filtered); 
+    localStorage.setItem('taglive_intros', JSON.stringify(filtered))
+  }catch(e:any){ 
+    if(e?.name==='QuotaExceededError' || e?.code===22) alert('Storage full! Your video is too big. Use <4MB video or image. I will keep it for this session only.')
+    else alert('Save failed: '+e.message)
+    setIntros(arr.filter((x:any)=>x.type!=='animated')) 
+  }
+}
+const saveOutros=(arr:any[])=>{
+  try{
+    const filtered=arr.filter((x:any)=>x.type!=='animated')
+    setOutros(filtered); 
+    localStorage.setItem('taglive_outros', JSON.stringify(filtered))
+  }catch(e:any){ 
+    if(e?.name==='QuotaExceededError' || e?.code===22) alert('Storage full! Outro video too big. Use <4MB.')
+    setOutros(arr.filter((x:any)=>x.type!=='animated')) 
+  }
+}
 const fileToBase64=(file:File)=>new Promise<string>((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result as string); r.onerror=rej; r.readAsDataURL(file) })
-const getVideoDuration=(base64:string)=>new Promise<number>((res)=>{ const v=document.createElement('video'); v.src=base64; v.onloadedmetadata=()=>res(v.duration); setTimeout(()=>res(10),2000) })
+const getVideoDuration=(base64:string)=>new Promise<number>((res)=>{ const v=document.createElement('video'); v.src=base64; v.onloadedmetadata=()=>res(v.duration); setTimeout(()=>res(8),2000) })
 
 const handleIntroFile=async(e:any)=>{
 const file=e.target.files?.[0]; if(!file) return
+if(file.size>4.5*1024*1024){ alert('Intro too big! Use video under 4MB for saving. Try compress with small size.'); e.target.value=''; return }
 const base64=await fileToBase64(file)
 let dur=5
 if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }
 const item={ id:`id_${Date.now()}`, type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }
-const n=[...intros,item]; saveIntros(n); setActiveIntroId(item.id); localStorage.setItem('taglive_active_intro', item.id); e.target.value=''; alert(`Intro Saved! ${Math.round(dur)}s - Will stay after refresh`)
+const n=[...intros,item]; saveIntros(n); setActiveIntroId(item.id); try{ localStorage.setItem('taglive_active_intro', item.id) }catch{}; e.target.value=''; alert(`Intro Saved! ${Math.round(dur)}s - Now will stay after refresh`)
 }
 const handleOutroFile=async(e:any)=>{
 const file=e.target.files?.[0]; if(!file) return
+if(file.size>4.5*1024*1024){ alert('Outro too big! Use under 4MB.'); e.target.value=''; return }
 const base64=await fileToBase64(file)
 let dur=5
 if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }
 const item={ id:`id_${Date.now()}`, type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }
-const n=[...outros,item]; saveOutros(n); setActiveOutroId(item.id); localStorage.setItem('taglive_active_outro', item.id); e.target.value=''; alert(`Outro Saved! ${Math.round(dur)}s - Will stay after refresh`)
+const n=[...outros,item]; saveOutros(n); setActiveOutroId(item.id); try{ localStorage.setItem('taglive_active_outro', item.id) }catch{}; e.target.value=''; alert(`Outro Saved! ${Math.round(dur)}s - Now will stay`)
 }
 
 const startCamera=async(newFacing=facing)=>{
 try{
 if(streamRef.current) streamRef.current.getTracks().forEach(t=>t.stop())
-await new Promise(r=>setTimeout(r,300))
+await new Promise(r=>setTimeout(r,250))
 const w=lowData?640:1280
 const h=lowData?480:720
 const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:newFacing,width:{ideal:w},height:{ideal:h}},audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}})
@@ -180,17 +201,17 @@ const toggleCamera=async()=>{ await startCamera(facing==='user'?'environment':'u
 const toggleTorch=async()=>{ try{ const track:any=trackRef.current; if(!track?.getCapabilities?.()?.torch) return alert('Torch not supported'); await track.applyConstraints({advanced:[{torch:!torch}] as any}); setTorch(!torch) }catch(e:any){ alert(e.message) } }
 
 const loginFacebook=()=>{
-if(!window.FB){ alert('Wait 3 sec...'); return }
-window.FB.login((resp:any)=>{ if(resp.authResponse){ window.FB.api('/me?fields=name,picture', (u:any)=>{ setFbUser(u); loadPages(resp.authResponse.accessToken) }) } },{scope:'public_profile,pages_show_list,pages_read_engagement,business_management'})
+if(!window.FB){ alert('Facebook SDK loading, wait 3 sec and try again'); return }
+window.FB.login((resp:any)=>{ if(resp.authResponse){ window.FB.api('/me?fields=name,picture', (u:any)=>{ setFbUser(u); loadPages(resp.authResponse.accessToken) }) } else { alert('Facebook login cancelled') } },{scope:'public_profile,pages_show_list,pages_read_engagement,business_management'})
 }
-const loadPages=(tok?:string)=>{ const t=tok||window.FB?.getAuthResponse()?.accessToken; if(!t) return alert('Login first'); window.FB.api('/me/accounts', {access_token:t}, (res:any)=>{ if(res.data?.length){ setPages(res.data); alert(`Found ${res.data.length} pages`) } else alert('No pages') }) }
+const loadPages=(tok?:string)=>{ const t=tok||window.FB?.getAuthResponse()?.accessToken; if(!t) return alert('Login Facebook first'); window.FB.api('/me/accounts', {access_token:t}, (res:any)=>{ if(res.data?.length){ setPages(res.data); alert(`Found ${res.data.length} pages`) } else alert('No pages found - make sure you are admin of page') }) }
 
 const createFbLiveAuto=async(page:any)=>{
 const active=intros.find(i=>i.id===activeIntroId)
 if(active){
 setBroadcastPlaying(active)
 if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img } }
-if(active.type==='video'&&broadcastVideoRef.current){ broadcastVideoRef.current.src=active.data; broadcastVideoRef.current.muted=false; broadcastVideoRef.current.volume=1; broadcastVideoRef.current.play().catch(()=>{}) }
+if(active.type==='video'&&broadcastVideoRef.current){ broadcastVideoRef.current.src=active.data; broadcastVideoRef.current.crossOrigin="anonymous"; broadcastVideoRef.current.muted=false; broadcastVideoRef.current.volume=1; broadcastVideoRef.current.play().catch(()=>{}) }
 setTimeout(async()=>{
 setBroadcastPlaying(null); broadcastImageRef.current=null;
 setSelectedPage(page)
@@ -251,17 +272,33 @@ const deleteSaved=(idx:number)=>{ const ns=saved.filter((_,i)=>i!==idx); setSave
 const pickMedia=()=>fileInputRef.current?.click()
 const pickLogo=()=>logoInputRef.current?.click()
 const onFilePick=(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const url=URL.createObjectURL(f); setBgImage(url); setBgMode('image'); const img=new Image(); img.src=url; img.onload=()=>{ bgImageRef.current=img } }
-const onLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const base64=await fileToBase64(f); setLogoImage(base64); localStorage.setItem('taglive_church_logo', base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; setSelected('logo'); alert('Logo Saved! Will stay after refresh') }
-const handleChurchLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const base64=await fileToBase64(f); setLogoImage(base64); localStorage.setItem('taglive_church_logo', base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; alert('Church Logo Saved!') }
-const removeChurchLogo=()=>{ localStorage.removeItem('taglive_church_logo'); setLogoImage(null); logoImageRef.current=null; if(churchLogoInputRef.current) churchLogoInputRef.current.value=''; if(logoInputRef.current) logoInputRef.current.value=''; alert('Logo Removed') }
+const onLogoPick=async(e:any)=>{ 
+  const f=e.target.files?.[0]; if(!f) return; 
+  if(f.size>2*1024*1024){ alert('Logo too big, use <2MB'); return }
+  const base64=await fileToBase64(f); 
+  try{ localStorage.setItem('taglive_church_logo', base64); }catch(e:any){ alert('Logo too big for storage, try smaller image') }
+  setLogoImage(base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; setSelected('logo'); alert('Logo Saved! Will stay after refresh')
+}
+const handleChurchLogoPick=async(e:any)=>{ 
+  const f=e.target.files?.[0]; if(!f) return; 
+  if(f.size>2*1024*1024){ alert('Logo too big, use <2MB image'); return }
+  const base64=await fileToBase64(f); 
+  try{ localStorage.setItem('taglive_church_logo', base64); }catch{ alert('Storage full, clear old intros') }
+  setLogoImage(base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; alert('Church Logo Saved! Stays after refresh')
+}
+const removeChurchLogo=()=>{ try{ localStorage.removeItem('taglive_church_logo'); }catch{}; setLogoImage(null); logoImageRef.current=null; if(churchLogoInputRef.current) churchLogoInputRef.current.value=''; if(logoInputRef.current) logoInputRef.current.value=''; alert('Logo Removed') }
 
-// FIXED SOUND - Simple, Vercel safe, Android sound works
+// === SOUND FIX === This fixes no sound at all + intro/outro silent
 const startRecording=async()=>{
-  const canvas=canvasRef.current; if(!canvas) return alert('Start camera first')
+  const canvas=canvasRef.current; if(!canvas) return alert('Start camera first - your screenshot shows camera off')
   canvas.width=720; canvas.height=1280
   const canvasStream=(canvas as any).captureStream(30) as MediaStream
+  
+  // FIX 1: Add mic FIRST - ensures your voice is in MP4
   const micTracks = streamRef.current?.getAudioTracks()||[]
-  micTracks.forEach(t=>{ try{ canvasStream.addTrack(t) }catch{} })
+  if(micTracks.length===0){ alert('No mic found! Allow microphone permission') }
+  micTracks.forEach(t=>{ try{ canvasStream.addTrack(t.clone ? t.clone() : t) }catch{} })
+
   const active=intros.find(i=>i.id===activeIntroId)
   if(active){
     setBroadcastPlaying(active)
@@ -271,21 +308,49 @@ const startRecording=async()=>{
     else if(active.type==='video'&&broadcastVideoRef.current){
       const v=broadcastVideoRef.current
       v.crossOrigin="anonymous"; v.muted=false; v.volume=1; v.playsInline=true; v.src=active.data
+      // FIX 2: Wait for video to actually play, THEN capture its audio
+      await new Promise<void>(r=>{
+        v.oncanplay=()=>{
+          try{ v.play().catch(()=>{}) }catch{}
+          setTimeout(r,300)
+        }
+        v.onerror=()=>r()
+        setTimeout(r,1500)
+      })
       try{
-        const vs=(v as any).captureStream?.() as MediaStream
-        if(vs) vs.getAudioTracks().forEach((at:any)=>{ try{ canvasStream.addTrack(at) }catch{} })
+        // Try to get audio from intro video - this is what gives intro sound in MP4
+        const vs=(v as any).captureStream?.() as MediaStream || (v as any).mozCaptureStream?.() as MediaStream
+        if(vs){
+          vs.getAudioTracks().forEach((at:any)=>{ try{ canvasStream.addTrack(at) }catch{} })
+        }
       }catch{}
-      try{ await v.play() }catch{}
+      try{ await v.play() }catch(e){ console.log('intro play blocked', e) }
     }
   }
+
   chunksRef.current=[]
   let mime='video/mp4'
-  if(!MediaRecorder.isTypeSupported('video/mp4')){ if(MediaRecorder.isTypeSupported('video/webm;codecs=h264')) mime='video/webm;codecs=h264'; else mime='video/webm;codecs=vp9' }
-  const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 2500000, audioBitsPerSecond: 128000 })
-  rec.ondataavailable=(e)=>{ if(e.data.size>0) chunksRef.current.push(e.data) }
-  rec.onstop=()=>{ const blob=new Blob(chunksRef.current, { type: mime }); const url=URL.createObjectURL(blob); setRecordedUrl(url) }
-  rec.start(100); recorderRef.current=rec; setIsRecording(true); startTimer()
-  if(active){ setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; if(broadcastVideoRef.current){ try{broadcastVideoRef.current.pause()}catch{} } }, (active.duration||5)*1000) }
+  if(!MediaRecorder.isTypeSupported('video/mp4')){ 
+    if(MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')) mime='video/webm;codecs=vp8,opus'
+    else if(MediaRecorder.isTypeSupported('video/webm;codecs=h264')) mime='video/webm;codecs=h264'
+    else mime='video/webm'
+  }
+  try{
+    const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 2000000, audioBitsPerSecond: 128000 })
+    rec.ondataavailable=(e)=>{ if(e.data.size>0) chunksRef.current.push(e.data) }
+    rec.onstop=()=>{ 
+      const blob=new Blob(chunksRef.current, { type: mime }); 
+      const url=URL.createObjectURL(blob); 
+      setRecordedUrl(url)
+      if(chunksRef.current.length===0) alert('Recording empty - no data')
+      else alert('Recording saved! Check Download MP4 - sound should be there now')
+    }
+    rec.start(100); recorderRef.current=rec; setIsRecording(true); startTimer()
+  }catch(e:any){ alert('Recording failed: '+e.message+' - Try Chrome browser') }
+
+  if(active){ 
+    setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; try{ broadcastVideoRef.current?.pause() }catch{} }, (active.duration||5)*1000) 
+  }
 }
 const stopRecordingFinal=()=>{
   recorderRef.current?.stop(); setIsRecording(false); setBroadcastPlaying(null); broadcastImageRef.current=null; 
@@ -303,7 +368,7 @@ const stopRecording=async()=>{
       try{ await v.play() }catch{}
       v.onended=()=>{ stopRecordingFinal() }
       setTimeout(()=>{ stopRecordingFinal() }, (active.duration||7)*1000)
-    } else { setTimeout(()=>{ stopRecordingFinal() }, (active.duration||5)*1000) }
+    } else { stopRecordingFinal() }
   } else { stopRecordingFinal() }
 }
 
@@ -321,7 +386,7 @@ else if(e.touches.length===2){ const dx=e.touches[1].clientX-e.touches[0].client
 const onTouchMove=(e:any)=>{
 const rect=canvasRef.current?.getBoundingClientRect(); if(!rect) return
 if(e.touches.length===1&&dragging){ const tx=e.touches[0].clientX-rect.left; const ty=e.touches[0].clientY-rect.top; const nx=tx*(720/rect.width); const ny=ty*(1280/rect.height); if(selected==='logo') setLogoPos(p=>({...p,x:nx,y:ny})); else setPos(p=>({...p,x:nx,y:ny})) }
-if(e.touches.length===2){ const dx=e.touches[1].clientX-e.touches[0].clientX; const dy=e.touches[1].clientY-e.touches[0].clientY; const dist=Math.hypot(dx,dy); const angle=Math.atan2(dy,dx)*180/Math.PI; if(lastTouch.current.dist>0){ const f=dist/lastTouch.current.dist; if(selected==='logo'){ setLogoPos(p=>({ ...p, scale:Math.min(2,Math.max(0.2,lastTouch.current.selScale*f)), rotation:lastTouch.current.selRot+(angle-lastTouch.current.angle) })) } else { setPos(p=>({ ...p, scale:Math.min(1.3,Math.max(0.6,lastTouch.current.selScale*f)), rotation:lastTouch.current.selRot+(angle-lastTouch.current.angle) })) } } }
+if(e.touches.length===2){ const dx=e.touches[1].clientX-e.touches[0].clientX; const dy=e.touches[1].clientY-e.touches[0].clientY; const dist=Math.hypot(dx,dy); const angle=Math.atan2(dy,dx)*180/Math.PI; if(lastTouch.current.dist>0){ const f=dist/lastTouch.current.dist; if(selected==='logo'){ setLogoPos(p=>({ ...p, scale:Math.min(2,Math.max(0.2,lastTouch.current.selScale*f)), rotation:lastTouch.current.selRot+(angle-lastTouch.current.angle) })) } else { setPos(p=>({ ...p, scale:Math.min(1.2,Math.max(0.5,lastTouch.current.selScale*f)), rotation:lastTouch.current.selRot+(angle-lastTouch.current.angle) })) } } }
 }
 const onTouchEnd=()=>{ setDragging(false); lastTouch.current.dist=0 }
 
@@ -378,27 +443,27 @@ else {
   else { sw=vw; sh=vw/rCanvas; sx=0; sy=(vh-sh)/2 }
   ctx.drawImage(v,sx,sy,sw,sh,0,0,c.width,c.height)
 }
-if(logoImageRef.current){ ctx.save(); ctx.translate(logoPos.x,logoPos.y); ctx.rotate(logoPos.rotation*Math.PI/180); ctx.scale(logoPos.scale,logoPos.scale); const iw=logoImageRef.current.width, ih=logoImageRef.current.height; const maxLogoW=180; const sc=Math.min(1,maxLogoW/iw); ctx.drawImage(logoImageRef.current,-iw*sc/2,-ih*sc/2,iw*sc,ih*sc); if(selected==='logo'){ ctx.strokeStyle='#00ff00'; ctx.lineWidth=4; ctx.setLineDash([10,10]); ctx.strokeRect(-iw*sc/2-6,-ih*sc/2-6,iw*sc+12,ih*sc+12); ctx.setLineDash([]) } ctx.restore() }
+if(logoImageRef.current){ ctx.save(); ctx.translate(logoPos.x,logoPos.y); ctx.rotate(logoPos.rotation*Math.PI/180); ctx.scale(logoPos.scale,logoPos.scale); const iw=logoImageRef.current.width, ih=logoImageRef.current.height; const maxLogoW=160; const sc=Math.min(1,maxLogoW/iw); ctx.drawImage(logoImageRef.current,-iw*sc/2,-ih*sc/2,iw*sc,ih*sc); if(selected==='logo'){ ctx.strokeStyle='#00ff00'; ctx.lineWidth=4; ctx.setLineDash([10,10]); ctx.strokeRect(-iw*sc/2-6,-ih*sc/2-6,iw*sc+12,ih*sc+12); ctx.setLineDash([]) } ctx.restore() }
 if(showText){
 ctx.save();
 const isSplit=bgMode==='split'
 const drawX=isSplit?c.width*0.5:pos.x
 const drawY=isSplit?c.height*0.24:pos.y
-const maxW=isSplit?600:520
-ctx.translate(drawX,drawY); ctx.rotate(pos.rotation*Math.PI/180); ctx.scale(pos.scale,pos.scale); ctx.font=`bold ${fontSize}px sans-serif`; const pad=24; const boxW=maxW+pad*2; const paragraphs=verse.split('\n'); let allLines:{text:string,isLastInPara:boolean,paraIdx:number}[]=[]; paragraphs.forEach((para,pIdx)=>{ if(!para.trim()){ allLines.push({text:'',isLastInPara:true,paraIdx:pIdx}); return } const wrapped=wrapText(ctx,para.trim(),maxW); wrapped.forEach((l,i)=>allLines.push({text:l,isLastInPara:i===wrapped.length-1,paraIdx:pIdx})) }); const realCount=allLines.filter(l=>l.text!=='').length; const lineH=fontSize*1.38; const boxH=realCount*lineH+(paragraphs.length-1)*10+pad*2; ctx.fillStyle=hexToRgba(boxColor,boxOpacity); ctx.fillRect(-boxW/2,-boxH/2,boxW,boxH); ctx.fillStyle=textColor; let y=-boxH/2+pad+lineH/2; allLines.forEach((ln)=>{ if(!ln.text){ y+=10; return } ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(ln.text,0,y); y+=lineH });
+const maxW=isSplit?520:460
+ctx.translate(drawX,drawY); ctx.rotate(pos.rotation*Math.PI/180); ctx.scale(pos.scale,pos.scale); ctx.font=`bold ${fontSize}px sans-serif`; const pad=16; const boxW=maxW+pad*2; const paragraphs=verse.split('\n'); let allLines:{text:string,isLastInPara:boolean,paraIdx:number}[]=[]; paragraphs.forEach((para,pIdx)=>{ if(!para.trim()){ allLines.push({text:'',isLastInPara:true,paraIdx:pIdx}); return } const wrapped=wrapText(ctx,para.trim(),maxW); wrapped.forEach((l,i)=>allLines.push({text:l,isLastInPara:i===wrapped.length-1,paraIdx:pIdx})) }); const realCount=allLines.filter(l=>l.text!=='').length; const lineH=fontSize*1.3; const boxH=realCount*lineH+(paragraphs.length-1)*8+pad*2; ctx.fillStyle=hexToRgba(boxColor,boxOpacity); ctx.fillRect(-boxW/2,-boxH/2,boxW,boxH); ctx.fillStyle=textColor; let y=-boxH/2+pad+lineH/2; allLines.forEach((ln)=>{ if(!ln.text){ y+=8; return } ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(ln.text,0,y); y+=lineH });
 if(isSplit&&showChurchName&&churchName){
-ctx.fillStyle='#FFD700'; ctx.font=`900 ${Math.max(14,Math.floor(fontSize*0.52))}px sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle'
-const churchY=y+22; const tW=ctx.measureText(churchName.toUpperCase()).width+28
-ctx.fillStyle='rgba(124,58,237,0.95)'; const pillH=28; ctx.fillRect(-tW/2,churchY-pillH/2,tW,pillH)
+ctx.fillStyle='#FFD700'; ctx.font=`900 ${Math.max(11,Math.floor(fontSize*0.45))}px sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle'
+const churchY=y+18; const tW=ctx.measureText(churchName.toUpperCase()).width+20
+ctx.fillStyle='rgba(124,58,237,0.95)'; const pillH=22; ctx.fillRect(-tW/2,churchY-pillH/2,tW,pillH)
 ctx.fillStyle='#FFD700'; ctx.fillText(churchName.toUpperCase(),0,churchY)
 }
-if(selected==='text'&&!isSplit){ ctx.strokeStyle='#7c3aed'; ctx.lineWidth=3; ctx.setLineDash([12,8]); ctx.strokeRect(-boxW/2-4,-boxH/2-4,boxW+8,boxH+8); ctx.setLineDash([]) } ctx.restore() }
+if(selected==='text'&&!isSplit){ ctx.strokeStyle='#7c3aed'; ctx.lineWidth=2; ctx.setLineDash([8,6]); ctx.strokeRect(-boxW/2-4,-boxH/2-4,boxW+8,boxH+8); ctx.setLineDash([]) } ctx.restore() }
 if(isLive||ytLive||isRecording){
 const timeStr=formatTime(liveSeconds)
-ctx.save(); ctx.fillStyle='#FF0000'; ctx.font='900 28px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top'; ctx.shadowColor='rgba(0,0,0,0.9)'; ctx.shadowBlur=6; ctx.fillText(`● LIVE ${timeStr}${lowData?' [480p]':''}`,24,22); ctx.restore()
+ctx.save(); ctx.fillStyle='#FF0000'; ctx.font='900 22px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top'; ctx.shadowColor='rgba(0,0,0,0.8)'; ctx.shadowBlur=4; ctx.fillText(`● LIVE ${timeStr}`,16,70); ctx.restore()
 }
 if(tickerOn&&tickerText){
-const tickerH=tickerSize+24
+const tickerH=tickerSize+16
 ctx.fillStyle='#000000'
 ctx.fillRect(0,c.height-tickerH,c.width,tickerH)
 ctx.fillStyle='#FFFF00'
@@ -406,9 +471,8 @@ ctx.font='bold '+tickerSize+'px sans-serif'
 ctx.textAlign='left'
 ctx.textBaseline='middle'
 const txt=tickerText+'   •   '+tickerText
-const w=ctx.measureText(txt).width
 tickerOffsetRef.current-=tickerSpeed
-if(tickerOffsetRef.current<0-w){ tickerOffsetRef.current=c.width }
+if(tickerOffsetRef.current<-600){ tickerOffsetRef.current=c.width }
 ctx.fillText(txt,tickerOffsetRef.current,c.height-tickerH/2)
 }
 }
@@ -453,35 +517,35 @@ return (
 <div style={{marginTop:12,display:'flex',flexDirection:'column',gap:12}}>
 <div style={{border:'2px solid #FF0000',borderRadius:12,padding:10,background:lowData?'#fef2f2':'#fff',display:'flex',justifyContent:'space-between',alignItems:'center'}}><div><b style={{fontSize:12}}>Data Saver Mode</b><div style={{fontSize:10,opacity:.7}}>{lowData?'480p - Uses less data':'720p - High Quality'}</div></div><button onClick={()=>{const v=!lowData;setLowData(v);localStorage.setItem('taglive_lowdata',v.toString());if(isCam)setTimeout(()=>startCamera(),300)}} style={{padding:'8px 14px',borderRadius:20,border:'none',background:lowData?'#16a34a':'#111',color:'#fff',fontWeight:900,fontSize:11}}>{lowData?'480p ON':'720p'}</button></div>
 
-<div style={{border:'2px solid #7c3aed',borderRadius:16,padding:12,background:'#f9f5ff'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:14}}>Intro / Outro Studio (SAVES)</b><button onClick={()=>setShowStudio(!showStudio)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:'#111',color:'#fff',fontWeight:800,fontSize:11}}>{showStudio?'Hide':'Open'}</button></div>
+<div style={{border:'2px solid #7c3aed',borderRadius:16,padding:12,background:'#f9f5ff'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:14}}>Intro / Outro Studio (FIXED SAVING)</b><button onClick={()=>setShowStudio(!showStudio)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:'#111',color:'#fff',fontWeight:800,fontSize:11}}>{showStudio?'Hide':'Open'}</button></div>
 {showStudio&&(<div style={{marginTop:10}}>
-<div style={{display:'flex',gap:6,marginTop:8}}><label style={{flex:1,background:'#7c3aed',color:'#fff',padding:12,borderRadius:10,fontWeight:800,fontSize:12,textAlign:'center',cursor:'pointer'}}>Upload Intro<input ref={introFileRef} type="file" accept="video/*,image/*" onChange={handleIntroFile} style={{display:'none'}}/></label><label style={{flex:1,background:'#111',color:'#fff',padding:12,borderRadius:10,fontWeight:800,fontSize:12,textAlign:'center',cursor:'pointer'}}>Upload Outro<input ref={outroFileRef} type="file" accept="video/*,image/*" onChange={handleOutroFile} style={{display:'none'}}/></label></div>
+<div style={{display:'flex',gap:6,marginTop:8}}><label style={{flex:1,background:'#7c3aed',color:'#fff',padding:12,borderRadius:10,fontWeight:800,fontSize:12,textAlign:'center',cursor:'pointer'}}>Upload Intro <small>(<4MB)</small><input ref={introFileRef} type="file" accept="video/*,image/*" onChange={handleIntroFile} style={{display:'none'}}/></label><label style={{flex:1,background:'#111',color:'#fff',padding:12,borderRadius:10,fontWeight:800,fontSize:12,textAlign:'center',cursor:'pointer'}}>Upload Outro <small>(<4MB)</small><input ref={outroFileRef} type="file" accept="video/*,image/*" onChange={handleOutroFile} style={{display:'none'}}/></label></div>
 <div style={{marginTop:12}}>
-{intros.length>0&&<div style={{marginBottom:10}}><b style={{fontSize:12}}>Active Intro (SAVED):</b><div style={{display:'flex',flexDirection:'column',gap:4,marginTop:6}}>{intros.map((it:any)=><div key={it.id} style={{display:'flex',gap:4}}><button onClick={()=>{setActiveIntroId(it.id);localStorage.setItem('taglive_active_intro',it.id)}} style={{flex:1,padding:8,borderRadius:8,border:'none',background:activeIntroId===it.id?'#16a34a':'#eee',color:activeIntroId===it.id?'#fff':'#000',fontWeight:700,fontSize:11,textAlign:'left'}}>{activeIntroId===it.id?'✓ ':''}{it.title} ({Math.round(it.duration)}s)</button><button onClick={()=>{const n=intros.filter((x:any)=>x.id!==it.id);saveIntros(n); if(activeIntroId===it.id){setActiveIntroId(null);localStorage.removeItem('taglive_active_intro')}}} style={{padding:8,borderRadius:8,border:'none',background:'#ff0000',color:'#fff',fontSize:11}}>X</button></div>)}</div></div>}
-{outros.length>0&&<div><b style={{fontSize:12}}>Active Outro (SAVED):</b><div style={{display:'flex',flexDirection:'column',gap:4,marginTop:6}}>{outros.map((ot:any)=><div key={ot.id} style={{display:'flex',gap:4}}><button onClick={()=>{setActiveOutroId(ot.id);localStorage.setItem('taglive_active_outro',ot.id)}} style={{flex:1,padding:8,borderRadius:8,border:'none',background:activeOutroId===ot.id?'#16a34a':'#eee',color:activeOutroId===ot.id?'#fff':'#000',fontWeight:700,fontSize:11,textAlign:'left'}}>{activeOutroId===ot.id?'✓ ':''}{ot.title} ({Math.round(ot.duration)}s)</button><button onClick={()=>{const n=outros.filter((x:any)=>x.id!==ot.id);saveOutros(n); if(activeOutroId===ot.id){setActiveOutroId(null);localStorage.removeItem('taglive_active_outro')}}} style={{padding:8,borderRadius:8,border:'none',background:'#ff0000',color:'#fff',fontSize:11}}>X</button></div>)}</div></div>}
+{intros.length>0&&<div style={{marginBottom:10}}><b style={{fontSize:12}}>Intro Saved ({intros.length}):</b><div style={{display:'flex',flexDirection:'column',gap:4,marginTop:6}}>{intros.map((it:any)=><div key={it.id} style={{display:'flex',gap:4}}><button onClick={()=>{setActiveIntroId(it.id);try{localStorage.setItem('taglive_active_intro',it.id)}catch{}}} style={{flex:1,padding:8,borderRadius:8,border:'none',background:activeIntroId===it.id?'#16a34a':'#eee',color:activeIntroId===it.id?'#fff':'#000',fontWeight:700,fontSize:11,textAlign:'left'}}>{activeIntroId===it.id?'✓ ':''}{it.title} ({Math.round(it.duration)}s)</button><button onClick={()=>{const n=intros.filter((x:any)=>x.id!==it.id);saveIntros(n); if(activeIntroId===it.id){setActiveIntroId(null);try{localStorage.removeItem('taglive_active_intro')}catch{}}}} style={{padding:8,borderRadius:8,border:'none',background:'#ff0000',color:'#fff',fontSize:11}}>X</button></div>)}</div></div>}
+{outros.length>0&&<div><b style={{fontSize:12}}>Outro Saved ({outros.length}):</b><div style={{display:'flex',flexDirection:'column',gap:4,marginTop:6}}>{outros.map((ot:any)=><div key={ot.id} style={{display:'flex',gap:4}}><button onClick={()=>{setActiveOutroId(ot.id);try{localStorage.setItem('taglive_active_outro',ot.id)}catch{}}} style={{flex:1,padding:8,borderRadius:8,border:'none',background:activeOutroId===ot.id?'#16a34a':'#eee',color:activeOutroId===ot.id?'#fff':'#000',fontWeight:700,fontSize:11,textAlign:'left'}}>{activeOutroId===ot.id?'✓ ':''}{ot.title} ({Math.round(ot.duration)}s)</button><button onClick={()=>{const n=outros.filter((x:any)=>x.id!==ot.id);saveOutros(n); if(activeOutroId===ot.id){setActiveOutroId(null);try{localStorage.removeItem('taglive_active_outro')}catch{}}}} style={{padding:8,borderRadius:8,border:'none',background:'#ff0000',color:'#fff',fontSize:11}}>X</button></div>)}</div></div>}
 </div>
 </div>)}
 </div>
 
-<div style={{border:'2px solid #111',borderRadius:16,padding:12,background:'#ffffff'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><b style={{fontSize:13,color:'#111',flex:1}}>Scrolling Ticker</b><div style={{display:'flex',gap:6}}><button onClick={()=>{ const v=!tickerOn; setTickerOn(v); localStorage.setItem('taglive_ticker_on', v.toString()) }} style={{padding:'8px 14px',borderRadius:20,border:'none',background:tickerOn?'#16a34a':'#111',color:'#fff',fontWeight:900,fontSize:11}}>{tickerOn?'ON':'OFF'}</button><button onClick={()=>setShowTickerStudio(!showTickerStudio)} style={{padding:'8px 12px',borderRadius:20,border:'none',background:showTickerStudio?'#111':'#eee',color:showTickerStudio?'#fff':'#000',fontWeight:800,fontSize:11}}>{showTickerStudio?'Hide':'Open'}</button></div></div>
+<div style={{border:'2px solid #111',borderRadius:16,padding:12,background:'#ffffff'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><b style={{fontSize:13,color:'#111',flex:1}}>Scrolling Ticker (FIXED SIZE)</b><div style={{display:'flex',gap:6}}><button onClick={()=>{ const v=!tickerOn; setTickerOn(v); try{localStorage.setItem('taglive_ticker_on', v.toString())}catch{} }} style={{padding:'8px 14px',borderRadius:20,border:'none',background:tickerOn?'#16a34a':'#111',color:'#fff',fontWeight:900,fontSize:11}}>{tickerOn?'ON':'OFF'}</button><button onClick={()=>setShowTickerStudio(!showTickerStudio)} style={{padding:'8px 12px',borderRadius:20,border:'none',background:showTickerStudio?'#111':'#eee',color:showTickerStudio?'#fff':'#000',fontWeight:800,fontSize:11}}>{showTickerStudio?'Hide':'Open'}</button></div></div>
 {showTickerStudio&&(<div style={{marginTop:10,display:'flex',flexDirection:'column',gap:8}}>
-<input value={tickerText} onChange={e=>{setTickerText(e.target.value);localStorage.setItem('taglive_ticker_text',e.target.value);tickerOffsetRef.current=720}} placeholder="Type announcement..." style={{width:'100%',padding:10,borderRadius:10,border:'2px solid #111',fontSize:12,fontWeight:700,background:'#000',color:'#FFFF00',boxSizing:'border-box'}}/>
+<input value={tickerText} onChange={e=>{setTickerText(e.target.value);try{localStorage.setItem('taglive_ticker_text',e.target.value)}catch{};tickerOffsetRef.current=720}} placeholder="Type announcement..." style={{width:'100%',padding:10,borderRadius:10,border:'2px solid #111',fontSize:12,fontWeight:700,background:'#000',color:'#FFFF00',boxSizing:'border-box'}}/>
 <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-<div style={{flex:1,minWidth:120,display:'flex',alignItems:'center',gap:6,background:'#f3f0ff',padding:'6px 10px',borderRadius:10}}><span style={{fontSize:10,fontWeight:800}}>A-</span><input type="range" min={16} max={60} value={tickerSize} onChange={e=>{ const v=parseInt(e.target.value); setTickerSize(v); localStorage.setItem('taglive_ticker_size', v.toString()) }} style={{flex:1}}/><span style={{fontSize:10,fontWeight:800}}>A+</span><span style={{fontSize:10,fontWeight:800,background:'#111',color:'#fff',padding:'3px 6px',borderRadius:20}}>{tickerSize}</span></div>
-<div style={{flex:1,minWidth:120,display:'flex',alignItems:'center',gap:6,background:'#fef3c7',padding:'6px 10px',borderRadius:10}}><span style={{fontSize:10,fontWeight:800}}>Speed</span><input type="range" min={1} max={10} value={tickerSpeed} onChange={e=>{ const v=parseInt(e.target.value); setTickerSpeed(v); localStorage.setItem('taglive_ticker_speed', v.toString()) }} style={{flex:1}}/><span style={{fontSize:10,fontWeight:800,background:'#111',color:'#fff',padding:'3px 6px',borderRadius:20}}>{tickerSpeed}</span></div>
+<div style={{flex:1,minWidth:120,display:'flex',alignItems:'center',gap:6,background:'#f3f0ff',padding:'6px 10px',borderRadius:10}}><span style={{fontSize:10,fontWeight:800}}>Size {tickerSize}</span><input type="range" min={12} max={30} value={tickerSize} onChange={e=>{ const v=parseInt(e.target.value); setTickerSize(v); try{localStorage.setItem('taglive_ticker_size', v.toString())}catch{} }} style={{flex:1}}/></div>
+<div style={{flex:1,minWidth:120,display:'flex',alignItems:'center',gap:6,background:'#fef3c7',padding:'6px 10px',borderRadius:10}}><span style={{fontSize:10,fontWeight:800}}>Speed {tickerSpeed}</span><input type="range" min={1} max={6} value={tickerSpeed} onChange={e=>{ const v=parseInt(e.target.value); setTickerSpeed(v); try{localStorage.setItem('taglive_ticker_speed', v.toString())}catch{} }} style={{flex:1}}/></div>
 </div>
 </div>)}</div>
 
 <div style={{border:'2px solid #7c3aed',borderRadius:16,padding:12,background:'#fff'}}>
-<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:13}}>Church Name + Logo (SAVES)</b><button onClick={()=>setShowChurchName(!showChurchName)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:showChurchName?'#7c3aed':'#111',color:'#fff',fontWeight:800,fontSize:11}}>{showChurchName?'ON':'OFF'}</button></div>
-<input value={churchName} onChange={e=>{setChurchName(e.target.value);localStorage.setItem('taglive_church_name',e.target.value)}} placeholder="SALEM GANA JA CITY" style={{width:'100%',marginTop:8,padding:10,borderRadius:10,border:'2px solid #7c3aed',fontSize:12,fontWeight:800,boxSizing:'border-box'}}/>
+<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:13}}>Church Name + Logo (SAVES NOW)</b><button onClick={()=>setShowChurchName(!showChurchName)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:showChurchName?'#7c3aed':'#111',color:'#fff',fontWeight:800,fontSize:11}}>{showChurchName?'ON':'OFF'}</button></div>
+<input value={churchName} onChange={e=>{setChurchName(e.target.value);try{localStorage.setItem('taglive_church_name',e.target.value)}catch{}}} placeholder="SALEM GANA JA CITY" style={{width:'100%',marginTop:8,padding:10,borderRadius:10,border:'2px solid #7c3aed',fontSize:12,fontWeight:800,boxSizing:'border-box'}}/>
 <div style={{marginTop:10,border:'1px dashed #7c3aed',borderRadius:10,padding:10,background:'#f9f5ff'}}>
-<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:11}}>SAVED LOGO</b>{logoImage&&<button onClick={removeChurchLogo} style={{padding:'4px 8px',borderRadius:6,border:'none',background:'red',color:'#fff',fontWeight:800,fontSize:10}}>Remove</button>}</div>
+<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:11}}>SAVED LOGO {logoImage?'(FOUND)':'(NONE)'}</b>{logoImage&&<button onClick={removeChurchLogo} style={{padding:'4px 8px',borderRadius:6,border:'none',background:'red',color:'#fff',fontWeight:800,fontSize:10}}>Remove</button>}</div>
 <div style={{display:'flex',gap:8,alignItems:'center',marginTop:8}}>
 {logoImage&&<img src={logoImage} style={{width:50,height:50,objectFit:'contain',borderRadius:8,border:'1px solid #ddd',background:'#fff'}}/>}
 <div style={{flex:1}}>
 <input ref={churchLogoInputRef} type="file" accept="image/*" onChange={handleChurchLogoPick} style={{width:'100%',fontSize:11}}/>
-<div style={{fontSize:9,opacity:0.7,marginTop:2}}>{logoImage?'Logo saved - stays after refresh':'No logo saved'}</div>
+<div style={{fontSize:9,opacity:0.7,marginTop:2}}>{logoImage?'Logo saved - will stay':'Upload <2MB logo'}</div>
 </div>
 </div>
 </div>
@@ -493,13 +557,13 @@ return (
 
 <div style={{display:'flex',gap:6,marginTop:12}}><button onClick={()=>setBgMode('face')} style={{flex:1,padding:8,borderRadius:20,border:'none',background:bgMode==='face'?'#111':'#eee',color:bgMode==='face'?'#fff':'#000',fontWeight:800,fontSize:12}}>Face</button><button onClick={()=>setBgMode('black')} style={{flex:1,padding:8,borderRadius:20,border:'none',background:bgMode==='black'?'#111':'#eee',color:bgMode==='black'?'#fff':'#000',fontWeight:800,fontSize:12}}>Black</button><button onClick={()=>setBgMode('image')} style={{flex:1,padding:8,borderRadius:20,border:'none',background:bgMode==='image'?'#111':'#eee',color:bgMode==='image'?'#fff':'#000',fontWeight:800,fontSize:12}}>Image</button><button onClick={()=>setBgMode('split')} style={{flex:1,padding:8,borderRadius:20,border:'none',background:bgMode==='split'?'#7c3aed':'#eee',color:bgMode==='split'?'#fff':'#000',fontWeight:800,fontSize:12}}>Top/Bottom</button></div>
 
-<div style={{display:'flex',alignItems:'center',gap:6,marginTop:10,flexWrap:'wrap'}}><div style={{flex:1,minWidth:140,display:'flex',alignItems:'center',gap:6,background:'#f3f0ff',padding:'6px 10px',borderRadius:10}}><span style={{fontSize:10,fontWeight:800}}>A-</span><input type="range" min={18} max={48} value={fontSize} onChange={e=>setFontSize(parseInt(e.target.value))} style={{flex:1}}/><span style={{fontSize:10,fontWeight:800}}>A+</span><span style={{fontSize:10,fontWeight:800,background:'#111',color:'#fff',padding:'3px 6px',borderRadius:20}}>{fontSize}</span></div><button onClick={()=>setAlign(align==='justify'?'center':'justify')} style={{padding:'8px 10px',borderRadius:10,border:'none',background:align==='justify'?'#111':'#ddd',color:align==='justify'?'#fff':'#000',fontWeight:800,fontSize:10}}>{align==='justify'?'Justify':'Center'}</button><button onClick={pickMedia} style={{padding:'8px 10px',borderRadius:10,border:'none',background:'#7c3aed',color:'#fff',fontWeight:800,fontSize:10}}>Media</button><input ref={fileInputRef} type="file" accept="image/*" onChange={onFilePick} style={{display:'none'}}/></div>
+<div style={{display:'flex',alignItems:'center',gap:6,marginTop:10,flexWrap:'wrap'}}><div style={{flex:1,minWidth:140,display:'flex',alignItems:'center',gap:6,background:'#f3f0ff',padding:'6px 10px',borderRadius:10}}><span style={{fontSize:10,fontWeight:800}}>Font {fontSize}</span><input type="range" min={14} max={36} value={fontSize} onChange={e=>setFontSize(parseInt(e.target.value))} style={{flex:1}}/><span style={{fontSize:10,fontWeight:800}}>A+</span></div><button onClick={()=>setAlign(align==='justify'?'center':'justify')} style={{padding:'8px 10px',borderRadius:10,border:'none',background:align==='justify'?'#111':'#ddd',color:align==='justify'?'#fff':'#000',fontWeight:800,fontSize:10}}>{align==='justify'?'Justify':'Center'}</button><button onClick={pickMedia} style={{padding:'8px 10px',borderRadius:10,border:'none',background:'#7c3aed',color:'#fff',fontWeight:800,fontSize:10}}>Media</button><input ref={fileInputRef} type="file" accept="image/*" onChange={onFilePick} style={{display:'none'}}/></div>
 
-<div style={{display:'flex',gap:6,marginTop:8,alignItems:'center',background:'#fff',border:'1px solid #eee',padding:8,borderRadius:10,flexWrap:'wrap'}}><div style={{display:'flex',alignItems:'center',gap:4}}><span style={{fontSize:10,fontWeight:800}}>Text</span><input type="color" value={textColor} onChange={e=>setTextColor(e.target.value)} style={{width:28,height:28,border:'none',borderRadius:6}}/></div><div style={{display:'flex',alignItems:'center',gap:4}}><span style={{fontSize:10,fontWeight:800}}>Box</span><input type="color" value={boxColor} onChange={e=>setBoxColor(e.target.value)} style={{width:28,height:28,border:'none',borderRadius:6}}/></div><div style={{display:'flex',alignItems:'center',gap:4,flex:1}}><span style={{fontSize:10,fontWeight:800}}>Opac</span><input type="range" min={0} max={1} step={0.05} value={boxOpacity} onChange={e=>setBoxOpacity(parseFloat(e.target.value))} style={{flex:1}}/></div><button onClick={pickLogo} style={{padding:'6px 10px',borderRadius:8,border:'none',background:logoImage?'#16a34a':'#111',color:'#fff',fontWeight:800,fontSize:10}}>{logoImage?'Logo':'Add Logo'}</button><input ref={logoInputRef} type="file" accept="image/*" onChange={onLogoPick} style={{display:'none'}}/><button onClick={()=>setShowText(!showText)} style={{padding:'6px 10px',borderRadius:8,border:'none',background:showText?'#111':'#ddd',color:showText?'#fff':'#000',fontWeight:800,fontSize:10}}>{showText?'Text':'No Text'}</button></div>
+<div style={{display:'flex',gap:6,marginTop:8,alignItems:'center',background:'#fff',border:'1px solid #eee',padding:8,borderRadius:10,flexWrap:'wrap'}}><div style={{display:'flex',alignItems:'center',gap:4}}><span style={{fontSize:10,fontWeight:800}}>Text</span><input type="color" value={textColor} onChange={e=>setTextColor(e.target.value)} style={{width:28,height:28,border:'none',borderRadius:6}}/></div><div style={{display:'flex',alignItems:'center',gap:4}}><span style={{fontSize:10,fontWeight:800}}>Box</span><input type="color" value={boxColor} onChange={e=>setBoxColor(e.target.value)} style={{width:28,height:28,border:'none',borderRadius:6}}/></div><div style={{display:'flex',alignItems:'center',gap:4,flex:1}}><span style={{fontSize:10,fontWeight:800}}>Opac</span><input type="range" min={0} max={1} step={0.05} value={boxOpacity} onChange={e=>setBoxOpacity(parseFloat(e.target.value))} style={{flex:1}}/></div><button onClick={pickLogo} style={{padding:'6px 10px',borderRadius:8,border:'none',background:logoImage?'#16a34a':'#111',color:'#fff',fontWeight:800,fontSize:10}}>{logoImage?'Logo ✓':'Add Logo'}</button><input ref={logoInputRef} type="file" accept="image/*" onChange={onLogoPick} style={{display:'none'}}/><button onClick={()=>setShowText(!showText)} style={{padding:'6px 10px',borderRadius:8,border:'none',background:showText?'#111':'#ddd',color:showText?'#fff':'#000',fontWeight:800,fontSize:10}}>{showText?'Text':'No Text'}</button></div>
 </div>
 
 <div>
-<div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{background:'#000',borderRadius:18,overflow:'hidden',position:'relative',aspectRatio:'9/16',touchAction:'none'}}><video ref={videoRef} muted playsInline autoPlay style={{width:'100%',height:'100%',objectFit:'cover',display:isCam&&bgMode==='face'?'block':'none'}}/>{!isCam&&<div style={{color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',height:420}}>Camera off - {lowData?'480p ON':'720p'}</div>}<canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%'}}/>
+<div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{background:'#000',borderRadius:18,overflow:'hidden',position:'relative',aspectRatio:'9/16',touchAction:'none'}}><video ref={videoRef} muted playsInline autoPlay style={{width:'100%',height:'100%',objectFit:'cover',display:isCam&&bgMode==='face'?'block':'none'}}/>{!isCam&&<div style={{color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',height:420}}>Camera off - Click Start {lowData?'480p ON':'720p'}</div>}<canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%'}}/>
 <video ref={broadcastVideoRef} muted={false} playsInline crossOrigin="anonymous" style={{position:'absolute',left:'-9999px',top:'-9999px',width:'10px',height:'10px',opacity:0.01}}/>
 {isCam&&(<div style={{position:'absolute',top: bgMode==='split'?'auto':'12px',bottom: bgMode==='split'?'50px':'auto',right:12,display:'flex',gap:8,zIndex:50}}><button onClick={toggleCamera} style={{background:'rgba(0,0,0,0.85)',color:'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>Flip</button><button onClick={toggleTorch} style={{background:torch?'#fbbf24':'rgba(0,0,0,0.85)',color:torch?'#000':'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>{torch?'Flash On':'Flash'}</button></div>)}
 </div>
@@ -507,9 +571,9 @@ return (
 <div style={{display:'flex',gap:6,marginTop:10}}>
 {!isRecording?<button onClick={startRecording} disabled={!isCam} style={{flex:1,background:isCam?'#a21caf':'#ccc',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Record MP4 + Intro (SOUND FIXED)</button>
 :<button onClick={stopRecording} style={{flex:1,background:'#111',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Stop + Outro ({formatTime(liveSeconds)})</button>}
-{recordedUrl&&<a href={recordedUrl} download={`${churchName.replace(/[^a-zA-Z0-9]/g,'_')}-${Date.now()}.mp4`} style={{flex:1,background:'#16a34a',color:'#fff',padding:12,borderRadius:10,fontWeight:800,textAlign:'center',textDecoration:'none',fontSize:12}}>Download MP4</a>}
+{recordedUrl&&<a href={recordedUrl} download={`${churchName.replace(/[^a-zA-Z0-9]/g,'_')}-${Date.now()}.mp4`} style={{flex:1,background:'#16a34a',color:'#fff',padding:12,borderRadius:10,fontWeight:800,textAlign:'center',textDecoration:'none',fontSize:12}}>Download MP4 WITH SOUND</a>}
 </div>
-{recordedUrl&&<video src={recordedUrl} controls style={{width:'100%',marginTop:8,borderRadius:12}}/>}
+{recordedUrl&&<video src={recordedUrl} controls playsInline style={{width:'100%',marginTop:8,borderRadius:12}}/>}
 <div style={{display:'flex',gap:6,marginTop:10}}><button onClick={openBibleApp} style={{flex:1,background:'#2563eb',color:'#fff',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Open Bible</button><button onClick={pasteClipboard} style={{flex:1,background:'#059669',color:'#fff',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Paste</button><button onClick={saveVerse} style={{flex:1,background:'#f59e0b',color:'#000',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Save</button></div>
 <textarea value={verse} onChange={e=>setVerse(e.target.value)} style={{width:'100%',height:90,marginTop:10,padding:12,borderRadius:12,border:'1px solid #ddd'}} placeholder={"Ministering:\nNAME OF PRESENTER"}/>
 {saved.length>0&&<div style={{marginTop:8,border:'1px solid #eee',borderRadius:12,padding:8,background:'#fff'}}>
