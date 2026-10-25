@@ -158,7 +158,7 @@ if(streamRef.current) streamRef.current.getTracks().forEach(t=>t.stop())
 await new Promise(r=>setTimeout(r,300))
 const w=lowData?640:1280
 const h=lowData?480:720
-const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:newFacing,width:{ideal:w},height:{ideal:h}},audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}})
+const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:newFacing,width:{ideal:w},height:{ideal:h}},audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}})
 streamRef.current=s; trackRef.current=s.getVideoTracks()[0]
 if(videoRef.current){ videoRef.current.srcObject=s; await videoRef.current.play() }
 setFacing(newFacing); setIsCam(true)
@@ -184,9 +184,17 @@ const active=intros.find(i=>i.id===activeIntroId)
 if(active){
 setBroadcastPlaying(active)
 if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
-if(active.type==='video'&&broadcastVideoRef.current){ broadcastVideoRef.current.src=active.data; broadcastVideoRef.current.muted=false; broadcastVideoRef.current.volume=1; broadcastVideoRef.current.play().catch(()=>{}) }
+if(active.type==='video'&&broadcastVideoRef.current){
+  broadcastVideoRef.current.src=active.data;
+  broadcastVideoRef.current.crossOrigin="anonymous";
+  broadcastVideoRef.current.muted=false;
+  broadcastVideoRef.current.volume=1;
+  broadcastVideoRef.current.playsInline=true;
+  try{ await broadcastVideoRef.current.play() }catch{}
+}
 setTimeout(async()=>{
 setBroadcastPlaying(null); broadcastImageRef.current=null;
+if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause() }catch{} }
 setSelectedPage(page)
 try{
 const res=await fetch(`https://graph.facebook.com/v19.0/${page.id}/live_videos`,{ method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({ access_token: page.access_token, title: verse.substring(0,60), description: 'TagLive - '+verse, status: 'UNPUBLISHED' }) })
@@ -249,7 +257,7 @@ const onLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; con
 const handleChurchLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const base64=await fileToBase64(f); setLogoImage(base64); localStorage.setItem('taglive_church_logo', base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; setShowLogo(true); localStorage.setItem('taglive_show_logo','true'); alert('Church Logo Saved!') }
 const removeChurchLogo=()=>{ localStorage.removeItem('taglive_church_logo'); setLogoImage(null); logoImageRef.current=null; if(churchLogoInputRef.current) churchLogoInputRef.current.value=''; if(logoInputRef.current) logoInputRef.current.value=''; alert('Logo Removed') }
 
-// --- SOUND + NO STUCK FIX - MILESTONE SAFE ---
+// --- FINAL FIXED: Intro sound in LIVE + Outro records ---
 const startRecording=async()=>{
   const canvas=canvasRef.current; if(!canvas) return alert('Start camera first')
   canvas.width=480; canvas.height=854
@@ -264,6 +272,7 @@ const startRecording=async()=>{
   const audioCtx=new (window.AudioContext||(window as any).webkitAudioContext)()
   audioCtxRef.current=audioCtx
   const dest=audioCtx.createMediaStreamDestination()
+  ;(audioCtx as any)._dest=dest
 
   const micTrack=streamRef.current?.getAudioTracks()[0]
   if(!micTrack) return alert('Mic not found - restart camera')
@@ -290,6 +299,7 @@ const startRecording=async()=>{
         await audioEl.play().catch(()=>{})
         const vSource=audioCtx.createMediaElementSource(audioEl)
         vSource.connect(dest)
+        vSource.connect(audioCtx.destination)
         ;(audioEl as any)._tagliveCleanup=()=>{ try{ vSource.disconnect() }catch{}; try{ audioEl.pause(); audioEl.removeAttribute('src'); audioEl.load() }catch{} }
         ;(audioCtxRef.current as any).introAudioEl=audioEl
       }catch{}
@@ -314,10 +324,7 @@ const startRecording=async()=>{
     setTimeout(()=>{
       setBroadcastPlaying(null); broadcastImageRef.current=null
       if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.removeAttribute('src'); broadcastVideoRef.current.load() }catch{} }
-      try{
-        const el=(audioCtxRef.current as any)?.introAudioEl
-        if(el && el._tagliveCleanup) el._tagliveCleanup()
-      }catch{}
+      try{ const el=(audioCtxRef.current as any)?.introAudioEl; if(el && el._tagliveCleanup) el._tagliveCleanup() }catch{}
     }, (active.duration||5)*1000)
   }
 }
@@ -344,6 +351,7 @@ const stopRecording=async()=>{
     if(active.type==='image'){
       const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }
       broadcastImageRef.current=img
+      setTimeout(()=>{ stopRecordingFinal() }, (active.duration||5)*1000)
     } else if(active.type==='video'){
       if(broadcastVideoRef.current){
         const v=broadcastVideoRef.current
@@ -356,23 +364,20 @@ const stopRecording=async()=>{
         audioEl.crossOrigin="anonymous"; audioEl.playsInline=true; audioEl.muted=false; audioEl.volume=1
         audioEl.src=active.data
         await audioEl.play().catch(()=>{})
-        if(audioCtxRef.current){
+        if(audioCtxRef.current && (audioCtxRef.current as any)._dest){
+          const dest=(audioCtxRef.current as any)._dest
           const vSource=audioCtxRef.current.createMediaElementSource(audioEl)
-          const dest=audioCtxRef.current.createMediaStreamDestination()
           vSource.connect(dest)
-          try{
-            const recStream=(recorderRef.current as any)?.stream as MediaStream
-            if(recStream) dest.stream.getAudioTracks().forEach(t=>recStream.addTrack(t))
-          }catch{}
+          vSource.connect(audioCtxRef.current.destination)
           ;(audioEl as any)._tagliveCleanup=()=>{ try{ vSource.disconnect() }catch{}; try{ audioEl.pause(); audioEl.removeAttribute('src'); audioEl.load() }catch{} }
           ;(audioCtxRef.current as any).outroAudioEl=audioEl
         }
       }catch{}
+      setTimeout(()=>{ stopRecordingFinal() }, (active.duration||5)*1000)
     }
-    setTimeout(()=>{ stopRecordingFinal() }, (active.duration||5)*1000)
   } else { stopRecordingFinal() }
 }
-// --- END FIX ---
+// --- END FINAL FIX ---
 
 const onTouchStart=(e:any)=>{
 const canvas=canvasRef.current; if(!canvas) return
