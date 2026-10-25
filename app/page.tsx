@@ -109,7 +109,6 @@ setStats({ live: live||0, daily: daily||0, weekly: weekly||0, monthly: monthly||
 trackDevice(); const interval=setInterval(trackDevice,60000); return()=>clearInterval(interval)
 },[isAdmin])
 
-// FIXED - RESTORE ALL SAVES ON REFRESH
 useEffect(()=>{
 try{
 const i=localStorage.getItem('taglive_intros'); if(i){ setIntros(JSON.parse(i)) }
@@ -250,13 +249,18 @@ const onLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; con
 const handleChurchLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const base64=await fileToBase64(f); setLogoImage(base64); localStorage.setItem('taglive_church_logo', base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; setShowLogo(true); localStorage.setItem('taglive_show_logo','true'); alert('Church Logo Saved!') }
 const removeChurchLogo=()=>{ localStorage.removeItem('taglive_church_logo'); setLogoImage(null); logoImageRef.current=null; if(churchLogoInputRef.current) churchLogoInputRef.current.value=''; if(logoInputRef.current) logoInputRef.current.value=''; alert('Logo Removed') }
 
-// --- SOUND FIX ONLY ---
+// --- SOUND + NO STUCK FIX - MILESTONE SAFE ---
 const startRecording=async()=>{
   const canvas=canvasRef.current; if(!canvas) return alert('Start camera first')
   canvas.width=480; canvas.height=854
   const canvasStream=(canvas as any).captureStream(30) as MediaStream
 
   try{ if(audioCtxRef.current) audioCtxRef.current.close() }catch{}
+  audioCtxRef.current=null
+  setBroadcastPlaying(null)
+  broadcastImageRef.current=null
+  if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.removeAttribute('src'); broadcastVideoRef.current.load() }catch{} }
+
   const audioCtx=new (window.AudioContext||(window as any).webkitAudioContext)()
   audioCtxRef.current=audioCtx
   const dest=audioCtx.createMediaStreamDestination()
@@ -272,14 +276,22 @@ const startRecording=async()=>{
     if(active.type==='image'){
       const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }
       broadcastImageRef.current=img
-    } else if(active.type==='video'&&broadcastVideoRef.current){
-      const v=broadcastVideoRef.current
-      v.crossOrigin="anonymous"; v.playsInline=true; v.muted=false; v.volume=1; v.src=active.data
+    } else if(active.type==='video'){
+      if(broadcastVideoRef.current){
+        const v=broadcastVideoRef.current
+        v.crossOrigin="anonymous"; v.playsInline=true; v.muted=true; v.volume=0
+        v.src=active.data; v.currentTime=0
+        try{ await v.play() }catch{}
+      }
       try{
-        await v.play()
-        const videoSource=audioCtx.createMediaElementSource(v)
-        videoSource.connect(dest)
-        videoSource.connect(audioCtx.destination)
+        const audioEl=document.createElement('video')
+        audioEl.crossOrigin="anonymous"; audioEl.playsInline=true; audioEl.muted=false; audioEl.volume=1
+        audioEl.src=active.data
+        await audioEl.play().catch(()=>{})
+        const vSource=audioCtx.createMediaElementSource(audioEl)
+        vSource.connect(dest)
+        ;(audioEl as any)._tagliveCleanup=()=>{ try{ vSource.disconnect() }catch{}; try{ audioEl.pause(); audioEl.removeAttribute('src'); audioEl.load() }catch{} }
+        ;(audioCtxRef.current as any).introAudioEl=audioEl
       }catch{}
     }
   }
@@ -301,16 +313,27 @@ const startRecording=async()=>{
   if(active){
     setTimeout(()=>{
       setBroadcastPlaying(null); broadcastImageRef.current=null
-      if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.src='' }catch{} }
+      if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.removeAttribute('src'); broadcastVideoRef.current.load() }catch{} }
+      try{
+        const el=(audioCtxRef.current as any)?.introAudioEl
+        if(el && el._tagliveCleanup) el._tagliveCleanup()
+      }catch{}
     }, (active.duration||5)*1000)
   }
 }
 
 const stopRecordingFinal=()=>{
   try{ recorderRef.current?.stop() }catch{}
-  try{ audioCtxRef.current?.close() }catch{}
+  try{
+    const el=(audioCtxRef.current as any)?.introAudioEl
+    if(el && el._tagliveCleanup) el._tagliveCleanup()
+    const el2=(audioCtxRef.current as any)?.outroAudioEl
+    if(el2 && el2._tagliveCleanup) el2._tagliveCleanup()
+  }catch{}
+  try{ if(audioCtxRef.current) audioCtxRef.current.close() }catch{}
+  audioCtxRef.current=null
   setIsRecording(false); setBroadcastPlaying(null); broadcastImageRef.current=null
-  if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.src='' }catch{} }
+  if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.removeAttribute('src'); broadcastVideoRef.current.load() }catch{} }
   if(!isLive&&!ytLive) stopTimer()
 }
 
@@ -321,24 +344,35 @@ const stopRecording=async()=>{
     if(active.type==='image'){
       const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }
       broadcastImageRef.current=img
-    } else if(active.type==='video'&&broadcastVideoRef.current){
-      const v=broadcastVideoRef.current
-      v.crossOrigin="anonymous"; v.playsInline=true; v.muted=false; v.volume=1; v.src=active.data
+    } else if(active.type==='video'){
+      if(broadcastVideoRef.current){
+        const v=broadcastVideoRef.current
+        v.crossOrigin="anonymous"; v.playsInline=true; v.muted=true; v.volume=0
+        v.src=active.data; v.currentTime=0
+        try{ await v.play() }catch{}
+      }
       try{
-        await v.play()
+        const audioEl=document.createElement('video')
+        audioEl.crossOrigin="anonymous"; audioEl.playsInline=true; audioEl.muted=false; audioEl.volume=1
+        audioEl.src=active.data
+        await audioEl.play().catch(()=>{})
         if(audioCtxRef.current){
+          const vSource=audioCtxRef.current.createMediaElementSource(audioEl)
+          const dest=audioCtxRef.current.createMediaStreamDestination()
+          vSource.connect(dest)
           try{
-            const videoSource=audioCtxRef.current.createMediaElementSource(v)
-            const dest=(audioCtxRef.current as any).destRef || audioCtxRef.current.createMediaStreamDestination()
-            videoSource.connect(dest)
+            const recStream=(recorderRef.current as any)?.stream as MediaStream
+            if(recStream) dest.stream.getAudioTracks().forEach(t=>recStream.addTrack(t))
           }catch{}
+          ;(audioEl as any)._tagliveCleanup=()=>{ try{ vSource.disconnect() }catch{}; try{ audioEl.pause(); audioEl.removeAttribute('src'); audioEl.load() }catch{} }
+          ;(audioCtxRef.current as any).outroAudioEl=audioEl
         }
       }catch{}
     }
     setTimeout(()=>{ stopRecordingFinal() }, (active.duration||5)*1000)
   } else { stopRecordingFinal() }
 }
-// --- END SOUND FIX ---
+// --- END FIX ---
 
 const onTouchStart=(e:any)=>{
 const canvas=canvasRef.current; if(!canvas) return
@@ -549,7 +583,7 @@ return (
 
 <div>
 <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{background:'#000',borderRadius:18,overflow:'hidden',position:'relative',aspectRatio:'9/16',touchAction:'none'}}><video ref={videoRef} muted playsInline autoPlay style={{width:'100%',height:'100%',objectFit:'cover',display:isCam&&bgMode==='face'?'block':'none'}}/>{!isCam&&<div style={{color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',height:420}}>Camera off - {lowData?'480p ON':'720p'}</div>}<canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%'}}/>
-<video ref={broadcastVideoRef} muted={false} playsInline crossOrigin="anonymous" style={{position:'absolute',left:'-9999px',top:'-9999px',width:'10px',height:'10px',opacity:0.01}}/>
+<video ref={broadcastVideoRef} muted playsInline crossOrigin="anonymous" style={{position:'absolute',left:'-9999px',top:'-9999px',width:'10px',height:'10px',opacity:0.01}}/>
 {isCam&&(<div style={{position:'absolute',top: bgMode==='split'?'auto':'12px',bottom: bgMode==='split'?'50px':'auto',right:12,display:'flex',gap:8,zIndex:50}}><button onClick={toggleCamera} style={{background:'rgba(0,0,0,0.85)',color:'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>Flip</button><button onClick={toggleTorch} style={{background:torch?'#fbbf24':'rgba(0,0,0,0.85)',color:torch?'#000':'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>{torch?'Flash On':'Flash'}</button></div>)}
 </div>
 <div style={{display:'flex',gap:8,marginTop:12}}>{!isCam?<button onClick={()=>startCamera()} style={{flex:1,background:'#111',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Start Camera {lowData?'(480p)':''}</button>:<><button onClick={toggleCamera} style={{flex:1,background:'#7c3aed',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Switch Camera</button><button onClick={stopCamera} style={{flex:1,background:'#444',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Stop</button></>}</div>
