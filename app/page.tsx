@@ -228,7 +228,7 @@ const onLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; con
 const handleChurchLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const base64=await fileToBase64(f); setLogoImage(base64); localStorage.setItem('taglive_church_logo', base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; alert('Church Logo Saved!') }
 const removeChurchLogo=()=>{ localStorage.removeItem('taglive_church_logo'); setLogoImage(null); logoImageRef.current=null; if(churchLogoInputRef.current) churchLogoInputRef.current.value=''; if(logoInputRef.current) logoInputRef.current.value=''; alert('Logo Removed') }
 
-// FINAL FIX - MP4 plays + sound + no outro corruption
+// FIXED - Preview sound + MP4 sound + Outro sound
 const startRecording=async()=>{
   const canvas=canvasRef.current; if(!canvas) return alert('Start camera first')
   canvas.width=720; canvas.height=1280
@@ -236,7 +236,6 @@ const startRecording=async()=>{
   const active=intros.find(i=>i.id===activeIntroId)
   const micTrack = streamRef.current?.getAudioTracks()[0]
   if(!micTrack) return alert('Mic not found - restart camera')
-
   let ac:any = null
   let introAudio:any = null
   try{
@@ -246,6 +245,7 @@ const startRecording=async()=>{
     const dest = ac.createMediaStreamDestination()
     const micSrc = ac.createMediaStreamSource(streamRef.current!)
     micSrc.connect(dest)
+    micSrc.connect(ac.destination) // THIS LINE FIXES PREVIEW MIC SOUND
     if(active?.type==='video'){
       introAudio = new Audio()
       introAudio.crossOrigin="anonymous"
@@ -264,7 +264,6 @@ const startRecording=async()=>{
   }catch{
     try{ canvasStream.addTrack(micTrack) }catch{}
   }
-
   if(active){
     setBroadcastPlaying(active)
     if(active.type==='image'){
@@ -275,14 +274,11 @@ const startRecording=async()=>{
       try{ await v.play() }catch{}
     }
   }
-
   chunksRef.current=[]
-  // Try mp4 first (plays as mp4), fallback to webm with sound
   let mime='video/webm;codecs=vp8,opus'
   if(MediaRecorder.isTypeSupported('video/mp4')) mime='video/mp4'
   else if(MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')) mime='video/webm;codecs=vp9,opus'
-
-  const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 2500000, audioBitsPerSecond: 128000 })
+  const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 2500000 })
   rec.ondataavailable=(e)=>{ if(e.data.size>0) chunksRef.current.push(e.data) }
   rec.onstop=()=>{
     const blob=new Blob(chunksRef.current, { type: mime })
@@ -290,11 +286,11 @@ const startRecording=async()=>{
     try{
       const a:any = audioCtxRef.current
       if(a?._introEl){ try{ a._introEl.pause(); a._introEl.src='' }catch{} }
+      if(a?._outroEl){ try{ a._outroEl.pause(); a._outroEl.src='' }catch{} }
       a?.close()
     }catch{}
   }
   rec.start(100); recorderRef.current=rec; setIsRecording(true); startTimer()
-
   if(active){
     setTimeout(()=>{
       setBroadcastPlaying(null); broadcastImageRef.current=null
@@ -319,7 +315,6 @@ const stopRecordingFinal=()=>{
   }catch{}
 }
 
-// SIMPLE OUTRO - FIXES screenshot + file corruption
 const stopRecording=async()=>{
   const active=outros.find(o=>o.id===activeOutroId)
   if(active && isRecording){
@@ -330,6 +325,18 @@ const stopRecording=async()=>{
       const v=broadcastVideoRef.current
       v.crossOrigin="anonymous"; v.muted=true; v.volume=0; v.playsInline=true; v.src=active.data
       try{ await v.play() }catch{}
+      try{
+        const ac:any = audioCtxRef.current
+        if(ac && ac._dest){
+          const a = new Audio()
+          a.crossOrigin="anonymous"; a.src=active.data; a.volume=1
+          await a.play().catch(()=>{})
+          const src = ac.createMediaElementSource(a)
+          src.connect(ac._dest)
+          src.connect(ac.destination)
+          ;(ac as any)._outroEl = a
+        }
+      }catch{}
     }
     setTimeout(()=>{ stopRecordingFinal() }, (active.duration||5)*1000)
   } else { stopRecordingFinal() }
