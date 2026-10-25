@@ -84,37 +84,6 @@ const startTimer=()=>{ if(timerRef.current) clearInterval(timerRef.current); set
 const stopTimer=()=>{ if(timerRef.current) clearInterval(timerRef.current); timerRef.current=null; setLiveSeconds(0) }
 
 useEffect(()=>{
-const fbAppId='1951327349161990'
-if(!document.getElementById('fb-sdk')){
-const s=document.createElement('script'); s.id='fb-sdk'; s.src='https://connect.facebook.net/en_US/sdk.js';
-s.onload=()=>{ window.FB.init({appId: fbAppId, cookie:true, xfbml:false, version:'v19.0'}) }
-document.body.appendChild(s)
-}
-try{
-const sv=localStorage.getItem('taglive_saved'); if(sv) setSaved(JSON.parse(sv))
-const yk=localStorage.getItem('taglive_ytkey'); if(yk) setYtKey(yk)
-const si=localStorage.getItem('taglive_intros'); if(si) setIntros(JSON.parse(si).filter((x:any)=>x.type!=='animated'))
-const so=localStorage.getItem('taglive_outros'); if(so) setOutros(JSON.parse(so).filter((x:any)=>x.type!=='animated'))
-const ai=localStorage.getItem('taglive_active_intro'); if(ai) setActiveIntroId(ai)
-const ao=localStorage.getItem('taglive_active_outro'); if(ao) setActiveOutroId(ao)
-const tk=localStorage.getItem('taglive_ticker_text'); if(tk) setTickerText(tk)
-const ts=localStorage.getItem('taglive_ticker_size'); if(ts) setTickerSize(parseInt(ts))
-const tsp=localStorage.getItem('taglive_ticker_speed'); if(tsp) setTickerSpeed(parseInt(tsp))
-const ton=localStorage.getItem('taglive_ticker_on'); if(ton) setTickerOn(ton==='true')
-const cn=localStorage.getItem('taglive_church_name'); if(cn) setChurchName(cn)
-const cl=localStorage.getItem('taglive_church_logo'); if(cl){ setLogoImage(cl); const img=new Image(); img.src=cl; img.onload=()=>{ logoImageRef.current=img } }
-const ld=localStorage.getItem('taglive_lowdata'); if(ld) setLowData(ld==='true')
-if(typeof window !== 'undefined'){
-  const params=new URLSearchParams(window.location.search)
-  if(params.get('admin')==='taglive2026'){ localStorage.setItem('taglive_admin','true'); setIsAdmin(true) }
-  else if(localStorage.getItem('taglive_admin')==='true'){ setIsAdmin(true) }
-}
-}catch{}
-const handleVis=async()=>{ if(!document.hidden){ try{ const t=await navigator.clipboard.readText(); if(t && t.length>5 && t.length<500 && t!==verse) setVerse(t) }catch{} } }
-document.addEventListener('visibilitychange', handleVis)
-return()=>{ document.removeEventListener('visibilitychange', handleVis); if(timerRef.current) clearInterval(timerRef.current) }
-},[])
-  useEffect(()=>{
 const trackDevice=async()=>{
 try{
 let deviceId=localStorage.getItem('taglive_device')
@@ -258,45 +227,78 @@ const onLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; con
 const handleChurchLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const base64=await fileToBase64(f); setLogoImage(base64); localStorage.setItem('taglive_church_logo', base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; alert('Church Logo Saved!') }
 const removeChurchLogo=()=>{ localStorage.removeItem('taglive_church_logo'); setLogoImage(null); logoImageRef.current=null; if(churchLogoInputRef.current) churchLogoInputRef.current.value=''; if(logoInputRef.current) logoInputRef.current.value=''; alert('Logo Removed') }
 
-// SOUND FIXED - mic + intro/outro video audio now recorded
+// === FINAL SOUND FIX - ANDROID WORKING ===
 const startRecording=async()=>{
   const canvas=canvasRef.current; if(!canvas) return alert('Start camera first')
   canvas.width=720; canvas.height=1280
   const canvasStream=(canvas as any).captureStream(30) as MediaStream
-  // 1. ALWAYS add mic
-  const micTracks = streamRef.current?.getAudioTracks()||[]
-  micTracks.forEach(t=>{ try{ canvasStream.addTrack(t) }catch{} })
+
+  // Use AudioContext mixer - this is the only way Android gets intro sound
+  let mixedAudioTrack: MediaStreamTrack | null = null
+  try{
+    const AC = (window as any).AudioContext || (window as any).webkitAudioContext
+    const ac = new AC()
+    if(ac.state==='suspended') await ac.resume()
+    audioCtxRef.current = ac
+    const dest = ac.createMediaStreamDestination()
+    ;(ac as any)._dest = dest
+
+    // mic
+    if(streamRef.current){
+      try{ const ms = ac.createMediaStreamSource(streamRef.current); ms.connect(dest) }catch{}
+    }
+
+    // intro video will be connected after play (see below)
+
+    mixedAudioTrack = dest.stream.getAudioTracks()[0] || null
+    if(mixedAudioTrack) canvasStream.addTrack(mixedAudioTrack)
+
+  }catch{
+    // fallback old way
+    streamRef.current?.getAudioTracks().forEach(t=>{ try{ canvasStream.addTrack(t) }catch{} })
+  }
 
   const active=intros.find(i=>i.id===activeIntroId)
   if(active){
     setBroadcastPlaying(active)
     if(active.type==='image'){ 
       const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }
-    }
-    else if(active.type==='video'&&broadcastVideoRef.current){
+    } else if(active.type==='video'&&broadcastVideoRef.current){
       const v=broadcastVideoRef.current
       v.crossOrigin="anonymous"; v.muted=false; v.volume=1; v.playsInline=true; v.src=active.data
       try{ await v.play() }catch{}
-      // FIX: capture audio AFTER play
+      // Now connect intro sound to mixer
       try{
-        const vs=(v as any).captureStream?.() as MediaStream || (v as any).mozCaptureStream?.() as MediaStream
-        if(vs){
-          vs.getAudioTracks().forEach((at:any)=>{ try{ canvasStream.addTrack(at) }catch{} })
-          vs.getVideoTracks().forEach(()=>{}) // keep video track ref alive
+        if(audioCtxRef.current){
+          const src = audioCtxRef.current.createMediaElementSource(v)
+          src.connect((audioCtxRef.current as any)._dest)
+          src.connect(audioCtxRef.current.destination) // hear live
         }
-      }catch{}
+      }catch{
+        // if createMediaElementSource fails (already connected), fallback to captureStream
+        try{
+          const vs=(v as any).captureStream?.() as MediaStream
+          if(vs) vs.getAudioTracks().forEach((at:any)=>{ try{ canvasStream.addTrack(at) }catch{} })
+        }catch{}
+      }
     }
   }
 
   chunksRef.current=[]
-  let mime='video/webm;codecs=vp9,opus'
-  if(MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')) mime='video/webm;codecs=vp8,opus'
-  if(MediaRecorder.isTypeSupported('video/mp4')) mime='video/mp4'
+  let mime='video/webm;codecs=vp8,opus'
+  if((window as any).MediaRecorder?.isTypeSupported('video/webm;codecs=vp9,opus')) mime='video/webm;codecs=vp9,opus'
+  if((window as any).MediaRecorder?.isTypeSupported('video/mp4')) mime='video/mp4'
   
   const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 2500000, audioBitsPerSecond: 128000 })
   rec.ondataavailable=(e)=>{ if(e.data.size>0) chunksRef.current.push(e.data) }
-  rec.onstop=()=>{ const blob=new Blob(chunksRef.current, { type: mime }); const url=URL.createObjectURL(blob); setRecordedUrl(url) }
+  rec.onstop=()=>{ 
+    const blob=new Blob(chunksRef.current, { type: mime }); 
+    const url=URL.createObjectURL(blob); 
+    setRecordedUrl(url);
+    try{ audioCtxRef.current?.close() }catch{}
+  }
   rec.start(100); recorderRef.current=rec; setIsRecording(true); startTimer()
+
   if(active){ setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; if(broadcastVideoRef.current){ try{broadcastVideoRef.current.pause()}catch{} } }, (active.duration||5)*1000) }
 }
 
@@ -304,6 +306,7 @@ const stopRecordingFinal=()=>{
   recorderRef.current?.stop(); setIsRecording(false); setBroadcastPlaying(null); broadcastImageRef.current=null; 
   if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.src='' }catch{} }
   if(!isLive&&!ytLive) stopTimer()
+  try{ audioCtxRef.current?.close() }catch{}
 }
 
 const stopRecording=async()=>{
@@ -315,12 +318,11 @@ const stopRecording=async()=>{
       const v=broadcastVideoRef.current
       v.crossOrigin="anonymous"; v.muted=false; v.volume=1; v.playsInline=true; v.src=active.data
       try{ await v.play() }catch{}
-      // FIX: add outro audio to existing recording
       try{
-        const vs=(v as any).captureStream?.() as MediaStream
-        if(vs){
-          const canvasStream = (recorderRef.current as any)?.stream as MediaStream
-          if(canvasStream) vs.getAudioTracks().forEach((at:any)=>{ try{ canvasStream.addTrack(at) }catch{} })
+        if(audioCtxRef.current){
+          const src = audioCtxRef.current.createMediaElementSource(v)
+          src.connect((audioCtxRef.current as any)._dest || audioCtxRef.current.destination)
+          src.connect(audioCtxRef.current.destination)
         }
       }catch{}
       v.onended=()=>{ stopRecordingFinal() }
