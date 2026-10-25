@@ -182,7 +182,7 @@ window.FB.login((resp:any)=>{ if(resp.authResponse){ window.FB.api('/me?fields=n
 }
 const loadPages=(tok?:string)=>{ const t=tok||window.FB?.getAuthResponse()?.accessToken; if(!t) return alert('Login first'); window.FB.api('/me/accounts', {access_token:t}, (res:any)=>{ if(res.data?.length){ setPages(res.data); alert(`Found ${res.data.length} pages`) } else alert('No pages') }) }
 
-// STOP INTRO ONLY - FOR TV STUDIO USE
+// STOP INTRO ONLY - FIXED NO ECHO
 const stopIntroOnly=()=>{
   try{ if(introTimeoutRef.current) clearTimeout(introTimeoutRef.current) }catch{}
   introTimeoutRef.current=null
@@ -192,13 +192,11 @@ const stopIntroOnly=()=>{
   try{
     const el=(audioCtxRef.current as any)?.introAudioEl
     if(el && el._tagliveCleanup) el._tagliveCleanup()
-    // If this was FB intro waiting, continue to Live
+    const mg=(audioCtxRef.current as any)?._micGain
+    if(mg){ try{ mg.gain.value=1 }catch{} }
     if(fbPendingRef.current){
       const p=fbPendingRef.current; fbPendingRef.current=null
       setSelectedPage(p.page)
-      setFbStreamUrl(p.stream_url || ''); setLiveId(p.id || ''); setIsLive(true); startTimer()
-      // If FB stream_url already created, we already did
-      if(p.after){ p.after() }
     }
   }catch{}
 }
@@ -206,7 +204,6 @@ const stopIntroOnly=()=>{
 const createFbLiveAuto=async(page:any)=>{
 const active=intros.find(i=>i.id===activeIntroId)
 if(active){
-// FULL DURATION - NO 7s LIMIT
 setBroadcastPlaying(active)
 if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
 if(active.type==='video'&&broadcastVideoRef.current){
@@ -225,7 +222,7 @@ try{
 const res=await fetch(`https://graph.facebook.com/v19.0/${page.id}/live_videos`,{ method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({ access_token: page.access_token, title: verse.substring(0,60), description: 'TagLive - '+verse, status: 'UNPUBLISHED' }) })
 const data=await res.json(); if(data.error) throw new Error(JSON.stringify(data.error)); setFbStreamUrl(data.stream_url); setLiveId(data.id); setIsLive(true); startTimer()
 }catch(e:any){ setIsLive(true); startTimer() }
-}, (active.duration||5)*1000) // FULL DURATION, even 10 hours
+}, (active.duration||5)*1000)
 fbPendingRef.current={ page }
 } else {
 setSelectedPage(page)
@@ -283,6 +280,7 @@ const onLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; con
 const handleChurchLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const base64=await fileToBase64(f); setLogoImage(base64); localStorage.setItem('taglive_church_logo', base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; setShowLogo(true); localStorage.setItem('taglive_show_logo','true'); alert('Church Logo Saved!') }
 const removeChurchLogo=()=>{ localStorage.removeItem('taglive_church_logo'); setLogoImage(null); logoImageRef.current=null; if(churchLogoInputRef.current) churchLogoInputRef.current.value=''; if(logoInputRef.current) logoInputRef.current.value=''; alert('Logo Removed') }
 
+// --- ECHO FIX - INTRO CLEAN ---
 const startRecording=async()=>{
   const canvas=canvasRef.current; if(!canvas) return alert('Start camera first')
   canvas.width=480; canvas.height=854
@@ -303,11 +301,16 @@ const startRecording=async()=>{
   const micTrack=streamRef.current?.getAudioTracks()[0]
   if(!micTrack) return alert('Mic not found - restart camera')
   const micSource=audioCtx.createMediaStreamSource(new MediaStream([micTrack]))
-  micSource.connect(dest)
+  const micGain=audioCtx.createGain()
+  micGain.gain.value=1
+  ;(audioCtx as any)._micGain=micGain
+  micSource.connect(micGain)
+  micGain.connect(dest)
 
   const active=intros.find(i=>i.id===activeIntroId)
   if(active){
     setBroadcastPlaying(active)
+    try{ micGain.gain.value=0 }catch{} // MUTE MIC TO REMOVE ECHO
     if(active.type==='image'){
       const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }
       broadcastImageRef.current=img
@@ -324,8 +327,7 @@ const startRecording=async()=>{
         audioEl.src=active.data
         await audioEl.play().catch(()=>{})
         const vSource=audioCtx.createMediaElementSource(audioEl)
-        vSource.connect(dest)
-        vSource.connect(audioCtx.destination)
+        vSource.connect(dest) // ONLY TO RECORDING, NOT TO SPEAKER
         ;(audioEl as any)._tagliveCleanup=()=>{ try{ vSource.disconnect() }catch{}; try{ audioEl.pause(); audioEl.removeAttribute('src'); audioEl.load() }catch{} }
         ;(audioCtxRef.current as any).introAudioEl=audioEl
       }catch{}
@@ -347,11 +349,11 @@ const startRecording=async()=>{
   }
   rec.start(100); recorderRef.current=rec; setIsRecording(true); startTimer()
   if(active){
-    // FULL DURATION - can be 10 hours, plays fully unless stopped
     introTimeoutRef.current=setTimeout(()=>{
       setBroadcastPlaying(null); broadcastImageRef.current=null
       if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.removeAttribute('src'); broadcastVideoRef.current.load() }catch{} }
       try{ const el=(audioCtxRef.current as any)?.introAudioEl; if(el && el._tagliveCleanup) el._tagliveCleanup() }catch{}
+      try{ micGain.gain.value=1 }catch{} // RESTORE MIC
     }, (active.duration||5)*1000)
   }
 }
@@ -397,7 +399,6 @@ const stopRecording=async()=>{
           const dest=(audioCtxRef.current as any)._dest
           const vSource=audioCtxRef.current.createMediaElementSource(audioEl)
           vSource.connect(dest)
-          vSource.connect(audioCtxRef.current.destination)
           ;(audioEl as any)._tagliveCleanup=()=>{ try{ vSource.disconnect() }catch{}; try{ audioEl.pause(); audioEl.removeAttribute('src'); audioEl.load() }catch{} }
           ;(audioCtxRef.current as any).outroAudioEl=audioEl
         }
