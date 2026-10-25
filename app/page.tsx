@@ -279,7 +279,6 @@ const onLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; con
 const handleChurchLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const base64=await fileToBase64(f); setLogoImage(base64); localStorage.setItem('taglive_church_logo', base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; setShowLogo(true); localStorage.setItem('taglive_show_logo','true'); alert('Church Logo Saved!') }
 const removeChurchLogo=()=>{ localStorage.removeItem('taglive_church_logo'); setLogoImage(null); logoImageRef.current=null; if(churchLogoInputRef.current) churchLogoInputRef.current.value=''; if(logoInputRef.current) logoInputRef.current.value=''; alert('Logo Removed') }
 
-// --- FINAL FIX - SOUND IN BOTH RECORDING + LIVESTREAM, NO ECHO ---
 const startRecording=async()=>{
   const canvas=canvasRef.current; if(!canvas) return alert('Start camera first')
   canvas.width=480; canvas.height=854
@@ -417,6 +416,7 @@ const stopRecording=async()=>{
   } else { stopRecordingFinal() }
 }
 
+// --- FIXED SCROLL - ONLY DRAG WHEN NEAR TEXT/LOGO ---
 const onTouchStart=(e:any)=>{
 const canvas=canvasRef.current; if(!canvas) return
 const rect=canvas.getBoundingClientRect(); 
@@ -425,12 +425,16 @@ const tx=(e.touches[0].clientX-rect.left)*(cw/rect.width)
 const ty=(e.touches[0].clientY-rect.top)*(ch/rect.height)
 const distText=Math.hypot(tx-pos.x,ty-pos.y)
 const distLogo=Math.hypot(tx-logoPos.x,ty-logoPos.y)
-if(logoImage&&showLogo&&distLogo<180&&distLogo<distText){ setSelected('logo'); lastTouch.current.selScale=logoPos.scale; lastTouch.current.selRot=logoPos.rotation }
+const nearText=distText<220
+const nearLogo=logoImage&&showLogo&&distLogo<200
+if(!nearText&&!nearLogo){ setDragging(false); return }
+if(nearLogo&&(!nearText||distLogo<distText)){ setSelected('logo'); lastTouch.current.selScale=logoPos.scale; lastTouch.current.selRot=logoPos.rotation }
 else { setSelected('text'); lastTouch.current.selScale=pos.scale; lastTouch.current.selRot=pos.rotation }
 if(e.touches.length===1){ setDragging(true); lastTouch.current.x=e.touches[0].clientX; lastTouch.current.y=e.touches[0].clientY }
 else if(e.touches.length===2){ const dx=e.touches[1].clientX-e.touches[0].clientX; const dy=e.touches[1].clientY-e.touches[0].clientY; lastTouch.current.dist=Math.hypot(dx,dy); lastTouch.current.angle=Math.atan2(dy,dx)*180/Math.PI; lastTouch.current.selScale=selected==='logo'?logoPos.scale:pos.scale; lastTouch.current.selRot=selected==='logo'?logoPos.rotation:pos.rotation; setDragging(false) }
 }
 const onTouchMove=(e:any)=>{
+if(!dragging) return
 const canvas=canvasRef.current; if(!canvas) return
 const rect=canvas.getBoundingClientRect(); if(!rect) return
 const cw=canvas.width||480; const ch=canvas.height||854
@@ -625,7 +629,7 @@ return (
 </div>
 
 <div>
-<div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{background:'#000',borderRadius:18,overflow:'hidden',position:'relative',aspectRatio:'9/16',touchAction:'none'}}><video ref={videoRef} muted playsInline autoPlay style={{width:'100%',height:'100%',objectFit:'cover',display:isCam&&bgMode==='face'?'block':'none'}}/>{!isCam&&<div style={{color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',height:420}}>Camera off - {lowData?'480p ON':'720p'}</div>}<canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%'}}/>
+<div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{background:'#000',borderRadius:18,overflow:'hidden',position:'relative',aspectRatio:'9/16',touchAction:'pan-y'}}><video ref={videoRef} muted playsInline autoPlay style={{width:'100%',height:'100%',objectFit:'cover',display:isCam&&bgMode==='face'?'block':'none'}}/>{!isCam&&<div style={{color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',height:420}}>Camera off - {lowData?'480p ON':'720p'}</div>}<canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%'}}/>
 <video ref={broadcastVideoRef} muted playsInline crossOrigin="anonymous" style={{position:'absolute',left:'-9999px',top:'-9999px',width:'10px',height:'10px',opacity:0.01}}/>
 {broadcastPlaying&&(
   <div style={{position:'absolute',top:12,left:12,right:12,display:'flex',justifyContent:'space-between',zIndex:100}}>
