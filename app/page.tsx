@@ -119,7 +119,7 @@ const base64=await fileToBase64(file)
 let dur=5
 if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }
 const item={ id:`id_${Date.now()}`, type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }
-const n=[...intros,item]; saveIntros(n); setActiveIntroId(item.id); localStorage.setItem('taglive_active_intro', item.id); e.target.value=''; alert(`Intro Saved! ${Math.round(dur)}s`)
+const n=[...intros,item]; saveIntros(n); setActiveIntroId(item.id); localStorage.setItem('taglive_active_intro', item.id); e.target.value=''; alert(`Intro Saved! ${Math.round(dur)}s - Sound will be in MP4`)
 }
 const handleOutroFile=async(e:any)=>{
 const file=e.target.files?.[0]; if(!file) return
@@ -127,7 +127,7 @@ const base64=await fileToBase64(file)
 let dur=5
 if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }
 const item={ id:`id_${Date.now()}`, type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }
-const n=[...outros,item]; saveOutros(n); setActiveOutroId(item.id); localStorage.setItem('taglive_active_outro', item.id); e.target.value=''; alert(`Outro Saved! ${Math.round(dur)}s`)
+const n=[...outros,item]; saveOutros(n); setActiveOutroId(item.id); localStorage.setItem('taglive_active_outro', item.id); e.target.value=''; alert(`Outro Saved! ${Math.round(dur)}s - Sound will be in MP4`)
 }
 
 const startCamera=async(newFacing=facing)=>{
@@ -227,95 +227,91 @@ const onLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; con
 const handleChurchLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const base64=await fileToBase64(f); setLogoImage(base64); localStorage.setItem('taglive_church_logo', base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; alert('Church Logo Saved!') }
 const removeChurchLogo=()=>{ localStorage.removeItem('taglive_church_logo'); setLogoImage(null); logoImageRef.current=null; if(churchLogoInputRef.current) churchLogoInputRef.current.value=''; if(logoInputRef.current) logoInputRef.current.value=''; alert('Logo Removed') }
 
-// PERMANENT - MIC ONLY, INTRO NEVER STUCKS
+// FIXED - INTRO/OUTRO SOUND ENTERS MP4 + NEVER STUCK
 const startRecording=async()=>{
   const canvas=canvasRef.current; if(!canvas) return alert('Start camera first')
   canvas.width=720; canvas.height=1280
   const canvasStream=(canvas as any).captureStream(30) as MediaStream
-  
-  // ONLY MIC - this guarantees sound on all Android
-  const micTrack = streamRef.current?.getAudioTracks()[0]
-  if(micTrack){
-    try{ canvasStream.addTrack(micTrack) }catch{}
-  } else {
-    return alert('Mic not found - restart camera')
+  const active=intros.find(i=>i.id===activeIntroId)
+  const micTrack = streamRef.current?.getAudioTracks()[0] || null
+
+  const startRec=()=>{
+    chunksRef.current=[]
+    let mime='video/webm;codecs=vp8,opus'
+    if(MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')) mime='video/webm;codecs=vp9,opus'
+    if(MediaRecorder.isTypeSupported('video/mp4')) mime='video/mp4'
+    const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 2500000, audioBitsPerSecond: 128000 })
+    rec.ondataavailable=(e)=>{ if(e.data.size>0) chunksRef.current.push(e.data) }
+    rec.onstop=()=>{ const blob=new Blob(chunksRef.current, { type: mime }); setRecordedUrl(URL.createObjectURL(blob)) }
+    rec.start(100); recorderRef.current=rec; setIsRecording(true); startTimer()
   }
 
-  const active=intros.find(i=>i.id===activeIntroId)
   if(active){
     setBroadcastPlaying(active)
     if(active.type==='image'){
       const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }
+      if(micTrack) try{ canvasStream.addTrack(micTrack) }catch{}
+      startRec()
+      setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null }, (active.duration||5)*1000)
     } else if(active.type==='video'&&broadcastVideoRef.current){
       const v=broadcastVideoRef.current
-      v.crossOrigin="anonymous"; v.muted=true; v.volume=0; v.playsInline=true; v.src=active.data
+      v.crossOrigin="anonymous"; v.muted=false; v.volume=1; v.playsInline=true; v.src=active.data
       try{ await v.play() }catch{}
-      // Play sound via speaker separately (live), but NOT into MP4 to avoid silent bug
+      // IMPORTANT: add intro video audio to MP4 so preview + download has sound
       try{
-        const a=new Audio(active.data); a.volume=0.8; a.play().catch(()=>{})
-        ;(v as any)._extraAudio=a
-      }catch{}
-    }
-  }
-
-  chunksRef.current=[]
-  let mime='video/webm;codecs=vp8,opus'
-  if(MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')) mime='video/webm;codecs=vp9,opus'
-  if(MediaRecorder.isTypeSupported('video/mp4')) mime='video/mp4'
-
-  const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 2500000, audioBitsPerSecond: 128000 })
-  rec.ondataavailable=(e)=>{ if(e.data.size>0) chunksRef.current.push(e.data) }
-  rec.onstop=()=>{
-    const blob=new Blob(chunksRef.current, { type: mime });
-    setRecordedUrl(URL.createObjectURL(blob));
-    try{
-      const v:any=broadcastVideoRef.current
-      if(v?._extraAudio){ try{ v._extraAudio.pause() }catch{} }
-    }catch{}
-  }
-  rec.start(100); recorderRef.current=rec; setIsRecording(true); startTimer()
-
-  // GUARANTEED UNSTUCK - always clear after duration
-  if(active){
-    const dur = (active.duration||5)*1000
-    setTimeout(()=>{
-      setBroadcastPlaying(null); broadcastImageRef.current=null
-      if(broadcastVideoRef.current){
-        try{
-          const v:any=broadcastVideoRef.current
-          if(v._extraAudio){ try{ v._extraAudio.pause() }catch{} }
-          v.pause()
-        }catch{}
+        await new Promise(r=>setTimeout(r,350))
+        const vs=(v as any).captureStream?.() as MediaStream || (v as any).mozCaptureStream?.() as MediaStream
+        if(vs && vs.getAudioTracks().length>0){
+          vs.getAudioTracks().forEach((at:any)=>{ try{ canvasStream.addTrack(at) }catch{} })
+        } else {
+          if(micTrack) canvasStream.addTrack(micTrack)
+        }
+      }catch{
+        if(micTrack) try{ canvasStream.addTrack(micTrack) }catch{}
       }
-    }, dur)
+      startRec()
+      // After intro, switch to mic - fixes stuck + mute
+      setTimeout(()=>{
+        try{
+          canvasStream.getAudioTracks().forEach(t=>{ try{ canvasStream.removeTrack(t) }catch{} })
+          if(micTrack) canvasStream.addTrack(micTrack)
+        }catch{}
+        setBroadcastPlaying(null); broadcastImageRef.current=null
+        try{ v.pause() }catch{}
+      }, (active.duration||5)*1000)
+    }
+  } else {
+    if(micTrack) try{ canvasStream.addTrack(micTrack) }catch{}
+    startRec()
   }
 }
 
 const stopRecordingFinal=()=>{
   try{ recorderRef.current?.stop() }catch{}
   setIsRecording(false); setBroadcastPlaying(null); broadcastImageRef.current=null
-  if(broadcastVideoRef.current){
-    try{
-      const v:any=broadcastVideoRef.current
-      if(v._extraAudio){ try{ v._extraAudio.pause(); v._extraAudio.src='' }catch{} }
-      v.pause(); v.src=''
-    }catch{}
-  }
+  if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.src='' }catch{} }
   if(!isLive&&!ytLive) stopTimer()
 }
 
 const stopRecording=async()=>{
   const active=outros.find(o=>o.id===activeOutroId)
-  if(active && isRecording){
+  if(active && isRecording && recorderRef.current){
     setBroadcastPlaying(active)
+    const canvasStream = (recorderRef.current as any).stream as MediaStream || (canvasRef.current as any).captureStream(30)
     if(active.type==='image'){
       const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }
       setTimeout(()=>{ stopRecordingFinal() }, (active.duration||5)*1000)
     } else if(active.type==='video'&&broadcastVideoRef.current){
       const v=broadcastVideoRef.current
-      v.crossOrigin="anonymous"; v.muted=true; v.volume=0; v.playsInline=true; v.src=active.data
+      v.crossOrigin="anonymous"; v.muted=false; v.volume=1; v.playsInline=true; v.src=active.data
       try{ await v.play() }catch{}
-      try{ const a=new Audio(active.data); a.volume=0.8; a.play().catch(()=>{}); (v as any)._extraAudio=a; a.onended=()=>{ stopRecordingFinal() } }catch{}
+      try{
+        canvasStream.getAudioTracks().forEach((t:any)=>{ try{ canvasStream.removeTrack(t) }catch{} })
+        await new Promise(r=>setTimeout(r,350))
+        const vs=(v as any).captureStream?.() as MediaStream
+        if(vs && vs.getAudioTracks()[0]) canvasStream.addTrack(vs.getAudioTracks()[0])
+      }catch{}
+      v.onended=()=>{ stopRecordingFinal() }
       setTimeout(()=>{ stopRecordingFinal() }, (active.duration||7)*1000)
     } else { setTimeout(()=>{ stopRecordingFinal() }, (active.duration||5)*1000) }
   } else { stopRecordingFinal() }
@@ -514,7 +510,7 @@ return (
 
 <div>
 <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{background:'#000',borderRadius:18,overflow:'hidden',position:'relative',aspectRatio:'9/16',touchAction:'none'}}><video ref={videoRef} muted playsInline autoPlay style={{width:'100%',height:'100%',objectFit:'cover',display:isCam&&bgMode==='face'?'block':'none'}}/>{!isCam&&<div style={{color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',height:420}}>Camera off - {lowData?'480p ON':'720p'}</div>}<canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%'}}/>
-<video ref={broadcastVideoRef} muted playsInline crossOrigin="anonymous" style={{position:'absolute',left:'-9999px',top:'-9999px',width:'10px',height:'10px',opacity:0.01}}/>
+<video ref={broadcastVideoRef} muted={false} playsInline crossOrigin="anonymous" style={{position:'absolute',left:'-9999px',top:'-9999px',width:'10px',height:'10px',opacity:0.01}}/>
 {isCam&&(<div style={{position:'absolute',top: bgMode==='split'?'auto':'12px',bottom: bgMode==='split'?'50px':'auto',right:12,display:'flex',gap:8,zIndex:50}}><button onClick={toggleCamera} style={{background:'rgba(0,0,0,0.85)',color:'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>Flip</button><button onClick={toggleTorch} style={{background:torch?'#fbbf24':'rgba(0,0,0,0.85)',color:torch?'#000':'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>{torch?'Flash On':'Flash'}</button></div>)}
 </div>
 <div style={{display:'flex',gap:8,marginTop:12}}>{!isCam?<button onClick={()=>startCamera()} style={{flex:1,background:'#111',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Start Camera {lowData?'(480p)':''}</button>:<><button onClick={toggleCamera} style={{flex:1,background:'#7c3aed',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Switch Camera</button><button onClick={stopCamera} style={{flex:1,background:'#444',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Stop</button></>}</div>
