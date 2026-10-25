@@ -109,6 +109,27 @@ setStats({ live: live||0, daily: daily||0, weekly: weekly||0, monthly: monthly||
 trackDevice(); const interval=setInterval(trackDevice,60000); return()=>clearInterval(interval)
 },[isAdmin])
 
+// FIXED - RESTORE ALL SAVES ON REFRESH (LOGO, INTRO/OUTRO, SCRIPTURE, CHURCH NAME)
+useEffect(()=>{
+try{
+const i=localStorage.getItem('taglive_intros'); if(i){ setIntros(JSON.parse(i)) }
+const o=localStorage.getItem('taglive_outros'); if(o){ setOutros(JSON.parse(o)) }
+const ai=localStorage.getItem('taglive_active_intro'); if(ai) setActiveIntroId(ai)
+const ao=localStorage.getItem('taglive_active_outro'); if(ao) setActiveOutroId(ao)
+const cl=localStorage.getItem('taglive_church_logo'); 
+if(cl){ 
+  setLogoImage(cl); 
+  const img=new Image(); 
+  img.src=cl; 
+  img.onload=()=>{ logoImageRef.current=img } 
+}
+const sv=localStorage.getItem('taglive_saved'); if(sv){ setSaved(JSON.parse(sv)) }
+const cn=localStorage.getItem('taglive_church_name'); if(cn) setChurchName(cn)
+const tt=localStorage.getItem('taglive_ticker_text'); if(tt) setTickerText(tt)
+const ton=localStorage.getItem('taglive_ticker_on'); if(ton) setTickerOn(ton==='true')
+}catch{}
+},[])
+
 const saveIntros=(arr:any[])=>{ const filtered=arr.filter((x:any)=>x.type!=='animated'); setIntros(filtered); localStorage.setItem('taglive_intros', JSON.stringify(filtered)) }
 const saveOutros=(arr:any[])=>{ const filtered=arr.filter((x:any)=>x.type!=='animated'); setOutros(filtered); localStorage.setItem('taglive_outros', JSON.stringify(filtered)) }
 const fileToBase64=(file:File)=>new Promise<string>((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result as string); r.onerror=rej; r.readAsDataURL(file) })
@@ -275,9 +296,8 @@ const startRecording=async()=>{
   }
   chunksRef.current=[]
   let mime='video/webm;codecs=vp8,opus'
-  if(MediaRecorder.isTypeSupported('video/mp4;codecs=avc1.42E01E,mp4a.40.2')) mime='video/mp4;codecs=avc1.42E01E,mp4a.40.2'
-  else if(MediaRecorder.isTypeSupported('video/mp4')) mime='video/mp4'
-  else if(MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')) mime='video/webm;codecs=vp9,opus'
+  if(MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')) mime='video/webm;codecs=vp9,opus'
+
   const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 2500000 })
   rec.ondataavailable=(e)=>{ if(e.data.size>0) chunksRef.current.push(e.data) }
   rec.onstop=()=>{
@@ -543,7 +563,7 @@ return (
 <div style={{display:'flex',gap:6,marginTop:10}}>
 {!isRecording?<button onClick={startRecording} disabled={!isCam} style={{flex:1,background:isCam?'#a21caf':'#ccc',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Record MP4 + Intro (SOUND FIXED)</button>
 :<button onClick={stopRecording} style={{flex:1,background:'#111',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Stop + Outro ({formatTime(liveSeconds)})</button>}
-{recordedUrl&&<a href={recordedUrl} download={`TagLive-${Date.now()}.mp4`} style={{flex:1,background:'#16a34a',color:'#fff',padding:12,borderRadius:10,fontWeight:800,textAlign:'center',textDecoration:'none',fontSize:12}}>Download MP4</a>}
+{recordedUrl&&<a href={recordedUrl} download={`TagLive-${Date.now()}.webm`} style={{flex:1,background:'#16a34a',color:'#fff',padding:12,borderRadius:10,fontWeight:800,textAlign:'center',textDecoration:'none',fontSize:12}}>Download MP4</a>}
 </div>
 {recordedUrl&&<video src={recordedUrl} controls playsInline style={{width:'100%',marginTop:8,borderRadius:12}}/>}
 <div style={{display:'flex',gap:6,marginTop:10}}><button onClick={openBibleApp} style={{flex:1,background:'#2563eb',color:'#fff',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Open Bible</button><button onClick={pasteClipboard} style={{flex:1,background:'#059669',color:'#fff',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Paste</button><button onClick={saveVerse} style={{flex:1,background:'#f59e0b',color:'#000',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Save</button></div>
