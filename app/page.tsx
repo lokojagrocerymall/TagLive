@@ -144,7 +144,7 @@ setFacing(newFacing); setIsCam(true)
 }catch(e:any){ alert('Camera: '+e.message) }
 }
 const stopCamera=()=>{
-if(isRecording) stopRecording();
+if(isRecording) stopRecordingFinal();
 streamRef.current?.getTracks().forEach(t=>t.stop());
 if(videoRef.current) videoRef.current.srcObject=null;
 setIsCam(false); setIsLive(false); setTorch(false); setYtLive(false); stopTimer()
@@ -228,7 +228,7 @@ const onLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; con
 const handleChurchLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const base64=await fileToBase64(f); setLogoImage(base64); localStorage.setItem('taglive_church_logo', base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; alert('Church Logo Saved!') }
 const removeChurchLogo=()=>{ localStorage.removeItem('taglive_church_logo'); setLogoImage(null); logoImageRef.current=null; if(churchLogoInputRef.current) churchLogoInputRef.current.value=''; if(logoInputRef.current) logoInputRef.current.value=''; alert('Logo Removed') }
 
-// PERMANENT FINAL - ONE MIXED TRACK, WHOLE RECORD, SOUND IN PREVIEW + DOWNLOAD
+// FINAL FIX - MP4 plays + sound + no outro corruption
 const startRecording=async()=>{
   const canvas=canvasRef.current; if(!canvas) return alert('Start camera first')
   canvas.width=720; canvas.height=1280
@@ -237,7 +237,6 @@ const startRecording=async()=>{
   const micTrack = streamRef.current?.getAudioTracks()[0]
   if(!micTrack) return alert('Mic not found - restart camera')
 
-  // Create AudioContext mixer - ONE track that contains mic + intro sound
   let ac:any = null
   let introAudio:any = null
   try{
@@ -245,35 +244,24 @@ const startRecording=async()=>{
     ac = new AC()
     if(ac.state==='suspended') await ac.resume()
     const dest = ac.createMediaStreamDestination()
-    
-    // mic into mixer
-    try{
-      const micSrc = ac.createMediaStreamSource(streamRef.current!)
-      micSrc.connect(dest)
-    }catch{}
-
-    // intro video sound into same mixer
+    const micSrc = ac.createMediaStreamSource(streamRef.current!)
+    micSrc.connect(dest)
     if(active?.type==='video'){
-      try{
-        introAudio = new Audio()
-        introAudio.crossOrigin="anonymous"
-        introAudio.src = active.data
-        introAudio.volume = 1
-        introAudio.muted = false
-        await introAudio.play().catch(()=>{})
-        const introSrc = ac.createMediaElementSource(introAudio)
-        introSrc.connect(dest)
-        introSrc.connect(ac.destination) // hear live
-      }catch(e){ console.log('intro mix fail',e) }
+      introAudio = new Audio()
+      introAudio.crossOrigin="anonymous"
+      introAudio.src = active.data
+      introAudio.volume = 1
+      await introAudio.play().catch(()=>{})
+      const introSrc = ac.createMediaElementSource(introAudio)
+      introSrc.connect(dest)
+      introSrc.connect(ac.destination)
     }
-
     const mixedTrack = dest.stream.getAudioTracks()[0]
     if(mixedTrack) canvasStream.addTrack(mixedTrack)
     ;(ac as any)._dest = dest
     ;(ac as any)._introEl = introAudio
     audioCtxRef.current = ac
   }catch{
-    // fallback - mic only if AudioContext fails
     try{ canvasStream.addTrack(micTrack) }catch{}
   }
 
@@ -289,10 +277,11 @@ const startRecording=async()=>{
   }
 
   chunksRef.current=[]
-  // Use webm vp8 opus - this is the ONLY mime that gives sound in download on Android
+  // Try mp4 first (plays as mp4), fallback to webm with sound
   let mime='video/webm;codecs=vp8,opus'
-  if(MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')) mime='video/webm;codecs=vp9,opus'
-  
+  if(MediaRecorder.isTypeSupported('video/mp4')) mime='video/mp4'
+  else if(MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')) mime='video/webm;codecs=vp9,opus'
+
   const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 2500000, audioBitsPerSecond: 128000 })
   rec.ondataavailable=(e)=>{ if(e.data.size>0) chunksRef.current.push(e.data) }
   rec.onstop=()=>{
@@ -327,37 +316,22 @@ const stopRecordingFinal=()=>{
     const a:any = audioCtxRef.current
     if(a?._introEl){ try{ a._introEl.pause(); a._introEl.src='' }catch{} }
     if(a?._outroEl){ try{ a._outroEl.pause(); a._outroEl.src='' }catch{} }
-    a?.close()
   }catch{}
 }
 
+// SIMPLE OUTRO - FIXES screenshot + file corruption
 const stopRecording=async()=>{
   const active=outros.find(o=>o.id===activeOutroId)
   if(active && isRecording){
     setBroadcastPlaying(active)
-    // Add outro sound to same mixer
-    try{
-      const ac:any = audioCtxRef.current
-      if(ac && active.type==='video'){
-        const a = new Audio()
-        a.crossOrigin="anonymous"; a.src=active.data; a.volume=1
-        await a.play().catch(()=>{})
-        const src = ac.createMediaElementSource(a)
-        src.connect(ac._dest)
-        src.connect(ac.destination)
-        ;(ac as any)._outroEl = a
-        a.onended=()=>{ stopRecordingFinal() }
-      }
-    }catch{}
     if(active.type==='image'){
       const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }
-      setTimeout(()=>{ stopRecordingFinal() }, (active.duration||5)*1000)
     } else if(active.type==='video'&&broadcastVideoRef.current){
       const v=broadcastVideoRef.current
       v.crossOrigin="anonymous"; v.muted=true; v.volume=0; v.playsInline=true; v.src=active.data
       try{ await v.play() }catch{}
-      setTimeout(()=>{ stopRecordingFinal() }, (active.duration||7)*1000)
-    } else { setTimeout(()=>{ stopRecordingFinal() }, (active.duration||5)*1000) }
+    }
+    setTimeout(()=>{ stopRecordingFinal() }, (active.duration||5)*1000)
   } else { stopRecordingFinal() }
 }
 
@@ -561,9 +535,9 @@ return (
 <div style={{display:'flex',gap:6,marginTop:10}}>
 {!isRecording?<button onClick={startRecording} disabled={!isCam} style={{flex:1,background:isCam?'#a21caf':'#ccc',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Record MP4 + Intro (SOUND FIXED)</button>
 :<button onClick={stopRecording} style={{flex:1,background:'#111',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Stop + Outro ({formatTime(liveSeconds)})</button>}
-{recordedUrl&&<a href={recordedUrl} download={`${churchName.replace(/[^a-zA-Z0-9]/g,'_')}-${Date.now()}.mp4`} style={{flex:1,background:'#16a34a',color:'#fff',padding:12,borderRadius:10,fontWeight:800,textAlign:'center',textDecoration:'none',fontSize:12}}>Download MP4</a>}
+{recordedUrl&&<a href={recordedUrl} download={`TagLive-${Date.now()}.mp4`} style={{flex:1,background:'#16a34a',color:'#fff',padding:12,borderRadius:10,fontWeight:800,textAlign:'center',textDecoration:'none',fontSize:12}}>Download MP4</a>}
 </div>
-{recordedUrl&&<video src={recordedUrl} controls style={{width:'100%',marginTop:8,borderRadius:12}}/>}
+{recordedUrl&&<video src={recordedUrl} controls playsInline style={{width:'100%',marginTop:8,borderRadius:12}}/>}
 <div style={{display:'flex',gap:6,marginTop:10}}><button onClick={openBibleApp} style={{flex:1,background:'#2563eb',color:'#fff',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Open Bible</button><button onClick={pasteClipboard} style={{flex:1,background:'#059669',color:'#fff',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Paste</button><button onClick={saveVerse} style={{flex:1,background:'#f59e0b',color:'#000',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Save</button></div>
 <textarea value={verse} onChange={e=>setVerse(e.target.value)} style={{width:'100%',height:90,marginTop:10,padding:12,borderRadius:12,border:'1px solid #ddd'}} placeholder={"Ministering:\nNAME OF PRESENTER"}/>
 {saved.length>0&&<div style={{marginTop:8,border:'1px solid #eee',borderRadius:12,padding:8,background:'#fff'}}>
