@@ -84,37 +84,6 @@ const formatTime=(sec:number)=>{ const h=Math.floor(sec/3600), m=Math.floor((sec
 const startTimer=()=>{ if(timerRef.current) clearInterval(timerRef.current); setLiveSeconds(0); timerRef.current=setInterval(()=>setLiveSeconds(p=>p+1),1000) }
 const stopTimer=()=>{ if(timerRef.current) clearInterval(timerRef.current); timerRef.current=null; setLiveSeconds(0) }
 
-useEffect(()=>{
-const fbAppId='1951327349161990'
-if(!document.getElementById('fb-sdk')){
-const s=document.createElement('script'); s.id='fb-sdk'; s.src='https://connect.facebook.net/en_US/sdk.js';
-s.onload=()=>{ window.FB.init({appId: fbAppId, cookie:true, xfbml:false, version:'v19.0'}) }
-document.body.appendChild(s)
-}
-try{
-const sv=localStorage.getItem('taglive_saved'); if(sv) setSaved(JSON.parse(sv))
-const yk=localStorage.getItem('taglive_ytkey'); if(yk) setYtKey(yk)
-const si=localStorage.getItem('taglive_intros'); if(si) setIntros(JSON.parse(si).filter((x:any)=>x.type!=='animated'))
-const so=localStorage.getItem('taglive_outros'); if(so) setOutros(JSON.parse(so).filter((x:any)=>x.type!=='animated'))
-const ai=localStorage.getItem('taglive_active_intro'); if(ai) setActiveIntroId(ai)
-const ao=localStorage.getItem('taglive_active_outro'); if(ao) setActiveOutroId(ao)
-const tk=localStorage.getItem('taglive_ticker_text'); if(tk) setTickerText(tk)
-const ts=localStorage.getItem('taglive_ticker_size'); if(ts) setTickerSize(parseInt(ts))
-const tsp=localStorage.getItem('taglive_ticker_speed'); if(tsp) setTickerSpeed(parseInt(tsp))
-const ton=localStorage.getItem('taglive_ticker_on'); if(ton) setTickerOn(ton==='true')
-const cn=localStorage.getItem('taglive_church_name'); if(cn) setChurchName(cn)
-const cl=localStorage.getItem('taglive_church_logo'); if(cl){ setLogoImage(cl); const img=new Image(); img.src=cl; img.onload=()=>{ logoImageRef.current=img } }
-const ld=localStorage.getItem('taglive_lowdata'); if(ld) setLowData(ld==='true')
-if(typeof window !== 'undefined'){
-  const params=new URLSearchParams(window.location.search)
-  if(params.get('admin')==='taglive2026'){ localStorage.setItem('taglive_admin','true'); setIsAdmin(true) }
-  else if(localStorage.getItem('taglive_admin')==='true'){ setIsAdmin(true) }
-}
-}catch{}
-const handleVis=async()=>{ if(!document.hidden){ try{ const t=await navigator.clipboard.readText(); if(t && t.length>5 && t.length<500 && t!==verse) setVerse(t) }catch{} } }
-document.addEventListener('visibilitychange', handleVis)
-return()=>{ document.removeEventListener('visibilitychange', handleVis); if(timerRef.current) clearInterval(timerRef.current) }
-},[])
   useEffect(()=>{
 const trackDevice=async()=>{
 try{
