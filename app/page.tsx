@@ -130,6 +130,14 @@ const cn=localStorage.getItem('taglive_church_name'); if(cn) setChurchName(cn)
 const tt=localStorage.getItem('taglive_ticker_text'); if(tt) setTickerText(tt)
 const ton=localStorage.getItem('taglive_ticker_on'); if(ton) setTickerOn(ton==='true')
 const lo=localStorage.getItem('taglive_show_logo'); if(lo) setShowLogo(lo==='true')
+// FIX: SET CANVAS SIZE + DEFAULT POSITIONS ON LOAD
+setTimeout(()=>{
+  if(canvasRef.current){ 
+    canvasRef.current.width=480; canvasRef.current.height=854
+  }
+  setPos((p:any)=>({...p, x:240, y:680 }))
+  setLogoPos((p:any)=>({...p, x:80, y:80 }))
+},600)
 }catch{}
 },[])
 
@@ -164,6 +172,8 @@ const h=lowData?480:720
 const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:newFacing,width:{ideal:w},height:{ideal:h}},audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}})
 streamRef.current=s; trackRef.current=s.getVideoTracks()[0]
 if(videoRef.current){ videoRef.current.srcObject=s; await videoRef.current.play() }
+// FIX STRETCH - SET CANVAS SIZE IMMEDIATELY
+if(canvasRef.current){ canvasRef.current.width=480; canvasRef.current.height=854 }
 setFacing(newFacing); setIsCam(true)
 }catch(e:any){ alert('Camera: '+e.message) }
 }
@@ -416,7 +426,6 @@ const stopRecording=async()=>{
   } else { stopRecordingFinal() }
 }
 
-// --- FIXED SCROLL - ONLY DRAG WHEN NEAR TEXT/LOGO ---
 const onTouchStart=(e:any)=>{
 const canvas=canvasRef.current; if(!canvas) return
 const rect=canvas.getBoundingClientRect(); 
@@ -425,8 +434,8 @@ const tx=(e.touches[0].clientX-rect.left)*(cw/rect.width)
 const ty=(e.touches[0].clientY-rect.top)*(ch/rect.height)
 const distText=Math.hypot(tx-pos.x,ty-pos.y)
 const distLogo=Math.hypot(tx-logoPos.x,ty-logoPos.y)
-const nearText=distText<220
-const nearLogo=logoImage&&showLogo&&distLogo<200
+const nearText=distText<350
+const nearLogo=logoImage&&showLogo&&distLogo<300
 if(!nearText&&!nearLogo){ setDragging(false); return }
 if(nearLogo&&(!nearText||distLogo<distText)){ setSelected('logo'); lastTouch.current.selScale=logoPos.scale; lastTouch.current.selRot=logoPos.rotation }
 else { setSelected('text'); lastTouch.current.selScale=pos.scale; lastTouch.current.selRot=pos.rotation }
@@ -437,13 +446,16 @@ const onTouchMove=(e:any)=>{
 if(!dragging) return
 const canvas=canvasRef.current; if(!canvas) return
 const rect=canvas.getBoundingClientRect(); if(!rect) return
-const cw=canvas.width||480; const ch=canvas.height||854
 if(e.touches.length===1&&dragging){ 
+  e.preventDefault()
+  const cw=canvas.width||480; const ch=canvas.height||854
   const tx=(e.touches[0].clientX-rect.left)*(cw/rect.width); 
   const ty=(e.touches[0].clientY-rect.top)*(ch/rect.height); 
   if(selected==='logo') setLogoPos(p=>({...p,x:tx,y:ty})); else setPos(p=>({...p,x:tx,y:ty})) 
 }
-if(e.touches.length===2){ const dx=e.touches[1].clientX-e.touches[0].clientX; const dy=e.touches[1].clientY-e.touches[0].clientY; const dist=Math.hypot(dx,dy); const angle=Math.atan2(dy,dx)*180/Math.PI; if(lastTouch.current.dist>0){ const f=dist/lastTouch.current.dist; if(selected==='logo'){ setLogoPos(p=>({ ...p, scale:Math.min(2,Math.max(0.2,lastTouch.current.selScale*f)), rotation:lastTouch.current.selRot+(angle-lastTouch.current.angle) })) } else { setPos(p=>({ ...p, scale:Math.min(1.3,Math.max(0.6,lastTouch.current.selScale*f)), rotation:lastTouch.current.selRot+(angle-lastTouch.current.angle) })) } } }
+if(e.touches.length===2){ 
+  e.preventDefault()
+  const dx=e.touches[1].clientX-e.touches[0].clientX; const dy=e.touches[1].clientY-e.touches[0].clientY; const dist=Math.hypot(dx,dy); const angle=Math.atan2(dy,dx)*180/Math.PI; if(lastTouch.current.dist>0){ const f=dist/lastTouch.current.dist; if(selected==='logo'){ setLogoPos(p=>({ ...p, scale:Math.min(2,Math.max(0.2,lastTouch.current.selScale*f)), rotation:lastTouch.current.selRot+(angle-lastTouch.current.angle) })) } else { setPos(p=>({ ...p, scale:Math.min(1.3,Math.max(0.6,lastTouch.current.selScale*f)), rotation:lastTouch.current.selRot+(angle-lastTouch.current.angle) })) } } }
 }
 const onTouchEnd=()=>{ setDragging(false); lastTouch.current.dist=0 }
 
@@ -622,9 +634,9 @@ return (
 <div style={{display:'flex',alignItems:'center',gap:6,marginTop:10,flexWrap:'wrap',minWidth:0}}><div style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:6,background:'#f3f0ff',padding:'6px 10px',borderRadius:10}}><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>A-</span><input type="range" min={18} max={48} value={fontSize} onChange={e=>setFontSize(parseInt(e.target.value))} style={{flex:1,minWidth:0,width:0}}/><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>A+</span><span style={{fontSize:10,fontWeight:800,background:'#111',color:'#fff',padding:'3px 6px',borderRadius:20,flexShrink:0}}>{fontSize}</span></div><button onClick={()=>setAlign(align==='justify'?'center':'justify')} style={{padding:'8px 10px',borderRadius:10,border:'none',background:align==='justify'?'#111':'#ddd',color:align==='justify'?'#fff':'#000',fontWeight:800,fontSize:10,flexShrink:0}}>{align==='justify'?'Justify':'Center'}</button><button onClick={pickMedia} style={{padding:'8px 10px',borderRadius:10,border:'none',background:'#7c3aed',color:'#fff',fontWeight:800,fontSize:10,flexShrink:0}}>Media</button><input ref={fileInputRef} type="file" accept="image/*" onChange={onFilePick} style={{display:'none'}}/></div>
 
 <div style={{display:'flex',gap:6,marginTop:8,alignItems:'center',background:'#fff',border:'1px solid #eee',padding:8,borderRadius:10,flexWrap:'wrap',minWidth:0}}><div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}><span style={{fontSize:10,fontWeight:800}}>Text</span><input type="color" value={textColor} onChange={e=>setTextColor(e.target.value)} style={{width:28,height:28,border:'none',borderRadius:6}}/></div><div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}><span style={{fontSize:10,fontWeight:800}}>Box</span><input type="color" value={boxColor} onChange={e=>setBoxColor(e.target.value)} style={{width:28,height:28,border:'none',borderRadius:6}}/></div><div style={{display:'flex',alignItems:'center',gap:4,flex:1,minWidth:0}}><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>Opac</span><input type="range" min={0} max={1} step={0.05} value={boxOpacity} onChange={e=>setBoxOpacity(parseFloat(e.target.value))} style={{flex:1,minWidth:0,width:0}}/></div>
-<button onClick={()=>{ const v=!showLogo; setShowLogo(v); localStorage.setItem('taglive_show_logo', v.toString()) }} style={{padding:'6px 10px',borderRadius:8,border:'none',background:showLogo?'#16a34a':'#111',color:'#fff',fontWeight:800,fontSize:10,flexShrink:0}}>{showLogo?'Logo':'No Logo'}</button>
+<button onClick={()=>{ const v=!showLogo; setShowLogo(v); localStorage.setItem('taglive_show_logo', v.toString()); if(v){ const c=canvasRef.current; if(c) setLogoPos((p:any)=>({...p, x:80, y:80})) } }} style={{padding:'6px 10px',borderRadius:8,border:'none',background:showLogo?'#16a34a':'#111',color:'#fff',fontWeight:800,fontSize:10,flexShrink:0}}>{showLogo?'Logo':'No Logo'}</button>
 <input ref={logoInputRef} type="file" accept="image/*" onChange={onLogoPick} style={{display:'none'}}/>
-<button onClick={()=>setShowText(!showText)} style={{padding:'6px 10px',borderRadius:8,border:'none',background:showText?'#111':'#ddd',color:showText?'#fff':'#000',fontWeight:800,fontSize:10,flexShrink:0}}>{showText?'Text':'No Text'}</button>
+<button onClick={()=>{ const v=!showText; setShowText(v); if(v){ const c=canvasRef.current; if(c) setPos((p:any)=>({...p, x:240, y:680})) } }} style={{padding:'6px 10px',borderRadius:8,border:'none',background:showText?'#111':'#ddd',color:showText?'#fff':'#000',fontWeight:800,fontSize:10,flexShrink:0}}>{showText?'Text':'No Text'}</button>
 </div>
 </div>
 
