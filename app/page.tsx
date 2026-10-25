@@ -149,7 +149,7 @@ const base64=await fileToBase64(file)
 let dur=5
 if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }
 const item={ id:`id_${Date.now()}`, type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }
-const n=[...intros,item]; saveIntros(n); setActiveIntroId(item.id); localStorage.setItem('taglive_active_intro', item.id); e.target.value=''; 
+const n=[...intros,item]; saveIntros(n); setActiveIntroId(item.id); localStorage.setItem('taglive_active_intro', item.id); e.target.value=''; alert(`Intro Saved! ${Math.round(dur)}s - Will play FULL duration`)
 }
 const handleOutroFile=async(e:any)=>{
 const file=e.target.files?.[0]; if(!file) return
@@ -157,7 +157,7 @@ const base64=await fileToBase64(file)
 let dur=5
 if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }
 const item={ id:`id_${Date.now()}`, type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }
-const n=[...outros,item]; saveOutros(n); setActiveOutroId(item.id); localStorage.setItem('taglive_active_outro', item.id); e.target.value=''; 
+const n=[...outros,item]; saveOutros(n); setActiveOutroId(item.id); localStorage.setItem('taglive_active_outro', item.id); e.target.value=''; alert(`Outro Saved! ${Math.round(dur)}s`)
 }
 
 const startCamera=async(newFacing=facing)=>{
@@ -276,14 +276,14 @@ const detectedBook=detectBookFromQuery(bibleQuery)
 const parsed=detectedBook?parseChapterVerse(bibleQuery,detectedBook.name):{ ch: null, vs: null }
 
 const pasteClipboard=async()=>{ try{ const t=await navigator.clipboard.readText(); if(t) setVerse(t); else alert('Clipboard empty') }catch{ alert('Allow clipboard') } }
-const saveVerse=()=>{ if(!verse.trim()) return; const ns=[verse,...saved.filter(s=>s!==verse)].slice(0,20); setSaved(ns); localStorage.setItem('taglive_saved', JSON.stringify(ns)); }
+const saveVerse=()=>{ if(!verse.trim()) return; const ns=[verse,...saved.filter(s=>s!==verse)].slice(0,20); setSaved(ns); localStorage.setItem('taglive_saved', JSON.stringify(ns)); alert('Saved!') }
 const deleteSaved=(idx:number)=>{ const ns=saved.filter((_,i)=>i!==idx); setSaved(ns); localStorage.setItem('taglive_saved', JSON.stringify(ns)); }
 const pickMedia=()=>fileInputRef.current?.click()
 const pickLogo=()=>logoInputRef.current?.click()
 const onFilePick=(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const url=URL.createObjectURL(f); setBgImage(url); setBgMode('image'); const img=new Image(); img.src=url; img.onload=()=>{ bgImageRef.current=img } }
-const onLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const base64=await fileToBase64(f); setLogoImage(base64); localStorage.setItem('taglive_church_logo', base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; setSelected('logo'); setShowLogo(true); localStorage.setItem('taglive_show_logo','true'); }
-const handleChurchLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const base64=await fileToBase64(f); setLogoImage(base64); localStorage.setItem('taglive_church_logo', base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; setShowLogo(true); localStorage.setItem('taglive_show_logo','true'); }
-const removeChurchLogo=()=>{ localStorage.removeItem('taglive_church_logo'); setLogoImage(null); logoImageRef.current=null; if(churchLogoInputRef.current) churchLogoInputRef.current.value=''; if(logoInputRef.current) logoInputRef.current.value=''; }
+const onLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const base64=await fileToBase64(f); setLogoImage(base64); localStorage.setItem('taglive_church_logo', base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; setSelected('logo'); setShowLogo(true); localStorage.setItem('taglive_show_logo','true'); alert('Logo Saved!') }
+const handleChurchLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const base64=await fileToBase64(f); setLogoImage(base64); localStorage.setItem('taglive_church_logo', base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; setShowLogo(true); localStorage.setItem('taglive_show_logo','true'); alert('Church Logo Saved!') }
+const removeChurchLogo=()=>{ localStorage.removeItem('taglive_church_logo'); setLogoImage(null); logoImageRef.current=null; if(churchLogoInputRef.current) churchLogoInputRef.current.value=''; if(logoInputRef.current) logoInputRef.current.value=''; alert('Logo Removed') }
 
 const startRecording=async()=>{
   const canvas=canvasRef.current; if(!canvas) return alert('Start camera first')
@@ -410,7 +410,7 @@ const stopRecording=async()=>{
   } else { stopRecordingFinal() }
 }
 
-// DOUBLE TAP TO LOCK / UNLOCK - FIXED ADJUSTABLE
+// --- DOUBLE TAP TO LOCK / UNLOCK ---
 const editStateRef=useRef({ locked:false, target:null as any, lastTap:0, lastX:0, lastY:0 })
 
 const onTouchStart=(e:any)=>{
@@ -427,19 +427,19 @@ const now=Date.now()
 const timeDiff=now-editStateRef.current.lastTap
 const moved=Math.hypot(tx-editStateRef.current.lastX, ty-editStateRef.current.lastY)
 
+// DOUBLE TAP DETECTED
 if(nearText||nearLogo){
   const tappedTarget=nearLogo&&(!nearText||distLogo<distText)?'logo':'text'
   if(timeDiff<350 && moved<80 && editStateRef.current.target===tappedTarget){
+    // TOGGLE LOCK
     if(editStateRef.current.locked && editStateRef.current.target===tappedTarget){
       editStateRef.current.locked=false; editStateRef.current.target=null
-      setDragging(false); setSelected(null as any)
+      setDragging(false)
+      setSelected(null as any)
     } else {
       editStateRef.current.locked=true; editStateRef.current.target=tappedTarget
-      setSelected(tappedTarget as any)
-      lastTouch.current.selScale=tappedTarget==='logo'?logoPos.scale:pos.scale
-      lastTouch.current.selRot=tappedTarget==='logo'?logoPos.rotation:pos.rotation
-      lastTouch.current.dist=0
-      lastTouch.current.angle=0
+      if(tappedTarget==='logo'){ setSelected('logo'); lastTouch.current.selScale=logoPos.scale; lastTouch.current.selRot=logoPos.rotation }
+      else { setSelected('text'); lastTouch.current.selScale=pos.scale; lastTouch.current.selRot=pos.rotation }
     }
     editStateRef.current.lastTap=0
     return
@@ -447,10 +447,13 @@ if(nearText||nearLogo){
   editStateRef.current.lastTap=now
   editStateRef.current.lastX=tx
   editStateRef.current.lastY=ty
-  if(!editStateRef.current.locked) editStateRef.current.target=tappedTarget
+  editStateRef.current.target=tappedTarget
+  // SINGLE TAP DOES NOT DRAG - ONLY SELECT FOR HINT
+  setSelected(tappedTarget as any)
   setDragging(false)
   return
 } else {
+  // TAP OUTSIDE -> LOCK AGAIN
   if(editStateRef.current.locked){
     editStateRef.current.locked=false
     editStateRef.current.target=null
@@ -466,6 +469,11 @@ if(nearText||nearLogo){
 
 const onTouchMove=(e:any)=>{
 if(!editStateRef.current.locked) return
+if(!dragging && e.touches.length===1){
+  setDragging(true)
+  lastTouch.current.x=e.touches[0].clientX
+  lastTouch.current.y=e.touches[0].clientY
+}
 const canvas=canvasRef.current; if(!canvas) return
 const rect=canvas.getBoundingClientRect(); if(!rect) return
 e.preventDefault()
@@ -474,18 +482,19 @@ if(e.touches.length===1){
   const tx=(e.touches[0].clientX-rect.left)*(cw/rect.width); 
   const ty=(e.touches[0].clientY-rect.top)*(ch/rect.height); 
   if(editStateRef.current.target==='logo') setLogoPos(p=>({...p,x:tx,y:ty})); else setPos(p=>({...p,x:tx,y:ty})) 
-  if(!dragging) setDragging(true)
 }
 if(e.touches.length===2){
   const dx=e.touches[1].clientX-e.touches[0].clientX; const dy=e.touches[1].clientY-e.touches[0].clientY; const dist=Math.hypot(dx,dy); const angle=Math.atan2(dy,dx)*180/Math.PI;
-  if(lastTouch.current.dist===0){ lastTouch.current.dist=dist; lastTouch.current.angle=angle; lastTouch.current.selScale=editStateRef.current.target==='logo'?logoPos.scale:pos.scale; lastTouch.current.selRot=editStateRef.current.target==='logo'?logoPos.rotation:pos.rotation }
+  if(lastTouch.current.dist===0){ lastTouch.current.dist=dist; lastTouch.current.angle=angle }
   if(lastTouch.current.dist>0){ const f=dist/lastTouch.current.dist; if(editStateRef.current.target==='logo'){ setLogoPos(p=>({ ...p, scale:Math.min(2,Math.max(0.2,lastTouch.current.selScale*f)), rotation:lastTouch.current.selRot+(angle-lastTouch.current.angle) })) } else { setPos(p=>({ ...p, scale:Math.min(1.3,Math.max(0.6,lastTouch.current.selScale*f)), rotation:lastTouch.current.selRot+(angle-lastTouch.current.angle) })) } }
 }
 }
-const onTouchEnd=(e:any)=>{
-  setDragging(false)
-  if(e && e.touches && e.touches.length===0){
-    lastTouch.current.dist=0
+const onTouchEnd=()=>{ 
+  if(e.touches && (e as any).touches.length>0) return
+  setDragging(false); 
+  lastTouch.current.dist=0 
+  if(editStateRef.current.locked && lastTouch.current.x){
+    lastTouch.current.x=0
   }
 }
 
@@ -542,7 +551,7 @@ else {
   else { sw=vw; sh=vw/rCanvas; sx=0; sy=(vh-sh)/2 }
   ctx.drawImage(v,sx,sy,sw,sh,0,0,c.width,c.height)
 }
-if(logoImageRef.current && showLogo){ ctx.save(); ctx.translate(logoPos.x,logoPos.y); ctx.rotate(logoPos.rotation*Math.PI/180); ctx.scale(logoPos.scale,logoPos.scale); const iw=logoImageRef.current.width, ih=logoImageRef.current.height; const maxLogoW=180; const sc=Math.min(1,maxLogoW/iw); ctx.drawImage(logoImageRef.current,-iw*sc/2,-ih*sc/2,iw*sc,ih*sc); if(editStateRef.current.locked && editStateRef.current.target==='logo'){ ctx.strokeStyle='#00ff00'; ctx.lineWidth=3; ctx.setLineDash([8,6]); ctx.strokeRect(-iw*sc/2-6,-ih*sc/2-6,iw*sc+12,ih*sc+12); ctx.setLineDash([]) } ctx.restore() }
+if(logoImageRef.current && showLogo){ ctx.save(); ctx.translate(logoPos.x,logoPos.y); ctx.rotate(logoPos.rotation*Math.PI/180); ctx.scale(logoPos.scale,logoPos.scale); const iw=logoImageRef.current.width, ih=logoImageRef.current.height; const maxLogoW=180; const sc=Math.min(1,maxLogoW/iw); ctx.drawImage(logoImageRef.current,-iw*sc/2,-ih*sc/2,iw*sc,ih*sc); if(editStateRef.current.locked && editStateRef.current.target==='logo'){ ctx.strokeStyle='#00ff00'; ctx.lineWidth=4; ctx.setLineDash([10,10]); ctx.strokeRect(-iw*sc/2-6,-ih*sc/2-6,iw*sc+12,ih*sc+12); ctx.setLineDash([]) } ctx.restore() }
 if(showText){
 ctx.save();
 const isSplit=bgMode==='split'
@@ -556,7 +565,7 @@ const churchY=y+22; const tW=ctx.measureText(churchName.toUpperCase()).width+28
 ctx.fillStyle='rgba(124,58,237,0.95)'; const pillH=28; ctx.fillRect(-tW/2,churchY-pillH/2,tW,pillH)
 ctx.fillStyle='#FFD700'; ctx.fillText(churchName.toUpperCase(),0,churchY)
 }
-if(editStateRef.current.locked && editStateRef.current.target==='text' && !isSplit){ ctx.strokeStyle='#7c3aed'; ctx.lineWidth=3; ctx.setLineDash([10,6]); ctx.strokeRect(-boxW/2-4,-boxH/2-4,boxW+8,boxH+8); ctx.setLineDash([]) } ctx.restore() }
+if(editStateRef.current.locked && editStateRef.current.target==='text' && !isSplit){ ctx.strokeStyle='#7c3aed'; ctx.lineWidth=3; ctx.setLineDash([12,8]); ctx.strokeRect(-boxW/2-4,-boxH/2-4,boxW+8,boxH+8); ctx.setLineDash([]) } ctx.restore() }
 if(isLive||ytLive||isRecording){
 const timeStr=formatTime(liveSeconds)
 ctx.save(); ctx.fillStyle='#FF0000'; ctx.font='900 28px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top'; ctx.shadowColor='rgba(0,0,0,0.9)'; ctx.shadowBlur=6; ctx.fillText(`● LIVE ${timeStr}${lowData?' [480p]':''}`,24,22); ctx.restore()
@@ -674,10 +683,16 @@ return (
 <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{background:'#000',borderRadius:18,overflow:'hidden',position:'relative',aspectRatio:'9/16',touchAction: editStateRef.current.locked ? 'none' : 'pan-y'}}><video ref={videoRef} muted playsInline autoPlay style={{width:'100%',height:'100%',objectFit:'cover',display:isCam&&bgMode==='face'?'block':'none'}}/>{!isCam&&<div style={{color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',height:420}}>Camera off - {lowData?'480p ON':'720p'}</div>}<canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%'}}/>
 <video ref={broadcastVideoRef} muted playsInline crossOrigin="anonymous" style={{position:'absolute',left:'-9999px',top:'-9999px',width:'10px',height:'10px',opacity:0.01}}/>
 {broadcastPlaying&&(
-  <div style={{position:'absolute',top:12,left:12,right:12,display:'flex',justifyContent:'flex-end',zIndex:100}}>
-    <button onClick={stopIntroOnly} style={{background:'#ff0000',color:'#fff',border:'2px solid #fff',padding:'10px 16px',borderRadius:20,fontWeight:900,fontSize:12}}>✕</button>
+  <div style={{position:'absolute',top:12,left:12,right:12,display:'flex',justifyContent:'space-between',zIndex:100}}>
+    <div style={{background:'rgba(0,0,0,0.85)',color:'#fff',padding:'8px 12px',borderRadius:20,fontSize:10,fontWeight:900}}>▶️ INTRO {Math.round((broadcastPlaying.duration||0))}s FULL</div>
+    <button onClick={stopIntroOnly} style={{background:'#ff0000',color:'#fff',border:'2px solid #fff',padding:'10px 16px',borderRadius:20,fontWeight:900,fontSize:12}}>✕ STOP INTRO</button>
   </div>
 )}
+<div style={{position:'absolute',bottom:8,left:0,right:0,textAlign:'center',zIndex:60,pointerEvents:'none'}}>
+  <span style={{background: editStateRef.current.locked ? '#00ff00' : 'rgba(0,0,0,0.7)', color: editStateRef.current.locked ? '#000' : '#fff', padding:'4px 10px', borderRadius:20, fontSize:9, fontWeight:900}}>
+    {editStateRef.current.locked ? `✏️ EDITING ${editStateRef.current.target?.toUpperCase()} - Drag to move - Tap outside to lock` : '🔒 LOCKED - Double tap text/logo to edit - Scroll works'}
+  </span>
+</div>
 {isCam&&!broadcastPlaying&&(<div style={{position:'absolute',top: bgMode==='split'?'auto':'12px',bottom: bgMode==='split'?'50px':'auto',right:12,display:'flex',gap:8,zIndex:50}}><button onClick={toggleCamera} style={{background:'rgba(0,0,0,0.85)',color:'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>Flip</button><button onClick={toggleTorch} style={{background:torch?'#fbbf24':'rgba(0,0,0,0.85)',color:torch?'#000':'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>{torch?'Flash On':'Flash'}</button></div>)}
 </div>
 <div style={{display:'flex',gap:8,marginTop:12}}>{!isCam?<button onClick={()=>startCamera()} style={{flex:1,background:'#111',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Start Camera {lowData?'(480p)':''}</button>:<><button onClick={toggleCamera} style={{flex:1,background:'#7c3aed',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Switch Camera</button><button onClick={stopCamera} style={{flex:1,background:'#444',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Stop</button></>}</div>
