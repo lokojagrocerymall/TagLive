@@ -183,7 +183,7 @@ const createFbLiveAuto=async(page:any)=>{
 const active=intros.find(i=>i.id===activeIntroId)
 if(active){
 setBroadcastPlaying(active)
-if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img } }
+if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
 if(active.type==='video'&&broadcastVideoRef.current){ broadcastVideoRef.current.src=active.data; broadcastVideoRef.current.muted=false; broadcastVideoRef.current.volume=1; broadcastVideoRef.current.play().catch(()=>{}) }
 setTimeout(async()=>{
 setBroadcastPlaying(null); broadcastImageRef.current=null;
@@ -256,38 +256,13 @@ const startRecording=async()=>{
   const active=intros.find(i=>i.id===activeIntroId)
   const micTrack = streamRef.current?.getAudioTracks()[0]
   if(!micTrack) return alert('Mic not found - restart camera')
-  let ac:any = null
-  let introAudio:any = null
-  try{
-    const AC = (window as any).AudioContext || (window as any).webkitAudioContext
-    ac = new AC()
-    if(ac.state==='suspended') await ac.resume()
-    const dest = ac.createMediaStreamDestination()
-    const micSrc = ac.createMediaStreamSource(streamRef.current!)
-    micSrc.connect(dest)
-    micSrc.connect(ac.destination)
-    if(active?.type==='video'){
-      introAudio = new Audio()
-      introAudio.crossOrigin="anonymous"
-      introAudio.src = active.data
-      introAudio.volume = 1
-      await introAudio.play().catch(()=>{})
-      const introSrc = ac.createMediaElementSource(introAudio)
-      introSrc.connect(dest)
-      introSrc.connect(ac.destination)
-    }
-    const mixedTrack = dest.stream.getAudioTracks()[0]
-    if(mixedTrack) canvasStream.addTrack(mixedTrack)
-    ;(ac as any)._dest = dest
-    ;(ac as any)._introEl = introAudio
-    audioCtxRef.current = ac
-  }catch{
-    try{ canvasStream.addTrack(micTrack) }catch{}
-  }
+  try{ canvasStream.addTrack(micTrack) }catch{}
+
   if(active){
     setBroadcastPlaying(active)
     if(active.type==='image'){
       const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }
+      broadcastImageRef.current=img
     } else if(active.type==='video'&&broadcastVideoRef.current){
       const v=broadcastVideoRef.current
       v.crossOrigin="anonymous"; v.muted=true; v.volume=0; v.playsInline=true; v.src=active.data
@@ -304,22 +279,12 @@ const startRecording=async()=>{
     const blob=new Blob(chunksRef.current, { type: mime })
     setRecordedUrl(URL.createObjectURL(blob))
     ;(window as any)._lastMime=mime
-    try{
-      const a:any = audioCtxRef.current
-      if(a?._introEl){ try{ a._introEl.pause(); a._introEl.src='' }catch{} }
-      if(a?._outroEl){ try{ a._outroEl.pause(); a._outroEl.src='' }catch{} }
-      a?.close()
-    }catch{}
   }
   rec.start(100); recorderRef.current=rec; setIsRecording(true); startTimer()
   if(active){
     setTimeout(()=>{
       setBroadcastPlaying(null); broadcastImageRef.current=null
-      if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause() }catch{} }
-      try{
-        const a:any = audioCtxRef.current
-        if(a?._introEl){ try{ a._introEl.pause() }catch{} }
-      }catch{}
+      if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.src='' }catch{} }
     }, (active.duration||5)*1000)
   }
 }
@@ -329,11 +294,6 @@ const stopRecordingFinal=()=>{
   setIsRecording(false); setBroadcastPlaying(null); broadcastImageRef.current=null
   if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.src='' }catch{} }
   if(!isLive&&!ytLive) stopTimer()
-  try{
-    const a:any = audioCtxRef.current
-    if(a?._introEl){ try{ a._introEl.pause(); a._introEl.src='' }catch{} }
-    if(a?._outroEl){ try{ a._outroEl.pause(); a._outroEl.src='' }catch{} }
-  }catch{}
 }
 
 const stopRecording=async()=>{
@@ -342,22 +302,11 @@ const stopRecording=async()=>{
     setBroadcastPlaying(active)
     if(active.type==='image'){
       const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }
+      broadcastImageRef.current=img
     } else if(active.type==='video'&&broadcastVideoRef.current){
       const v=broadcastVideoRef.current
       v.crossOrigin="anonymous"; v.muted=true; v.volume=0; v.playsInline=true; v.src=active.data
       try{ await v.play() }catch{}
-      try{
-        const ac:any = audioCtxRef.current
-        if(ac && ac._dest){
-          const a = new Audio()
-          a.crossOrigin="anonymous"; a.src=active.data; a.volume=1
-          await a.play().catch(()=>{})
-          const src = ac.createMediaElementSource(a)
-          src.connect(ac._dest)
-          src.connect(ac.destination)
-          ;(ac as any)._outroEl = a
-        }
-      }catch{}
     }
     setTimeout(()=>{ stopRecordingFinal() }, (active.duration||5)*1000)
   } else { stopRecordingFinal() }
