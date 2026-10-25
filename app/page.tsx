@@ -130,13 +130,10 @@ const cn=localStorage.getItem('taglive_church_name'); if(cn) setChurchName(cn)
 const tt=localStorage.getItem('taglive_ticker_text'); if(tt) setTickerText(tt)
 const ton=localStorage.getItem('taglive_ticker_on'); if(ton) setTickerOn(ton==='true')
 const lo=localStorage.getItem('taglive_show_logo'); if(lo) setShowLogo(lo==='true')
-// FIX: SET CANVAS SIZE + DEFAULT POSITIONS ON LOAD
 setTimeout(()=>{
-  if(canvasRef.current){ 
-    canvasRef.current.width=480; canvasRef.current.height=854
-  }
-  setPos((p:any)=>({...p, x:240, y:680 }))
-  setLogoPos((p:any)=>({...p, x:80, y:80 }))
+  if(canvasRef.current){ canvasRef.current.width=480; canvasRef.current.height=854 }
+  setPos((p:any)=>({...p, x:240, y:700 }))
+  setLogoPos((p:any)=>({...p, x:90, y:90 }))
 },600)
 }catch{}
 },[])
@@ -172,7 +169,6 @@ const h=lowData?480:720
 const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:newFacing,width:{ideal:w},height:{ideal:h}},audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}})
 streamRef.current=s; trackRef.current=s.getVideoTracks()[0]
 if(videoRef.current){ videoRef.current.srcObject=s; await videoRef.current.play() }
-// FIX STRETCH - SET CANVAS SIZE IMMEDIATELY
 if(canvasRef.current){ canvasRef.current.width=480; canvasRef.current.height=854 }
 setFacing(newFacing); setIsCam(true)
 }catch(e:any){ alert('Camera: '+e.message) }
@@ -293,19 +289,16 @@ const startRecording=async()=>{
   const canvas=canvasRef.current; if(!canvas) return alert('Start camera first')
   canvas.width=480; canvas.height=854
   const canvasStream=(canvas as any).captureStream(30) as MediaStream
-
   try{ if(audioCtxRef.current) audioCtxRef.current.close() }catch{}
   audioCtxRef.current=null
   setBroadcastPlaying(null)
   broadcastImageRef.current=null
   if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.removeAttribute('src'); broadcastVideoRef.current.load() }catch{} }
   if(introTimeoutRef.current){ try{ clearTimeout(introTimeoutRef.current) }catch{} }
-
   const audioCtx=new (window.AudioContext||(window as any).webkitAudioContext)()
   audioCtxRef.current=audioCtx
   const dest=audioCtx.createMediaStreamDestination()
   ;(audioCtx as any)._dest=dest
-
   const micTrack=streamRef.current?.getAudioTracks()[0]
   if(!micTrack) return alert('Mic not found - restart camera')
   const micSource=audioCtx.createMediaStreamSource(new MediaStream([micTrack]))
@@ -314,7 +307,6 @@ const startRecording=async()=>{
   ;(audioCtx as any)._micGain=micGain
   micSource.connect(micGain)
   micGain.connect(dest)
-
   const active=intros.find(i=>i.id===activeIntroId)
   if(active){
     setBroadcastPlaying(active)
@@ -342,9 +334,7 @@ const startRecording=async()=>{
       }catch{}
     }
   }
-
   dest.stream.getAudioTracks().forEach(t=>canvasStream.addTrack(t))
-
   chunksRef.current=[]
   let mime='video/webm;codecs=vp9,opus'
   if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm;codecs=vp8,opus'
@@ -393,10 +383,7 @@ const stopRecording=async()=>{
     if(active.type==='image'){
       const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }
       broadcastImageRef.current=img
-      setTimeout(()=>{ 
-        if(micGain){ try{ micGain.gain.value=1 }catch{} }
-        stopRecordingFinal() 
-      }, (active.duration||5)*1000)
+      setTimeout(()=>{ if(micGain){ try{ micGain.gain.value=1 }catch{} } stopRecordingFinal() }, (active.duration||5)*1000)
     } else if(active.type==='video'){
       if(broadcastVideoRef.current){
         const v=broadcastVideoRef.current
@@ -418,13 +405,13 @@ const stopRecording=async()=>{
           ;(audioCtxRef.current as any).outroAudioEl=audioEl
         }
       }catch{}
-      setTimeout(()=>{ 
-        if(micGain){ try{ micGain.gain.value=1 }catch{} }
-        stopRecordingFinal() 
-      }, (active.duration||5)*1000)
+      setTimeout(()=>{ if(micGain){ try{ micGain.gain.value=1 }catch{} } stopRecordingFinal() }, (active.duration||5)*1000)
     }
   } else { stopRecordingFinal() }
 }
+
+// --- DOUBLE TAP TO LOCK / UNLOCK ---
+const editStateRef=useRef({ locked:false, target:null as any, lastTap:0, lastX:0, lastY:0 })
 
 const onTouchStart=(e:any)=>{
 const canvas=canvasRef.current; if(!canvas) return
@@ -436,28 +423,80 @@ const distText=Math.hypot(tx-pos.x,ty-pos.y)
 const distLogo=Math.hypot(tx-logoPos.x,ty-logoPos.y)
 const nearText=distText<350
 const nearLogo=logoImage&&showLogo&&distLogo<300
-if(!nearText&&!nearLogo){ setDragging(false); return }
-if(nearLogo&&(!nearText||distLogo<distText)){ setSelected('logo'); lastTouch.current.selScale=logoPos.scale; lastTouch.current.selRot=logoPos.rotation }
-else { setSelected('text'); lastTouch.current.selScale=pos.scale; lastTouch.current.selRot=pos.rotation }
-if(e.touches.length===1){ setDragging(true); lastTouch.current.x=e.touches[0].clientX; lastTouch.current.y=e.touches[0].clientY }
-else if(e.touches.length===2){ const dx=e.touches[1].clientX-e.touches[0].clientX; const dy=e.touches[1].clientY-e.touches[0].clientY; lastTouch.current.dist=Math.hypot(dx,dy); lastTouch.current.angle=Math.atan2(dy,dx)*180/Math.PI; lastTouch.current.selScale=selected==='logo'?logoPos.scale:pos.scale; lastTouch.current.selRot=selected==='logo'?logoPos.rotation:pos.rotation; setDragging(false) }
+const now=Date.now()
+const timeDiff=now-editStateRef.current.lastTap
+const moved=Math.hypot(tx-editStateRef.current.lastX, ty-editStateRef.current.lastY)
+
+// DOUBLE TAP DETECTED
+if(nearText||nearLogo){
+  const tappedTarget=nearLogo&&(!nearText||distLogo<distText)?'logo':'text'
+  if(timeDiff<350 && moved<80 && editStateRef.current.target===tappedTarget){
+    // TOGGLE LOCK
+    if(editStateRef.current.locked && editStateRef.current.target===tappedTarget){
+      editStateRef.current.locked=false; editStateRef.current.target=null
+      setDragging(false)
+      setSelected(null as any)
+    } else {
+      editStateRef.current.locked=true; editStateRef.current.target=tappedTarget
+      if(tappedTarget==='logo'){ setSelected('logo'); lastTouch.current.selScale=logoPos.scale; lastTouch.current.selRot=logoPos.rotation }
+      else { setSelected('text'); lastTouch.current.selScale=pos.scale; lastTouch.current.selRot=pos.rotation }
+    }
+    editStateRef.current.lastTap=0
+    return
+  }
+  editStateRef.current.lastTap=now
+  editStateRef.current.lastX=tx
+  editStateRef.current.lastY=ty
+  editStateRef.current.target=tappedTarget
+  // SINGLE TAP DOES NOT DRAG - ONLY SELECT FOR HINT
+  setSelected(tappedTarget as any)
+  setDragging(false)
+  return
+} else {
+  // TAP OUTSIDE -> LOCK AGAIN
+  if(editStateRef.current.locked){
+    editStateRef.current.locked=false
+    editStateRef.current.target=null
+    setDragging(false)
+    setSelected(null as any)
+  }
+  editStateRef.current.lastTap=now
+  editStateRef.current.lastX=tx
+  editStateRef.current.lastY=ty
+  return
 }
+}
+
 const onTouchMove=(e:any)=>{
-if(!dragging) return
+if(!editStateRef.current.locked) return
+if(!dragging && e.touches.length===1){
+  setDragging(true)
+  lastTouch.current.x=e.touches[0].clientX
+  lastTouch.current.y=e.touches[0].clientY
+}
 const canvas=canvasRef.current; if(!canvas) return
 const rect=canvas.getBoundingClientRect(); if(!rect) return
-if(e.touches.length===1&&dragging){ 
-  e.preventDefault()
+e.preventDefault()
+if(e.touches.length===1){
   const cw=canvas.width||480; const ch=canvas.height||854
   const tx=(e.touches[0].clientX-rect.left)*(cw/rect.width); 
   const ty=(e.touches[0].clientY-rect.top)*(ch/rect.height); 
-  if(selected==='logo') setLogoPos(p=>({...p,x:tx,y:ty})); else setPos(p=>({...p,x:tx,y:ty})) 
+  if(editStateRef.current.target==='logo') setLogoPos(p=>({...p,x:tx,y:ty})); else setPos(p=>({...p,x:tx,y:ty})) 
 }
-if(e.touches.length===2){ 
-  e.preventDefault()
-  const dx=e.touches[1].clientX-e.touches[0].clientX; const dy=e.touches[1].clientY-e.touches[0].clientY; const dist=Math.hypot(dx,dy); const angle=Math.atan2(dy,dx)*180/Math.PI; if(lastTouch.current.dist>0){ const f=dist/lastTouch.current.dist; if(selected==='logo'){ setLogoPos(p=>({ ...p, scale:Math.min(2,Math.max(0.2,lastTouch.current.selScale*f)), rotation:lastTouch.current.selRot+(angle-lastTouch.current.angle) })) } else { setPos(p=>({ ...p, scale:Math.min(1.3,Math.max(0.6,lastTouch.current.selScale*f)), rotation:lastTouch.current.selRot+(angle-lastTouch.current.angle) })) } } }
+if(e.touches.length===2){
+  const dx=e.touches[1].clientX-e.touches[0].clientX; const dy=e.touches[1].clientY-e.touches[0].clientY; const dist=Math.hypot(dx,dy); const angle=Math.atan2(dy,dx)*180/Math.PI;
+  if(lastTouch.current.dist===0){ lastTouch.current.dist=dist; lastTouch.current.angle=angle }
+  if(lastTouch.current.dist>0){ const f=dist/lastTouch.current.dist; if(editStateRef.current.target==='logo'){ setLogoPos(p=>({ ...p, scale:Math.min(2,Math.max(0.2,lastTouch.current.selScale*f)), rotation:lastTouch.current.selRot+(angle-lastTouch.current.angle) })) } else { setPos(p=>({ ...p, scale:Math.min(1.3,Math.max(0.6,lastTouch.current.selScale*f)), rotation:lastTouch.current.selRot+(angle-lastTouch.current.angle) })) } }
 }
-const onTouchEnd=()=>{ setDragging(false); lastTouch.current.dist=0 }
+}
+const onTouchEnd=()=>{ 
+  if(e.touches && (e as any).touches.length>0) return
+  setDragging(false); 
+  lastTouch.current.dist=0 
+  if(editStateRef.current.locked && lastTouch.current.x){
+    lastTouch.current.x=0
+  }
+}
 
 useEffect(()=>{
 let a:any
@@ -512,7 +551,7 @@ else {
   else { sw=vw; sh=vw/rCanvas; sx=0; sy=(vh-sh)/2 }
   ctx.drawImage(v,sx,sy,sw,sh,0,0,c.width,c.height)
 }
-if(logoImageRef.current && showLogo){ ctx.save(); ctx.translate(logoPos.x,logoPos.y); ctx.rotate(logoPos.rotation*Math.PI/180); ctx.scale(logoPos.scale,logoPos.scale); const iw=logoImageRef.current.width, ih=logoImageRef.current.height; const maxLogoW=180; const sc=Math.min(1,maxLogoW/iw); ctx.drawImage(logoImageRef.current,-iw*sc/2,-ih*sc/2,iw*sc,ih*sc); if(selected==='logo'){ ctx.strokeStyle='#00ff00'; ctx.lineWidth=4; ctx.setLineDash([10,10]); ctx.strokeRect(-iw*sc/2-6,-ih*sc/2-6,iw*sc+12,ih*sc+12); ctx.setLineDash([]) } ctx.restore() }
+if(logoImageRef.current && showLogo){ ctx.save(); ctx.translate(logoPos.x,logoPos.y); ctx.rotate(logoPos.rotation*Math.PI/180); ctx.scale(logoPos.scale,logoPos.scale); const iw=logoImageRef.current.width, ih=logoImageRef.current.height; const maxLogoW=180; const sc=Math.min(1,maxLogoW/iw); ctx.drawImage(logoImageRef.current,-iw*sc/2,-ih*sc/2,iw*sc,ih*sc); if(editStateRef.current.locked && editStateRef.current.target==='logo'){ ctx.strokeStyle='#00ff00'; ctx.lineWidth=4; ctx.setLineDash([10,10]); ctx.strokeRect(-iw*sc/2-6,-ih*sc/2-6,iw*sc+12,ih*sc+12); ctx.setLineDash([]) } ctx.restore() }
 if(showText){
 ctx.save();
 const isSplit=bgMode==='split'
@@ -526,7 +565,7 @@ const churchY=y+22; const tW=ctx.measureText(churchName.toUpperCase()).width+28
 ctx.fillStyle='rgba(124,58,237,0.95)'; const pillH=28; ctx.fillRect(-tW/2,churchY-pillH/2,tW,pillH)
 ctx.fillStyle='#FFD700'; ctx.fillText(churchName.toUpperCase(),0,churchY)
 }
-if(selected==='text'&&!isSplit){ ctx.strokeStyle='#7c3aed'; ctx.lineWidth=3; ctx.setLineDash([12,8]); ctx.strokeRect(-boxW/2-4,-boxH/2-4,boxW+8,boxH+8); ctx.setLineDash([]) } ctx.restore() }
+if(editStateRef.current.locked && editStateRef.current.target==='text' && !isSplit){ ctx.strokeStyle='#7c3aed'; ctx.lineWidth=3; ctx.setLineDash([12,8]); ctx.strokeRect(-boxW/2-4,-boxH/2-4,boxW+8,boxH+8); ctx.setLineDash([]) } ctx.restore() }
 if(isLive||ytLive||isRecording){
 const timeStr=formatTime(liveSeconds)
 ctx.save(); ctx.fillStyle='#FF0000'; ctx.font='900 28px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top'; ctx.shadowColor='rgba(0,0,0,0.9)'; ctx.shadowBlur=6; ctx.fillText(`● LIVE ${timeStr}${lowData?' [480p]':''}`,24,22); ctx.restore()
@@ -634,14 +673,14 @@ return (
 <div style={{display:'flex',alignItems:'center',gap:6,marginTop:10,flexWrap:'wrap',minWidth:0}}><div style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:6,background:'#f3f0ff',padding:'6px 10px',borderRadius:10}}><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>A-</span><input type="range" min={18} max={48} value={fontSize} onChange={e=>setFontSize(parseInt(e.target.value))} style={{flex:1,minWidth:0,width:0}}/><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>A+</span><span style={{fontSize:10,fontWeight:800,background:'#111',color:'#fff',padding:'3px 6px',borderRadius:20,flexShrink:0}}>{fontSize}</span></div><button onClick={()=>setAlign(align==='justify'?'center':'justify')} style={{padding:'8px 10px',borderRadius:10,border:'none',background:align==='justify'?'#111':'#ddd',color:align==='justify'?'#fff':'#000',fontWeight:800,fontSize:10,flexShrink:0}}>{align==='justify'?'Justify':'Center'}</button><button onClick={pickMedia} style={{padding:'8px 10px',borderRadius:10,border:'none',background:'#7c3aed',color:'#fff',fontWeight:800,fontSize:10,flexShrink:0}}>Media</button><input ref={fileInputRef} type="file" accept="image/*" onChange={onFilePick} style={{display:'none'}}/></div>
 
 <div style={{display:'flex',gap:6,marginTop:8,alignItems:'center',background:'#fff',border:'1px solid #eee',padding:8,borderRadius:10,flexWrap:'wrap',minWidth:0}}><div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}><span style={{fontSize:10,fontWeight:800}}>Text</span><input type="color" value={textColor} onChange={e=>setTextColor(e.target.value)} style={{width:28,height:28,border:'none',borderRadius:6}}/></div><div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}><span style={{fontSize:10,fontWeight:800}}>Box</span><input type="color" value={boxColor} onChange={e=>setBoxColor(e.target.value)} style={{width:28,height:28,border:'none',borderRadius:6}}/></div><div style={{display:'flex',alignItems:'center',gap:4,flex:1,minWidth:0}}><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>Opac</span><input type="range" min={0} max={1} step={0.05} value={boxOpacity} onChange={e=>setBoxOpacity(parseFloat(e.target.value))} style={{flex:1,minWidth:0,width:0}}/></div>
-<button onClick={()=>{ const v=!showLogo; setShowLogo(v); localStorage.setItem('taglive_show_logo', v.toString()); if(v){ const c=canvasRef.current; if(c) setLogoPos((p:any)=>({...p, x:80, y:80})) } }} style={{padding:'6px 10px',borderRadius:8,border:'none',background:showLogo?'#16a34a':'#111',color:'#fff',fontWeight:800,fontSize:10,flexShrink:0}}>{showLogo?'Logo':'No Logo'}</button>
+<button onClick={()=>{ const v=!showLogo; setShowLogo(v); localStorage.setItem('taglive_show_logo', v.toString()); if(v){ setLogoPos((p:any)=>({...p, x:80, y:80})) } }} style={{padding:'6px 10px',borderRadius:8,border:'none',background:showLogo?'#16a34a':'#111',color:'#fff',fontWeight:800,fontSize:10,flexShrink:0}}>{showLogo?'Logo':'No Logo'}</button>
 <input ref={logoInputRef} type="file" accept="image/*" onChange={onLogoPick} style={{display:'none'}}/>
-<button onClick={()=>{ const v=!showText; setShowText(v); if(v){ const c=canvasRef.current; if(c) setPos((p:any)=>({...p, x:240, y:680})) } }} style={{padding:'6px 10px',borderRadius:8,border:'none',background:showText?'#111':'#ddd',color:showText?'#fff':'#000',fontWeight:800,fontSize:10,flexShrink:0}}>{showText?'Text':'No Text'}</button>
+<button onClick={()=>{ const v=!showText; setShowText(v); if(v){ setPos((p:any)=>({...p, x:240, y:680})) } }} style={{padding:'6px 10px',borderRadius:8,border:'none',background:showText?'#111':'#ddd',color:showText?'#fff':'#000',fontWeight:800,fontSize:10,flexShrink:0}}>{showText?'Text':'No Text'}</button>
 </div>
 </div>
 
 <div>
-<div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{background:'#000',borderRadius:18,overflow:'hidden',position:'relative',aspectRatio:'9/16',touchAction:'pan-y'}}><video ref={videoRef} muted playsInline autoPlay style={{width:'100%',height:'100%',objectFit:'cover',display:isCam&&bgMode==='face'?'block':'none'}}/>{!isCam&&<div style={{color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',height:420}}>Camera off - {lowData?'480p ON':'720p'}</div>}<canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%'}}/>
+<div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{background:'#000',borderRadius:18,overflow:'hidden',position:'relative',aspectRatio:'9/16',touchAction: editStateRef.current.locked ? 'none' : 'pan-y'}}><video ref={videoRef} muted playsInline autoPlay style={{width:'100%',height:'100%',objectFit:'cover',display:isCam&&bgMode==='face'?'block':'none'}}/>{!isCam&&<div style={{color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',height:420}}>Camera off - {lowData?'480p ON':'720p'}</div>}<canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%'}}/>
 <video ref={broadcastVideoRef} muted playsInline crossOrigin="anonymous" style={{position:'absolute',left:'-9999px',top:'-9999px',width:'10px',height:'10px',opacity:0.01}}/>
 {broadcastPlaying&&(
   <div style={{position:'absolute',top:12,left:12,right:12,display:'flex',justifyContent:'space-between',zIndex:100}}>
@@ -649,6 +688,11 @@ return (
     <button onClick={stopIntroOnly} style={{background:'#ff0000',color:'#fff',border:'2px solid #fff',padding:'10px 16px',borderRadius:20,fontWeight:900,fontSize:12}}>✕ STOP INTRO</button>
   </div>
 )}
+<div style={{position:'absolute',bottom:8,left:0,right:0,textAlign:'center',zIndex:60,pointerEvents:'none'}}>
+  <span style={{background: editStateRef.current.locked ? '#00ff00' : 'rgba(0,0,0,0.7)', color: editStateRef.current.locked ? '#000' : '#fff', padding:'4px 10px', borderRadius:20, fontSize:9, fontWeight:900}}>
+    {editStateRef.current.locked ? `✏️ EDITING ${editStateRef.current.target?.toUpperCase()} - Drag to move - Tap outside to lock` : '🔒 LOCKED - Double tap text/logo to edit - Scroll works'}
+  </span>
+</div>
 {isCam&&!broadcastPlaying&&(<div style={{position:'absolute',top: bgMode==='split'?'auto':'12px',bottom: bgMode==='split'?'50px':'auto',right:12,display:'flex',gap:8,zIndex:50}}><button onClick={toggleCamera} style={{background:'rgba(0,0,0,0.85)',color:'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>Flip</button><button onClick={toggleTorch} style={{background:torch?'#fbbf24':'rgba(0,0,0,0.85)',color:torch?'#000':'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>{torch?'Flash On':'Flash'}</button></div>)}
 </div>
 <div style={{display:'flex',gap:8,marginTop:12}}>{!isCam?<button onClick={()=>startCamera()} style={{flex:1,background:'#111',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Start Camera {lowData?'(480p)':''}</button>:<><button onClick={toggleCamera} style={{flex:1,background:'#7c3aed',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Switch Camera</button><button onClick={stopCamera} style={{flex:1,background:'#444',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Stop</button></>}</div>
