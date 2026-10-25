@@ -119,7 +119,7 @@ const base64=await fileToBase64(file)
 let dur=5
 if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }
 const item={ id:`id_${Date.now()}`, type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }
-const n=[...intros,item]; saveIntros(n); setActiveIntroId(item.id); localStorage.setItem('taglive_active_intro', item.id); e.target.value=''; alert(`Intro Saved! ${Math.round(dur)}s - Will stay after refresh`)
+const n=[...intros,item]; saveIntros(n); setActiveIntroId(item.id); localStorage.setItem('taglive_active_intro', item.id); e.target.value=''; alert(`Intro Saved! ${Math.round(dur)}s`)
 }
 const handleOutroFile=async(e:any)=>{
 const file=e.target.files?.[0]; if(!file) return
@@ -127,7 +127,7 @@ const base64=await fileToBase64(file)
 let dur=5
 if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }
 const item={ id:`id_${Date.now()}`, type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }
-const n=[...outros,item]; saveOutros(n); setActiveOutroId(item.id); localStorage.setItem('taglive_active_outro', item.id); e.target.value=''; alert(`Outro Saved! ${Math.round(dur)}s - Will stay after refresh`)
+const n=[...outros,item]; saveOutros(n); setActiveOutroId(item.id); localStorage.setItem('taglive_active_outro', item.id); e.target.value=''; alert(`Outro Saved! ${Math.round(dur)}s`)
 }
 
 const startCamera=async(newFacing=facing)=>{
@@ -223,18 +223,18 @@ const deleteSaved=(idx:number)=>{ const ns=saved.filter((_,i)=>i!==idx); setSave
 const pickMedia=()=>fileInputRef.current?.click()
 const pickLogo=()=>logoInputRef.current?.click()
 const onFilePick=(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const url=URL.createObjectURL(f); setBgImage(url); setBgMode('image'); const img=new Image(); img.src=url; img.onload=()=>{ bgImageRef.current=img } }
-const onLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const base64=await fileToBase64(f); setLogoImage(base64); localStorage.setItem('taglive_church_logo', base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; setSelected('logo'); alert('Logo Saved! Will stay after refresh') }
+const onLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const base64=await fileToBase64(f); setLogoImage(base64); localStorage.setItem('taglive_church_logo', base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; setSelected('logo'); alert('Logo Saved!') }
 const handleChurchLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const base64=await fileToBase64(f); setLogoImage(base64); localStorage.setItem('taglive_church_logo', base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; alert('Church Logo Saved!') }
 const removeChurchLogo=()=>{ localStorage.removeItem('taglive_church_logo'); setLogoImage(null); logoImageRef.current=null; if(churchLogoInputRef.current) churchLogoInputRef.current.value=''; if(logoInputRef.current) logoInputRef.current.value=''; alert('Logo Removed') }
 
-// === FINAL SOUND FIX - ANDROID WORKING ===
+// SOUND FIXED - SEPARATE AUDIO ELEMENT SO IT ENTERS RECORD
 const startRecording=async()=>{
   const canvas=canvasRef.current; if(!canvas) return alert('Start camera first')
   canvas.width=720; canvas.height=1280
   const canvasStream=(canvas as any).captureStream(30) as MediaStream
 
-  // Use AudioContext mixer - this is the only way Android gets intro sound
-  let mixedAudioTrack: MediaStreamTrack | null = null
+  // 1. Create mixer with ONE audio track
+  let audioElRef:any = null
   try{
     const AC = (window as any).AudioContext || (window as any).webkitAudioContext
     const ac = new AC()
@@ -242,44 +242,49 @@ const startRecording=async()=>{
     audioCtxRef.current = ac
     const dest = ac.createMediaStreamDestination()
     ;(ac as any)._dest = dest
+    ;(ac as any)._audioEl = null
 
-    // mic
+    // Add mic to mixer
     if(streamRef.current){
-      try{ const ms = ac.createMediaStreamSource(streamRef.current); ms.connect(dest) }catch{}
+      try{
+        const micSrc = ac.createMediaStreamSource(streamRef.current)
+        micSrc.connect(dest)
+      }catch{}
     }
 
-    // intro video will be connected after play (see below)
-
-    mixedAudioTrack = dest.stream.getAudioTracks()[0] || null
-    if(mixedAudioTrack) canvasStream.addTrack(mixedAudioTrack)
+    // Add mixed track to canvasStream - ONLY ONE TRACK
+    const mixedTrack = dest.stream.getAudioTracks()[0]
+    if(mixedTrack) canvasStream.addTrack(mixedTrack)
 
   }catch{
-    // fallback old way
     streamRef.current?.getAudioTracks().forEach(t=>{ try{ canvasStream.addTrack(t) }catch{} })
   }
 
   const active=intros.find(i=>i.id===activeIntroId)
   if(active){
     setBroadcastPlaying(active)
-    if(active.type==='image'){ 
+    if(active.type==='image'){
       const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }
     } else if(active.type==='video'&&broadcastVideoRef.current){
       const v=broadcastVideoRef.current
-      v.crossOrigin="anonymous"; v.muted=false; v.volume=1; v.playsInline=true; v.src=active.data
+      // Video for PICTURE
+      v.crossOrigin="anonymous"; v.muted=true; v.volume=0; v.playsInline=true; v.src=active.data
       try{ await v.play() }catch{}
-      // Now connect intro sound to mixer
-      try{
-        if(audioCtxRef.current){
-          const src = audioCtxRef.current.createMediaElementSource(v)
-          src.connect((audioCtxRef.current as any)._dest)
-          src.connect(audioCtxRef.current.destination) // hear live
-        }
-      }catch{
-        // if createMediaElementSource fails (already connected), fallback to captureStream
+
+      // Audio for SOUND - separate element so createMediaElementSource works
+      if(active.type==='video' && audioCtxRef.current){
         try{
-          const vs=(v as any).captureStream?.() as MediaStream
-          if(vs) vs.getAudioTracks().forEach((at:any)=>{ try{ canvasStream.addTrack(at) }catch{} })
-        }catch{}
+          const ac = audioCtxRef.current
+          const dest = (ac as any)._dest
+          const a = new Audio()
+          a.crossOrigin="anonymous"; a.src=active.data; a.loop=false; a.volume=1
+          ;(ac as any)._audioEl = a
+          await a.play().catch(()=>{})
+          const src = ac.createMediaElementSource(a)
+          src.connect(dest) // to recording
+          src.connect(ac.destination) // to speaker
+          audioElRef = a
+        }catch(e){ console.log('intro audio mix error',e) }
       }
     }
   }
@@ -291,22 +296,29 @@ const startRecording=async()=>{
   
   const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 2500000, audioBitsPerSecond: 128000 })
   rec.ondataavailable=(e)=>{ if(e.data.size>0) chunksRef.current.push(e.data) }
-  rec.onstop=()=>{ 
-    const blob=new Blob(chunksRef.current, { type: mime }); 
-    const url=URL.createObjectURL(blob); 
+  rec.onstop=()=>{
+    const blob=new Blob(chunksRef.current, { type: mime });
+    const url=URL.createObjectURL(blob);
     setRecordedUrl(url);
-    try{ audioCtxRef.current?.close() }catch{}
+    try{
+      const ac:any = audioCtxRef.current
+      if(ac?._audioEl){ try{ ac._audioEl.pause(); ac._audioEl.src='' }catch{} }
+      ac?.close()
+    }catch{}
   }
-  rec.start(100); recorderRef.current=rec; setIsRecording(true); startTimer()
-
-  if(active){ setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; if(broadcastVideoRef.current){ try{broadcastVideoRef.current.pause()}catch{} } }, (active.duration||5)*1000) }
+  rec.start(100); recorderRef.current=rec; (recorderRef.current as any)._audioEl = audioElRef; setIsRecording(true); startTimer()
+  if(active){ setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; if(broadcastVideoRef.current){ try{broadcastVideoRef.current.pause()}catch{} } try{ audioElRef?.pause() }catch{} }, (active.duration||5)*1000) }
 }
 
 const stopRecordingFinal=()=>{
   recorderRef.current?.stop(); setIsRecording(false); setBroadcastPlaying(null); broadcastImageRef.current=null; 
   if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.src='' }catch{} }
   if(!isLive&&!ytLive) stopTimer()
-  try{ audioCtxRef.current?.close() }catch{}
+  try{ 
+    const ac:any = audioCtxRef.current
+    if(ac?._audioEl){ try{ ac._audioEl.pause(); ac._audioEl.src='' }catch{} }
+    ac?.close() 
+  }catch{}
 }
 
 const stopRecording=async()=>{
@@ -316,16 +328,24 @@ const stopRecording=async()=>{
     if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; setTimeout(()=>{ stopRecordingFinal() }, (active.duration||5)*1000) }
     else if(active.type==='video'&&broadcastVideoRef.current){
       const v=broadcastVideoRef.current
-      v.crossOrigin="anonymous"; v.muted=false; v.volume=1; v.playsInline=true; v.src=active.data
+      v.crossOrigin="anonymous"; v.muted=true; v.volume=0; v.playsInline=true; v.src=active.data
       try{ await v.play() }catch{}
+      // Play outro sound via separate audio element into same mixer
       try{
         if(audioCtxRef.current){
-          const src = audioCtxRef.current.createMediaElementSource(v)
-          src.connect((audioCtxRef.current as any)._dest || audioCtxRef.current.destination)
-          src.connect(audioCtxRef.current.destination)
+          const ac:any = audioCtxRef.current
+          const dest = ac._dest
+          const a = new Audio()
+          a.crossOrigin="anonymous"; a.src=active.data; a.volume=1
+          ac._audioEl = a
+          await a.play().catch(()=>{})
+          const src = ac.createMediaElementSource(a)
+          src.connect(dest)
+          src.connect(ac.destination)
+          a.onended=()=>{ stopRecordingFinal() }
         }
       }catch{}
-      v.onended=()=>{ stopRecordingFinal() }
+      v.onended=()=>{ /* wait audio */ }
       setTimeout(()=>{ stopRecordingFinal() }, (active.duration||7)*1000)
     } else { setTimeout(()=>{ stopRecordingFinal() }, (active.duration||5)*1000) }
   } else { stopRecordingFinal() }
@@ -524,7 +544,7 @@ return (
 
 <div>
 <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{background:'#000',borderRadius:18,overflow:'hidden',position:'relative',aspectRatio:'9/16',touchAction:'none'}}><video ref={videoRef} muted playsInline autoPlay style={{width:'100%',height:'100%',objectFit:'cover',display:isCam&&bgMode==='face'?'block':'none'}}/>{!isCam&&<div style={{color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',height:420}}>Camera off - {lowData?'480p ON':'720p'}</div>}<canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%'}}/>
-<video ref={broadcastVideoRef} muted={false} playsInline crossOrigin="anonymous" style={{position:'absolute',left:'-9999px',top:'-9999px',width:'10px',height:'10px',opacity:0.01}}/>
+<video ref={broadcastVideoRef} muted playsInline crossOrigin="anonymous" style={{position:'absolute',left:'-9999px',top:'-9999px',width:'10px',height:'10px',opacity:0.01}}/>
 {isCam&&(<div style={{position:'absolute',top: bgMode==='split'?'auto':'12px',bottom: bgMode==='split'?'50px':'auto',right:12,display:'flex',gap:8,zIndex:50}}><button onClick={toggleCamera} style={{background:'rgba(0,0,0,0.85)',color:'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>Flip</button><button onClick={toggleTorch} style={{background:torch?'#fbbf24':'rgba(0,0,0,0.85)',color:torch?'#000':'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>{torch?'Flash On':'Flash'}</button></div>)}
 </div>
 <div style={{display:'flex',gap:8,marginTop:12}}>{!isCam?<button onClick={()=>startCamera()} style={{flex:1,background:'#111',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Start Camera {lowData?'(480p)':''}</button>:<><button onClick={toggleCamera} style={{flex:1,background:'#7c3aed',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Switch Camera</button><button onClick={stopCamera} style={{flex:1,background:'#444',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Stop</button></>}</div>
