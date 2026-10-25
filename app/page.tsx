@@ -109,7 +109,7 @@ setStats({ live: live||0, daily: daily||0, weekly: weekly||0, monthly: monthly||
 trackDevice(); const interval=setInterval(trackDevice,60000); return()=>clearInterval(interval)
 },[isAdmin])
 
-// FIXED - RESTORE ALL SAVES ON REFRESH (LOGO, INTRO/OUTRO, SCRIPTURE, CHURCH NAME)
+// FIXED - RESTORE ALL SAVES ON REFRESH
 useEffect(()=>{
 try{
 const i=localStorage.getItem('taglive_intros'); if(i){ setIntros(JSON.parse(i)) }
@@ -127,6 +127,7 @@ const sv=localStorage.getItem('taglive_saved'); if(sv){ setSaved(JSON.parse(sv))
 const cn=localStorage.getItem('taglive_church_name'); if(cn) setChurchName(cn)
 const tt=localStorage.getItem('taglive_ticker_text'); if(tt) setTickerText(tt)
 const ton=localStorage.getItem('taglive_ticker_on'); if(ton) setTickerOn(ton==='true')
+const lo=localStorage.getItem('taglive_show_logo'); if(lo) setShowLogo(lo==='true')
 }catch{}
 },[])
 
@@ -245,8 +246,8 @@ const deleteSaved=(idx:number)=>{ const ns=saved.filter((_,i)=>i!==idx); setSave
 const pickMedia=()=>fileInputRef.current?.click()
 const pickLogo=()=>logoInputRef.current?.click()
 const onFilePick=(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const url=URL.createObjectURL(f); setBgImage(url); setBgMode('image'); const img=new Image(); img.src=url; img.onload=()=>{ bgImageRef.current=img } }
-const onLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const base64=await fileToBase64(f); setLogoImage(base64); localStorage.setItem('taglive_church_logo', base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; setSelected('logo'); alert('Logo Saved!') }
-const handleChurchLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const base64=await fileToBase64(f); setLogoImage(base64); localStorage.setItem('taglive_church_logo', base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; alert('Church Logo Saved!') }
+const onLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const base64=await fileToBase64(f); setLogoImage(base64); localStorage.setItem('taglive_church_logo', base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; setSelected('logo'); setShowLogo(true); localStorage.setItem('taglive_show_logo','true'); alert('Logo Saved!') }
+const handleChurchLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const base64=await fileToBase64(f); setLogoImage(base64); localStorage.setItem('taglive_church_logo', base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; setShowLogo(true); localStorage.setItem('taglive_show_logo','true'); alert('Church Logo Saved!') }
 const removeChurchLogo=()=>{ localStorage.removeItem('taglive_church_logo'); setLogoImage(null); logoImageRef.current=null; if(churchLogoInputRef.current) churchLogoInputRef.current.value=''; if(logoInputRef.current) logoInputRef.current.value=''; alert('Logo Removed') }
 
 const startRecording=async()=>{
@@ -270,14 +271,15 @@ const startRecording=async()=>{
   }
   chunksRef.current=[]
   let mime='video/webm;codecs=vp8,opus'
+  if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm'
   const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 800000 })
   rec.ondataavailable=(e)=>{ if(e.data.size>0) chunksRef.current.push(e.data) }
   rec.onstop=()=>{
     const blob=new Blob(chunksRef.current, { type: mime })
+    if(recordedUrl) try{ URL.revokeObjectURL(recordedUrl) }catch{}
     setRecordedUrl(URL.createObjectURL(blob))
-    ;(window as any)._lastMime=mime
   }
-  rec.start(100); recorderRef.current=rec; setIsRecording(true); startTimer()
+  rec.start(250); recorderRef.current=rec; setIsRecording(true); startTimer()
   if(active){
     setTimeout(()=>{
       setBroadcastPlaying(null); broadcastImageRef.current=null
@@ -310,19 +312,27 @@ const stopRecording=async()=>{
 }
 
 const onTouchStart=(e:any)=>{
-const rect=canvasRef.current?.getBoundingClientRect(); if(!rect) return
-const tx=(e.touches[0].clientX-rect.left)*(720/rect.width)
-const ty=(e.touches[0].clientY-rect.top)*(1280/rect.height)
+const canvas=canvasRef.current; if(!canvas) return
+const rect=canvas.getBoundingClientRect(); 
+const cw=canvas.width||480; const ch=canvas.height||854
+const tx=(e.touches[0].clientX-rect.left)*(cw/rect.width)
+const ty=(e.touches[0].clientY-rect.top)*(ch/rect.height)
 const distText=Math.hypot(tx-pos.x,ty-pos.y)
 const distLogo=Math.hypot(tx-logoPos.x,ty-logoPos.y)
-if(logoImage&&distLogo<180&&distLogo<distText){ setSelected('logo'); lastTouch.current.selScale=logoPos.scale; lastTouch.current.selRot=logoPos.rotation }
+if(logoImage&&showLogo&&distLogo<180&&distLogo<distText){ setSelected('logo'); lastTouch.current.selScale=logoPos.scale; lastTouch.current.selRot=logoPos.rotation }
 else { setSelected('text'); lastTouch.current.selScale=pos.scale; lastTouch.current.selRot=pos.rotation }
 if(e.touches.length===1){ setDragging(true); lastTouch.current.x=e.touches[0].clientX; lastTouch.current.y=e.touches[0].clientY }
 else if(e.touches.length===2){ const dx=e.touches[1].clientX-e.touches[0].clientX; const dy=e.touches[1].clientY-e.touches[0].clientY; lastTouch.current.dist=Math.hypot(dx,dy); lastTouch.current.angle=Math.atan2(dy,dx)*180/Math.PI; lastTouch.current.selScale=selected==='logo'?logoPos.scale:pos.scale; lastTouch.current.selRot=selected==='logo'?logoPos.rotation:pos.rotation; setDragging(false) }
 }
 const onTouchMove=(e:any)=>{
-const rect=canvasRef.current?.getBoundingClientRect(); if(!rect) return
-if(e.touches.length===1&&dragging){ const tx=e.touches[0].clientX-rect.left; const ty=e.touches[0].clientY-rect.top; const nx=tx*(720/rect.width); const ny=ty*(1280/rect.height); if(selected==='logo') setLogoPos(p=>({...p,x:nx,y:ny})); else setPos(p=>({...p,x:nx,y:ny})) }
+const canvas=canvasRef.current; if(!canvas) return
+const rect=canvas.getBoundingClientRect(); if(!rect) return
+const cw=canvas.width||480; const ch=canvas.height||854
+if(e.touches.length===1&&dragging){ 
+  const tx=(e.touches[0].clientX-rect.left)*(cw/rect.width); 
+  const ty=(e.touches[0].clientY-rect.top)*(ch/rect.height); 
+  if(selected==='logo') setLogoPos(p=>({...p,x:tx,y:ty})); else setPos(p=>({...p,x:tx,y:ty})) 
+}
 if(e.touches.length===2){ const dx=e.touches[1].clientX-e.touches[0].clientX; const dy=e.touches[1].clientY-e.touches[0].clientY; const dist=Math.hypot(dx,dy); const angle=Math.atan2(dy,dx)*180/Math.PI; if(lastTouch.current.dist>0){ const f=dist/lastTouch.current.dist; if(selected==='logo'){ setLogoPos(p=>({ ...p, scale:Math.min(2,Math.max(0.2,lastTouch.current.selScale*f)), rotation:lastTouch.current.selRot+(angle-lastTouch.current.angle) })) } else { setPos(p=>({ ...p, scale:Math.min(1.3,Math.max(0.6,lastTouch.current.selScale*f)), rotation:lastTouch.current.selRot+(angle-lastTouch.current.angle) })) } } }
 }
 const onTouchEnd=()=>{ setDragging(false); lastTouch.current.dist=0 }
@@ -380,7 +390,7 @@ else {
   else { sw=vw; sh=vw/rCanvas; sx=0; sy=(vh-sh)/2 }
   ctx.drawImage(v,sx,sy,sw,sh,0,0,c.width,c.height)
 }
-if(logoImageRef.current){ ctx.save(); ctx.translate(logoPos.x,logoPos.y); ctx.rotate(logoPos.rotation*Math.PI/180); ctx.scale(logoPos.scale,logoPos.scale); const iw=logoImageRef.current.width, ih=logoImageRef.current.height; const maxLogoW=180; const sc=Math.min(1,maxLogoW/iw); ctx.drawImage(logoImageRef.current,-iw*sc/2,-ih*sc/2,iw*sc,ih*sc); if(selected==='logo'){ ctx.strokeStyle='#00ff00'; ctx.lineWidth=4; ctx.setLineDash([10,10]); ctx.strokeRect(-iw*sc/2-6,-ih*sc/2-6,iw*sc+12,ih*sc+12); ctx.setLineDash([]) } ctx.restore() }
+if(logoImageRef.current && showLogo){ ctx.save(); ctx.translate(logoPos.x,logoPos.y); ctx.rotate(logoPos.rotation*Math.PI/180); ctx.scale(logoPos.scale,logoPos.scale); const iw=logoImageRef.current.width, ih=logoImageRef.current.height; const maxLogoW=180; const sc=Math.min(1,maxLogoW/iw); ctx.drawImage(logoImageRef.current,-iw*sc/2,-ih*sc/2,iw*sc,ih*sc); if(selected==='logo'){ ctx.strokeStyle='#00ff00'; ctx.lineWidth=4; ctx.setLineDash([10,10]); ctx.strokeRect(-iw*sc/2-6,-ih*sc/2-6,iw*sc+12,ih*sc+12); ctx.setLineDash([]) } ctx.restore() }
 if(showText){
 ctx.save();
 const isSplit=bgMode==='split'
@@ -420,7 +430,7 @@ a=requestAnimationFrame(draw)
 }
 draw()
 return()=>cancelAnimationFrame(a)
-},[isCam,verse,isLive,pos,bgMode,fontSize,align,bgImage,ytLive,textColor,boxColor,boxOpacity,logoImage,logoPos,isRecording,selected,showText,tickerOn,tickerText,tickerSize,tickerSpeed,churchName,showChurchName,liveSeconds,lowData,broadcastPlaying])
+},[isCam,verse,isLive,pos,bgMode,fontSize,align,bgImage,ytLive,textColor,boxColor,boxOpacity,logoImage,logoPos,isRecording,selected,showText,showLogo,tickerOn,tickerText,tickerSize,tickerSpeed,churchName,showChurchName,liveSeconds,lowData,broadcastPlaying])
 
 return (
 <div style={{minHeight:'100vh',background:'#f5f5f7'}}>
@@ -497,7 +507,11 @@ return (
 
 <div style={{display:'flex',alignItems:'center',gap:6,marginTop:10,flexWrap:'wrap',minWidth:0}}><div style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:6,background:'#f3f0ff',padding:'6px 10px',borderRadius:10}}><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>A-</span><input type="range" min={18} max={48} value={fontSize} onChange={e=>setFontSize(parseInt(e.target.value))} style={{flex:1,minWidth:0,width:0}}/><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>A+</span><span style={{fontSize:10,fontWeight:800,background:'#111',color:'#fff',padding:'3px 6px',borderRadius:20,flexShrink:0}}>{fontSize}</span></div><button onClick={()=>setAlign(align==='justify'?'center':'justify')} style={{padding:'8px 10px',borderRadius:10,border:'none',background:align==='justify'?'#111':'#ddd',color:align==='justify'?'#fff':'#000',fontWeight:800,fontSize:10,flexShrink:0}}>{align==='justify'?'Justify':'Center'}</button><button onClick={pickMedia} style={{padding:'8px 10px',borderRadius:10,border:'none',background:'#7c3aed',color:'#fff',fontWeight:800,fontSize:10,flexShrink:0}}>Media</button><input ref={fileInputRef} type="file" accept="image/*" onChange={onFilePick} style={{display:'none'}}/></div>
 
-<div style={{display:'flex',gap:6,marginTop:8,alignItems:'center',background:'#fff',border:'1px solid #eee',padding:8,borderRadius:10,flexWrap:'wrap',minWidth:0}}><div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}><span style={{fontSize:10,fontWeight:800}}>Text</span><input type="color" value={textColor} onChange={e=>setTextColor(e.target.value)} style={{width:28,height:28,border:'none',borderRadius:6}}/></div><div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}><span style={{fontSize:10,fontWeight:800}}>Box</span><input type="color" value={boxColor} onChange={e=>setBoxColor(e.target.value)} style={{width:28,height:28,border:'none',borderRadius:6}}/></div><div style={{display:'flex',alignItems:'center',gap:4,flex:1,minWidth:0}}><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>Opac</span><input type="range" min={0} max={1} step={0.05} value={boxOpacity} onChange={e=>setBoxOpacity(parseFloat(e.target.value))} style={{flex:1,minWidth:0,width:0}}/></div><button onClick={pickLogo} style={{padding:'6px 10px',borderRadius:8,border:'none',background:logoImage?'#16a34a':'#111',color:'#fff',fontWeight:800,fontSize:10,flexShrink:0}}>{logoImage?'Logo':'Add Logo'}</button><input ref={logoInputRef} type="file" accept="image/*" onChange={onLogoPick} style={{display:'none'}}/><button onClick={()=>setShowText(!showText)} style={{padding:'6px 10px',borderRadius:8,border:'none',background:showText?'#111':'#ddd',color:showText?'#fff':'#000',fontWeight:800,fontSize:10,flexShrink:0}}>{showText?'Text':'No Text'}</button></div>
+<div style={{display:'flex',gap:6,marginTop:8,alignItems:'center',background:'#fff',border:'1px solid #eee',padding:8,borderRadius:10,flexWrap:'wrap',minWidth:0}}><div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}><span style={{fontSize:10,fontWeight:800}}>Text</span><input type="color" value={textColor} onChange={e=>setTextColor(e.target.value)} style={{width:28,height:28,border:'none',borderRadius:6}}/></div><div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}><span style={{fontSize:10,fontWeight:800}}>Box</span><input type="color" value={boxColor} onChange={e=>setBoxColor(e.target.value)} style={{width:28,height:28,border:'none',borderRadius:6}}/></div><div style={{display:'flex',alignItems:'center',gap:4,flex:1,minWidth:0}}><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>Opac</span><input type="range" min={0} max={1} step={0.05} value={boxOpacity} onChange={e=>setBoxOpacity(parseFloat(e.target.value))} style={{flex:1,minWidth:0,width:0}}/></div>
+<button onClick={()=>{ const v=!showLogo; setShowLogo(v); localStorage.setItem('taglive_show_logo', v.toString()) }} style={{padding:'6px 10px',borderRadius:8,border:'none',background:showLogo?'#16a34a':'#111',color:'#fff',fontWeight:800,fontSize:10,flexShrink:0}}>{showLogo?'Logo':'No Logo'}</button>
+<input ref={logoInputRef} type="file" accept="image/*" onChange={onLogoPick} style={{display:'none'}}/>
+<button onClick={()=>setShowText(!showText)} style={{padding:'6px 10px',borderRadius:8,border:'none',background:showText?'#111':'#ddd',color:showText?'#fff':'#000',fontWeight:800,fontSize:10,flexShrink:0}}>{showText?'Text':'No Text'}</button>
+</div>
 </div>
 
 <div>
