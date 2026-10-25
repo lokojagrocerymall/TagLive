@@ -251,13 +251,12 @@ const removeChurchLogo=()=>{ localStorage.removeItem('taglive_church_logo'); set
 
 const startRecording=async()=>{
   const canvas=canvasRef.current; if(!canvas) return alert('Start camera first')
-  canvas.width=720; canvas.height=1280
-  const canvasStream=(canvas as any).captureStream(30) as MediaStream
+  canvas.width=480; canvas.height=854
+  const canvasStream=(canvas as any).captureStream(15) as MediaStream
   const active=intros.find(i=>i.id===activeIntroId)
   const micTrack = streamRef.current?.getAudioTracks()[0]
   if(!micTrack) return alert('Mic not found - restart camera')
   try{ canvasStream.addTrack(micTrack) }catch{}
-
   if(active){
     setBroadcastPlaying(active)
     if(active.type==='image'){
@@ -271,9 +270,7 @@ const startRecording=async()=>{
   }
   chunksRef.current=[]
   let mime='video/webm;codecs=vp8,opus'
-  if(MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')) mime='video/webm;codecs=vp9,opus'
-
-  const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 2500000 })
+  const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 800000 })
   rec.ondataavailable=(e)=>{ if(e.data.size>0) chunksRef.current.push(e.data) }
   rec.onstop=()=>{
     const blob=new Blob(chunksRef.current, { type: mime })
