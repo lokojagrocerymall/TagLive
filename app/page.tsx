@@ -1,4 +1,5 @@
 "use client"
+export const dynamic = 'force-dynamic'
 import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@supabase/supabase-js'
 const supabase = createClient('https://gqifluvkrjzsebfdjcio.supabase.co','eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdxaWZsdXZrcmp6c2ViZmRqY2lvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIzNzY4NDgsImV4cCI6MjEwNzk1Mjg0OH0.zonQMk22nXN0VsbHyI88hT27ntl-VxEEi8k2G8-k5lc')
@@ -103,9 +104,11 @@ const ton=localStorage.getItem('taglive_ticker_on'); if(ton) setTickerOn(ton==='
 const cn=localStorage.getItem('taglive_church_name'); if(cn) setChurchName(cn)
 const cl=localStorage.getItem('taglive_church_logo'); if(cl){ setLogoImage(cl); const img=new Image(); img.src=cl; img.onload=()=>{ logoImageRef.current=img } }
 const ld=localStorage.getItem('taglive_lowdata'); if(ld) setLowData(ld==='true')
-const params=new URLSearchParams(window.location.search)
-if(params.get('admin')==='taglive2026'){ localStorage.setItem('taglive_admin','true'); setIsAdmin(true) }
-else if(localStorage.getItem('taglive_admin')==='true'){ setIsAdmin(true) }
+if(typeof window !== 'undefined'){
+  const params=new URLSearchParams(window.location.search)
+  if(params.get('admin')==='taglive2026'){ localStorage.setItem('taglive_admin','true'); setIsAdmin(true) }
+  else if(localStorage.getItem('taglive_admin')==='true'){ setIsAdmin(true) }
+}
 }catch{}
 const handleVis=async()=>{ if(!document.hidden){ try{ const t=await navigator.clipboard.readText(); if(t && t.length>5 && t.length<500 && t!==verse) setVerse(t) }catch{} } }
 document.addEventListener('visibilitychange', handleVis)
@@ -255,13 +258,15 @@ const onLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; con
 const handleChurchLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const base64=await fileToBase64(f); setLogoImage(base64); localStorage.setItem('taglive_church_logo', base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; alert('Church Logo Saved!') }
 const removeChurchLogo=()=>{ localStorage.removeItem('taglive_church_logo'); setLogoImage(null); logoImageRef.current=null; if(churchLogoInputRef.current) churchLogoInputRef.current.value=''; if(logoInputRef.current) logoInputRef.current.value=''; alert('Logo Removed') }
 
-// FIXED SOUND - Simple, Vercel safe, Android sound works
+// SOUND FIXED - mic + intro/outro video audio now recorded
 const startRecording=async()=>{
   const canvas=canvasRef.current; if(!canvas) return alert('Start camera first')
   canvas.width=720; canvas.height=1280
   const canvasStream=(canvas as any).captureStream(30) as MediaStream
+  // 1. ALWAYS add mic
   const micTracks = streamRef.current?.getAudioTracks()||[]
   micTracks.forEach(t=>{ try{ canvasStream.addTrack(t) }catch{} })
+
   const active=intros.find(i=>i.id===activeIntroId)
   if(active){
     setBroadcastPlaying(active)
@@ -271,27 +276,36 @@ const startRecording=async()=>{
     else if(active.type==='video'&&broadcastVideoRef.current){
       const v=broadcastVideoRef.current
       v.crossOrigin="anonymous"; v.muted=false; v.volume=1; v.playsInline=true; v.src=active.data
-      try{
-        const vs=(v as any).captureStream?.() as MediaStream
-        if(vs) vs.getAudioTracks().forEach((at:any)=>{ try{ canvasStream.addTrack(at) }catch{} })
-      }catch{}
       try{ await v.play() }catch{}
+      // FIX: capture audio AFTER play
+      try{
+        const vs=(v as any).captureStream?.() as MediaStream || (v as any).mozCaptureStream?.() as MediaStream
+        if(vs){
+          vs.getAudioTracks().forEach((at:any)=>{ try{ canvasStream.addTrack(at) }catch{} })
+          vs.getVideoTracks().forEach(()=>{}) // keep video track ref alive
+        }
+      }catch{}
     }
   }
+
   chunksRef.current=[]
-  let mime='video/mp4'
-  if(!MediaRecorder.isTypeSupported('video/mp4')){ if(MediaRecorder.isTypeSupported('video/webm;codecs=h264')) mime='video/webm;codecs=h264'; else mime='video/webm;codecs=vp9' }
+  let mime='video/webm;codecs=vp9,opus'
+  if(MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')) mime='video/webm;codecs=vp8,opus'
+  if(MediaRecorder.isTypeSupported('video/mp4')) mime='video/mp4'
+  
   const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 2500000, audioBitsPerSecond: 128000 })
   rec.ondataavailable=(e)=>{ if(e.data.size>0) chunksRef.current.push(e.data) }
   rec.onstop=()=>{ const blob=new Blob(chunksRef.current, { type: mime }); const url=URL.createObjectURL(blob); setRecordedUrl(url) }
   rec.start(100); recorderRef.current=rec; setIsRecording(true); startTimer()
   if(active){ setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; if(broadcastVideoRef.current){ try{broadcastVideoRef.current.pause()}catch{} } }, (active.duration||5)*1000) }
 }
+
 const stopRecordingFinal=()=>{
   recorderRef.current?.stop(); setIsRecording(false); setBroadcastPlaying(null); broadcastImageRef.current=null; 
   if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.src='' }catch{} }
   if(!isLive&&!ytLive) stopTimer()
 }
+
 const stopRecording=async()=>{
   const active=outros.find(o=>o.id===activeOutroId)
   if(active && isRecording){
@@ -301,6 +315,14 @@ const stopRecording=async()=>{
       const v=broadcastVideoRef.current
       v.crossOrigin="anonymous"; v.muted=false; v.volume=1; v.playsInline=true; v.src=active.data
       try{ await v.play() }catch{}
+      // FIX: add outro audio to existing recording
+      try{
+        const vs=(v as any).captureStream?.() as MediaStream
+        if(vs){
+          const canvasStream = (recorderRef.current as any)?.stream as MediaStream
+          if(canvasStream) vs.getAudioTracks().forEach((at:any)=>{ try{ canvasStream.addTrack(at) }catch{} })
+        }
+      }catch{}
       v.onended=()=>{ stopRecordingFinal() }
       setTimeout(()=>{ stopRecordingFinal() }, (active.duration||7)*1000)
     } else { setTimeout(()=>{ stopRecordingFinal() }, (active.duration||5)*1000) }
@@ -463,12 +485,12 @@ return (
 </div>)}
 </div>
 
-<div style={{border:'2px solid #111',borderRadius:16,padding:12,background:'#ffffff'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><b style={{fontSize:13,color:'#111',flex:1}}>Scrolling Ticker</b><div style={{display:'flex',gap:6}}><button onClick={()=>{ const v=!tickerOn; setTickerOn(v); localStorage.setItem('taglive_ticker_on', v.toString()) }} style={{padding:'8px 14px',borderRadius:20,border:'none',background:tickerOn?'#16a34a':'#111',color:'#fff',fontWeight:900,fontSize:11}}>{tickerOn?'ON':'OFF'}</button><button onClick={()=>setShowTickerStudio(!showTickerStudio)} style={{padding:'8px 12px',borderRadius:20,border:'none',background:showTickerStudio?'#111':'#eee',color:showTickerStudio?'#fff':'#000',fontWeight:800,fontSize:11}}>{showTickerStudio?'Hide':'Open'}</button></div></div>
-{showTickerStudio&&(<div style={{marginTop:10,display:'flex',flexDirection:'column',gap:8}}>
+<div style={{border:'2px solid #111',borderRadius:16,padding:12,background:'#ffffff',overflow:'hidden'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><b style={{fontSize:13,color:'#111',flex:1}}>Scrolling Ticker</b><div style={{display:'flex',gap:6,flexShrink:0}}><button onClick={()=>{ const v=!tickerOn; setTickerOn(v); localStorage.setItem('taglive_ticker_on', v.toString()) }} style={{padding:'8px 14px',borderRadius:20,border:'none',background:tickerOn?'#16a34a':'#111',color:'#fff',fontWeight:900,fontSize:11}}>{tickerOn?'ON':'OFF'}</button><button onClick={()=>setShowTickerStudio(!showTickerStudio)} style={{padding:'8px 12px',borderRadius:20,border:'none',background:showTickerStudio?'#111':'#eee',color:showTickerStudio?'#fff':'#000',fontWeight:800,fontSize:11}}>{showTickerStudio?'Hide':'Open'}</button></div></div>
+{showTickerStudio&&(<div style={{marginTop:10,display:'flex',flexDirection:'column',gap:8,overflow:'hidden'}}>
 <input value={tickerText} onChange={e=>{setTickerText(e.target.value);localStorage.setItem('taglive_ticker_text',e.target.value);tickerOffsetRef.current=720}} placeholder="Type announcement..." style={{width:'100%',padding:10,borderRadius:10,border:'2px solid #111',fontSize:12,fontWeight:700,background:'#000',color:'#FFFF00',boxSizing:'border-box'}}/>
-<div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-<div style={{flex:1,minWidth:120,display:'flex',alignItems:'center',gap:6,background:'#f3f0ff',padding:'6px 10px',borderRadius:10}}><span style={{fontSize:10,fontWeight:800}}>A-</span><input type="range" min={16} max={60} value={tickerSize} onChange={e=>{ const v=parseInt(e.target.value); setTickerSize(v); localStorage.setItem('taglive_ticker_size', v.toString()) }} style={{flex:1}}/><span style={{fontSize:10,fontWeight:800}}>A+</span><span style={{fontSize:10,fontWeight:800,background:'#111',color:'#fff',padding:'3px 6px',borderRadius:20}}>{tickerSize}</span></div>
-<div style={{flex:1,minWidth:120,display:'flex',alignItems:'center',gap:6,background:'#fef3c7',padding:'6px 10px',borderRadius:10}}><span style={{fontSize:10,fontWeight:800}}>Speed</span><input type="range" min={1} max={10} value={tickerSpeed} onChange={e=>{ const v=parseInt(e.target.value); setTickerSpeed(v); localStorage.setItem('taglive_ticker_speed', v.toString()) }} style={{flex:1}}/><span style={{fontSize:10,fontWeight:800,background:'#111',color:'#fff',padding:'3px 6px',borderRadius:20}}>{tickerSpeed}</span></div>
+<div style={{display:'flex',gap:6,flexWrap:'wrap',minWidth:0}}>
+<div style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:6,background:'#f3f0ff',padding:'6px 10px',borderRadius:10}}><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>A-</span><input type="range" min={16} max={60} value={tickerSize} onChange={e=>{ const v=parseInt(e.target.value); setTickerSize(v); localStorage.setItem('taglive_ticker_size', v.toString()) }} style={{flex:1,minWidth:0,width:0}}/><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>A+</span><span style={{fontSize:10,fontWeight:800,background:'#111',color:'#fff',padding:'3px 6px',borderRadius:20,flexShrink:0}}>{tickerSize}</span></div>
+<div style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:6,background:'#fef3c7',padding:'6px 10px',borderRadius:10}}><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>Speed</span><input type="range" min={1} max={10} value={tickerSpeed} onChange={e=>{ const v=parseInt(e.target.value); setTickerSpeed(v); localStorage.setItem('taglive_ticker_speed', v.toString()) }} style={{flex:1,minWidth:0,width:0}}/><span style={{fontSize:10,fontWeight:800,background:'#111',color:'#fff',padding:'3px 6px',borderRadius:20,flexShrink:0}}>{tickerSpeed}</span></div>
 </div>
 </div>)}</div>
 
@@ -493,9 +515,9 @@ return (
 
 <div style={{display:'flex',gap:6,marginTop:12}}><button onClick={()=>setBgMode('face')} style={{flex:1,padding:8,borderRadius:20,border:'none',background:bgMode==='face'?'#111':'#eee',color:bgMode==='face'?'#fff':'#000',fontWeight:800,fontSize:12}}>Face</button><button onClick={()=>setBgMode('black')} style={{flex:1,padding:8,borderRadius:20,border:'none',background:bgMode==='black'?'#111':'#eee',color:bgMode==='black'?'#fff':'#000',fontWeight:800,fontSize:12}}>Black</button><button onClick={()=>setBgMode('image')} style={{flex:1,padding:8,borderRadius:20,border:'none',background:bgMode==='image'?'#111':'#eee',color:bgMode==='image'?'#fff':'#000',fontWeight:800,fontSize:12}}>Image</button><button onClick={()=>setBgMode('split')} style={{flex:1,padding:8,borderRadius:20,border:'none',background:bgMode==='split'?'#7c3aed':'#eee',color:bgMode==='split'?'#fff':'#000',fontWeight:800,fontSize:12}}>Top/Bottom</button></div>
 
-<div style={{display:'flex',alignItems:'center',gap:6,marginTop:10,flexWrap:'wrap'}}><div style={{flex:1,minWidth:140,display:'flex',alignItems:'center',gap:6,background:'#f3f0ff',padding:'6px 10px',borderRadius:10}}><span style={{fontSize:10,fontWeight:800}}>A-</span><input type="range" min={18} max={48} value={fontSize} onChange={e=>setFontSize(parseInt(e.target.value))} style={{flex:1}}/><span style={{fontSize:10,fontWeight:800}}>A+</span><span style={{fontSize:10,fontWeight:800,background:'#111',color:'#fff',padding:'3px 6px',borderRadius:20}}>{fontSize}</span></div><button onClick={()=>setAlign(align==='justify'?'center':'justify')} style={{padding:'8px 10px',borderRadius:10,border:'none',background:align==='justify'?'#111':'#ddd',color:align==='justify'?'#fff':'#000',fontWeight:800,fontSize:10}}>{align==='justify'?'Justify':'Center'}</button><button onClick={pickMedia} style={{padding:'8px 10px',borderRadius:10,border:'none',background:'#7c3aed',color:'#fff',fontWeight:800,fontSize:10}}>Media</button><input ref={fileInputRef} type="file" accept="image/*" onChange={onFilePick} style={{display:'none'}}/></div>
+<div style={{display:'flex',alignItems:'center',gap:6,marginTop:10,flexWrap:'wrap',minWidth:0}}><div style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:6,background:'#f3f0ff',padding:'6px 10px',borderRadius:10}}><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>A-</span><input type="range" min={18} max={48} value={fontSize} onChange={e=>setFontSize(parseInt(e.target.value))} style={{flex:1,minWidth:0,width:0}}/><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>A+</span><span style={{fontSize:10,fontWeight:800,background:'#111',color:'#fff',padding:'3px 6px',borderRadius:20,flexShrink:0}}>{fontSize}</span></div><button onClick={()=>setAlign(align==='justify'?'center':'justify')} style={{padding:'8px 10px',borderRadius:10,border:'none',background:align==='justify'?'#111':'#ddd',color:align==='justify'?'#fff':'#000',fontWeight:800,fontSize:10,flexShrink:0}}>{align==='justify'?'Justify':'Center'}</button><button onClick={pickMedia} style={{padding:'8px 10px',borderRadius:10,border:'none',background:'#7c3aed',color:'#fff',fontWeight:800,fontSize:10,flexShrink:0}}>Media</button><input ref={fileInputRef} type="file" accept="image/*" onChange={onFilePick} style={{display:'none'}}/></div>
 
-<div style={{display:'flex',gap:6,marginTop:8,alignItems:'center',background:'#fff',border:'1px solid #eee',padding:8,borderRadius:10,flexWrap:'wrap'}}><div style={{display:'flex',alignItems:'center',gap:4}}><span style={{fontSize:10,fontWeight:800}}>Text</span><input type="color" value={textColor} onChange={e=>setTextColor(e.target.value)} style={{width:28,height:28,border:'none',borderRadius:6}}/></div><div style={{display:'flex',alignItems:'center',gap:4}}><span style={{fontSize:10,fontWeight:800}}>Box</span><input type="color" value={boxColor} onChange={e=>setBoxColor(e.target.value)} style={{width:28,height:28,border:'none',borderRadius:6}}/></div><div style={{display:'flex',alignItems:'center',gap:4,flex:1}}><span style={{fontSize:10,fontWeight:800}}>Opac</span><input type="range" min={0} max={1} step={0.05} value={boxOpacity} onChange={e=>setBoxOpacity(parseFloat(e.target.value))} style={{flex:1}}/></div><button onClick={pickLogo} style={{padding:'6px 10px',borderRadius:8,border:'none',background:logoImage?'#16a34a':'#111',color:'#fff',fontWeight:800,fontSize:10}}>{logoImage?'Logo':'Add Logo'}</button><input ref={logoInputRef} type="file" accept="image/*" onChange={onLogoPick} style={{display:'none'}}/><button onClick={()=>setShowText(!showText)} style={{padding:'6px 10px',borderRadius:8,border:'none',background:showText?'#111':'#ddd',color:showText?'#fff':'#000',fontWeight:800,fontSize:10}}>{showText?'Text':'No Text'}</button></div>
+<div style={{display:'flex',gap:6,marginTop:8,alignItems:'center',background:'#fff',border:'1px solid #eee',padding:8,borderRadius:10,flexWrap:'wrap',minWidth:0}}><div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}><span style={{fontSize:10,fontWeight:800}}>Text</span><input type="color" value={textColor} onChange={e=>setTextColor(e.target.value)} style={{width:28,height:28,border:'none',borderRadius:6}}/></div><div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}><span style={{fontSize:10,fontWeight:800}}>Box</span><input type="color" value={boxColor} onChange={e=>setBoxColor(e.target.value)} style={{width:28,height:28,border:'none',borderRadius:6}}/></div><div style={{display:'flex',alignItems:'center',gap:4,flex:1,minWidth:0}}><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>Opac</span><input type="range" min={0} max={1} step={0.05} value={boxOpacity} onChange={e=>setBoxOpacity(parseFloat(e.target.value))} style={{flex:1,minWidth:0,width:0}}/></div><button onClick={pickLogo} style={{padding:'6px 10px',borderRadius:8,border:'none',background:logoImage?'#16a34a':'#111',color:'#fff',fontWeight:800,fontSize:10,flexShrink:0}}>{logoImage?'Logo':'Add Logo'}</button><input ref={logoInputRef} type="file" accept="image/*" onChange={onLogoPick} style={{display:'none'}}/><button onClick={()=>setShowText(!showText)} style={{padding:'6px 10px',borderRadius:8,border:'none',background:showText?'#111':'#ddd',color:showText?'#fff':'#000',fontWeight:800,fontSize:10,flexShrink:0}}>{showText?'Text':'No Text'}</button></div>
 </div>
 
 <div>
