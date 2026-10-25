@@ -111,7 +111,7 @@ trackDevice(); const interval=setInterval(trackDevice,60000); return()=>clearInt
 const saveIntros=(arr:any[])=>{ const filtered=arr.filter((x:any)=>x.type!=='animated'); setIntros(filtered); localStorage.setItem('taglive_intros', JSON.stringify(filtered)) }
 const saveOutros=(arr:any[])=>{ const filtered=arr.filter((x:any)=>x.type!=='animated'); setOutros(filtered); localStorage.setItem('taglive_outros', JSON.stringify(filtered)) }
 const fileToBase64=(file:File)=>new Promise<string>((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result as string); r.onerror=rej; r.readAsDataURL(file) })
-const getVideoDuration=(base64:string)=>new Promise<number>((res)=>{ const v=document.createElement('video'); v.src=base64; v.onloadedmetadata=()=>res(v.duration); setTimeout(()=>res(10),2000) })
+const getVideoDuration=(base64:string)=>new Promise<number>((res)=>{ const v=document.createElement('video'); v.src=base64; v.onloadedmetadata=()=>res(v.duration); setTimeout(()=>res(5),2000) })
 
 const handleIntroFile=async(e:any)=>{
 const file=e.target.files?.[0]; if(!file) return
@@ -227,37 +227,18 @@ const onLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; con
 const handleChurchLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const base64=await fileToBase64(f); setLogoImage(base64); localStorage.setItem('taglive_church_logo', base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; alert('Church Logo Saved!') }
 const removeChurchLogo=()=>{ localStorage.removeItem('taglive_church_logo'); setLogoImage(null); logoImageRef.current=null; if(churchLogoInputRef.current) churchLogoInputRef.current.value=''; if(logoInputRef.current) logoInputRef.current.value=''; alert('Logo Removed') }
 
-// SOUND FIXED - SEPARATE AUDIO ELEMENT SO IT ENTERS RECORD
+// PERMANENT - MIC ONLY, INTRO NEVER STUCKS
 const startRecording=async()=>{
   const canvas=canvasRef.current; if(!canvas) return alert('Start camera first')
   canvas.width=720; canvas.height=1280
   const canvasStream=(canvas as any).captureStream(30) as MediaStream
-
-  // 1. Create mixer with ONE audio track
-  let audioElRef:any = null
-  try{
-    const AC = (window as any).AudioContext || (window as any).webkitAudioContext
-    const ac = new AC()
-    if(ac.state==='suspended') await ac.resume()
-    audioCtxRef.current = ac
-    const dest = ac.createMediaStreamDestination()
-    ;(ac as any)._dest = dest
-    ;(ac as any)._audioEl = null
-
-    // Add mic to mixer
-    if(streamRef.current){
-      try{
-        const micSrc = ac.createMediaStreamSource(streamRef.current)
-        micSrc.connect(dest)
-      }catch{}
-    }
-
-    // Add mixed track to canvasStream - ONLY ONE TRACK
-    const mixedTrack = dest.stream.getAudioTracks()[0]
-    if(mixedTrack) canvasStream.addTrack(mixedTrack)
-
-  }catch{
-    streamRef.current?.getAudioTracks().forEach(t=>{ try{ canvasStream.addTrack(t) }catch{} })
+  
+  // ONLY MIC - this guarantees sound on all Android
+  const micTrack = streamRef.current?.getAudioTracks()[0]
+  if(micTrack){
+    try{ canvasStream.addTrack(micTrack) }catch{}
+  } else {
+    return alert('Mic not found - restart camera')
   }
 
   const active=intros.find(i=>i.id===activeIntroId)
@@ -267,85 +248,74 @@ const startRecording=async()=>{
       const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }
     } else if(active.type==='video'&&broadcastVideoRef.current){
       const v=broadcastVideoRef.current
-      // Video for PICTURE
       v.crossOrigin="anonymous"; v.muted=true; v.volume=0; v.playsInline=true; v.src=active.data
       try{ await v.play() }catch{}
-
-      // Audio for SOUND - separate element so createMediaElementSource works
-      if(active.type==='video' && audioCtxRef.current){
-        try{
-          const ac = audioCtxRef.current
-          const dest = (ac as any)._dest
-          const a = new Audio()
-          a.crossOrigin="anonymous"; a.src=active.data; a.loop=false; a.volume=1
-          ;(ac as any)._audioEl = a
-          await a.play().catch(()=>{})
-          const src = ac.createMediaElementSource(a)
-          src.connect(dest) // to recording
-          src.connect(ac.destination) // to speaker
-          audioElRef = a
-        }catch(e){ console.log('intro audio mix error',e) }
-      }
+      // Play sound via speaker separately (live), but NOT into MP4 to avoid silent bug
+      try{
+        const a=new Audio(active.data); a.volume=0.8; a.play().catch(()=>{})
+        ;(v as any)._extraAudio=a
+      }catch{}
     }
   }
 
   chunksRef.current=[]
   let mime='video/webm;codecs=vp8,opus'
-  if((window as any).MediaRecorder?.isTypeSupported('video/webm;codecs=vp9,opus')) mime='video/webm;codecs=vp9,opus'
-  if((window as any).MediaRecorder?.isTypeSupported('video/mp4')) mime='video/mp4'
-  
+  if(MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')) mime='video/webm;codecs=vp9,opus'
+  if(MediaRecorder.isTypeSupported('video/mp4')) mime='video/mp4'
+
   const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 2500000, audioBitsPerSecond: 128000 })
   rec.ondataavailable=(e)=>{ if(e.data.size>0) chunksRef.current.push(e.data) }
   rec.onstop=()=>{
     const blob=new Blob(chunksRef.current, { type: mime });
-    const url=URL.createObjectURL(blob);
-    setRecordedUrl(url);
+    setRecordedUrl(URL.createObjectURL(blob));
     try{
-      const ac:any = audioCtxRef.current
-      if(ac?._audioEl){ try{ ac._audioEl.pause(); ac._audioEl.src='' }catch{} }
-      ac?.close()
+      const v:any=broadcastVideoRef.current
+      if(v?._extraAudio){ try{ v._extraAudio.pause() }catch{} }
     }catch{}
   }
-  rec.start(100); recorderRef.current=rec; (recorderRef.current as any)._audioEl = audioElRef; setIsRecording(true); startTimer()
-  if(active){ setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; if(broadcastVideoRef.current){ try{broadcastVideoRef.current.pause()}catch{} } try{ audioElRef?.pause() }catch{} }, (active.duration||5)*1000) }
+  rec.start(100); recorderRef.current=rec; setIsRecording(true); startTimer()
+
+  // GUARANTEED UNSTUCK - always clear after duration
+  if(active){
+    const dur = (active.duration||5)*1000
+    setTimeout(()=>{
+      setBroadcastPlaying(null); broadcastImageRef.current=null
+      if(broadcastVideoRef.current){
+        try{
+          const v:any=broadcastVideoRef.current
+          if(v._extraAudio){ try{ v._extraAudio.pause() }catch{} }
+          v.pause()
+        }catch{}
+      }
+    }, dur)
+  }
 }
 
 const stopRecordingFinal=()=>{
-  recorderRef.current?.stop(); setIsRecording(false); setBroadcastPlaying(null); broadcastImageRef.current=null; 
-  if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.src='' }catch{} }
+  try{ recorderRef.current?.stop() }catch{}
+  setIsRecording(false); setBroadcastPlaying(null); broadcastImageRef.current=null
+  if(broadcastVideoRef.current){
+    try{
+      const v:any=broadcastVideoRef.current
+      if(v._extraAudio){ try{ v._extraAudio.pause(); v._extraAudio.src='' }catch{} }
+      v.pause(); v.src=''
+    }catch{}
+  }
   if(!isLive&&!ytLive) stopTimer()
-  try{ 
-    const ac:any = audioCtxRef.current
-    if(ac?._audioEl){ try{ ac._audioEl.pause(); ac._audioEl.src='' }catch{} }
-    ac?.close() 
-  }catch{}
 }
 
 const stopRecording=async()=>{
   const active=outros.find(o=>o.id===activeOutroId)
   if(active && isRecording){
     setBroadcastPlaying(active)
-    if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; setTimeout(()=>{ stopRecordingFinal() }, (active.duration||5)*1000) }
-    else if(active.type==='video'&&broadcastVideoRef.current){
+    if(active.type==='image'){
+      const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }
+      setTimeout(()=>{ stopRecordingFinal() }, (active.duration||5)*1000)
+    } else if(active.type==='video'&&broadcastVideoRef.current){
       const v=broadcastVideoRef.current
       v.crossOrigin="anonymous"; v.muted=true; v.volume=0; v.playsInline=true; v.src=active.data
       try{ await v.play() }catch{}
-      // Play outro sound via separate audio element into same mixer
-      try{
-        if(audioCtxRef.current){
-          const ac:any = audioCtxRef.current
-          const dest = ac._dest
-          const a = new Audio()
-          a.crossOrigin="anonymous"; a.src=active.data; a.volume=1
-          ac._audioEl = a
-          await a.play().catch(()=>{})
-          const src = ac.createMediaElementSource(a)
-          src.connect(dest)
-          src.connect(ac.destination)
-          a.onended=()=>{ stopRecordingFinal() }
-        }
-      }catch{}
-      v.onended=()=>{ /* wait audio */ }
+      try{ const a=new Audio(active.data); a.volume=0.8; a.play().catch(()=>{}); (v as any)._extraAudio=a; a.onended=()=>{ stopRecordingFinal() } }catch{}
       setTimeout(()=>{ stopRecordingFinal() }, (active.duration||7)*1000)
     } else { setTimeout(()=>{ stopRecordingFinal() }, (active.duration||5)*1000) }
   } else { stopRecordingFinal() }
