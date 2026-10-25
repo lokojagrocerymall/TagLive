@@ -250,14 +250,23 @@ const onLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; con
 const handleChurchLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const base64=await fileToBase64(f); setLogoImage(base64); localStorage.setItem('taglive_church_logo', base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; setShowLogo(true); localStorage.setItem('taglive_show_logo','true'); alert('Church Logo Saved!') }
 const removeChurchLogo=()=>{ localStorage.removeItem('taglive_church_logo'); setLogoImage(null); logoImageRef.current=null; if(churchLogoInputRef.current) churchLogoInputRef.current.value=''; if(logoInputRef.current) logoInputRef.current.value=''; alert('Logo Removed') }
 
+// --- SOUND FIX ONLY ---
 const startRecording=async()=>{
   const canvas=canvasRef.current; if(!canvas) return alert('Start camera first')
   canvas.width=480; canvas.height=854
-  const canvasStream=(canvas as any).captureStream(15) as MediaStream
-  const active=intros.find(i=>i.id===activeIntroId)
-  const micTrack = streamRef.current?.getAudioTracks()[0]
+  const canvasStream=(canvas as any).captureStream(30) as MediaStream
+
+  try{ if(audioCtxRef.current) audioCtxRef.current.close() }catch{}
+  const audioCtx=new (window.AudioContext||(window as any).webkitAudioContext)()
+  audioCtxRef.current=audioCtx
+  const dest=audioCtx.createMediaStreamDestination()
+
+  const micTrack=streamRef.current?.getAudioTracks()[0]
   if(!micTrack) return alert('Mic not found - restart camera')
-  try{ canvasStream.addTrack(micTrack) }catch{}
+  const micSource=audioCtx.createMediaStreamSource(new MediaStream([micTrack]))
+  micSource.connect(dest)
+
+  const active=intros.find(i=>i.id===activeIntroId)
   if(active){
     setBroadcastPlaying(active)
     if(active.type==='image'){
@@ -265,21 +274,30 @@ const startRecording=async()=>{
       broadcastImageRef.current=img
     } else if(active.type==='video'&&broadcastVideoRef.current){
       const v=broadcastVideoRef.current
-      v.crossOrigin="anonymous"; v.muted=true; v.volume=0; v.playsInline=true; v.src=active.data
-      try{ await v.play() }catch{}
+      v.crossOrigin="anonymous"; v.playsInline=true; v.muted=false; v.volume=1; v.src=active.data
+      try{
+        await v.play()
+        const videoSource=audioCtx.createMediaElementSource(v)
+        videoSource.connect(dest)
+        videoSource.connect(audioCtx.destination)
+      }catch{}
     }
   }
+
+  dest.stream.getAudioTracks().forEach(t=>canvasStream.addTrack(t))
+
   chunksRef.current=[]
-  let mime='video/webm;codecs=vp8,opus'
+  let mime='video/webm;codecs=vp9,opus'
+  if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm;codecs=vp8,opus'
   if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm'
-  const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 800000 })
+  const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 1200000 })
   rec.ondataavailable=(e)=>{ if(e.data.size>0) chunksRef.current.push(e.data) }
   rec.onstop=()=>{
-    const blob=new Blob(chunksRef.current, { type: mime })
+    const blob=new Blob(chunksRef.current, { type: 'video/webm' })
     if(recordedUrl) try{ URL.revokeObjectURL(recordedUrl) }catch{}
     setRecordedUrl(URL.createObjectURL(blob))
   }
-  rec.start(250); recorderRef.current=rec; setIsRecording(true); startTimer()
+  rec.start(100); recorderRef.current=rec; setIsRecording(true); startTimer()
   if(active){
     setTimeout(()=>{
       setBroadcastPlaying(null); broadcastImageRef.current=null
@@ -290,6 +308,7 @@ const startRecording=async()=>{
 
 const stopRecordingFinal=()=>{
   try{ recorderRef.current?.stop() }catch{}
+  try{ audioCtxRef.current?.close() }catch{}
   setIsRecording(false); setBroadcastPlaying(null); broadcastImageRef.current=null
   if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.src='' }catch{} }
   if(!isLive&&!ytLive) stopTimer()
@@ -304,12 +323,22 @@ const stopRecording=async()=>{
       broadcastImageRef.current=img
     } else if(active.type==='video'&&broadcastVideoRef.current){
       const v=broadcastVideoRef.current
-      v.crossOrigin="anonymous"; v.muted=true; v.volume=0; v.playsInline=true; v.src=active.data
-      try{ await v.play() }catch{}
+      v.crossOrigin="anonymous"; v.playsInline=true; v.muted=false; v.volume=1; v.src=active.data
+      try{
+        await v.play()
+        if(audioCtxRef.current){
+          try{
+            const videoSource=audioCtxRef.current.createMediaElementSource(v)
+            const dest=(audioCtxRef.current as any).destRef || audioCtxRef.current.createMediaStreamDestination()
+            videoSource.connect(dest)
+          }catch{}
+        }
+      }catch{}
     }
     setTimeout(()=>{ stopRecordingFinal() }, (active.duration||5)*1000)
   } else { stopRecordingFinal() }
 }
+// --- END SOUND FIX ---
 
 const onTouchStart=(e:any)=>{
 const canvas=canvasRef.current; if(!canvas) return
