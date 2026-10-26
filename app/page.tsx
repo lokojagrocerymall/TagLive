@@ -638,9 +638,13 @@ return (
 </div>
 )}
 
-{/* HEADER - EXACT AS CIRCLED SCREENSHOT - BOLDER */}
-<div style={{background:'#fff',borderBottom:'2px solid #111',padding:'10px 16px',display:'flex',alignItems:'center',position:'sticky',top:0,zIndex:100}}>
-<img src="/logo.png" alt="TagLive - Tag Your Live" style={{height:52,width:'auto',maxWidth:320,objectFit:'contain',display:'block'}} />
+{/* HEADER - FIXED - ICON + TITLE + SUBTITLE - EXACT AS YOU CIRCLED */}
+<div style={{background:'#fff',borderBottom:'2px solid #111',padding:'10px 14px',display:'flex',alignItems:'center',gap:10,position:'sticky',top:0,zIndex:100}}>
+<img src="/logo.png" alt="TagLive" style={{width:44,height:44,objectFit:'contain',borderRadius:8,flexShrink:0,display:'block'}} />
+<div style={{display:'flex',flexDirection:'column',lineHeight:1.1}}>
+<div style={{fontWeight:900,fontSize:20,letterSpacing:-0.3}}>Tag<span style={{color:'#7c3aed'}}>Live</span></div>
+<div style={{fontWeight:700,fontSize:11,letterSpacing:1.2,color:'#666',marginTop:1}}>TAG YOUR LIVE</div>
+</div>
 {(isLive||ytLive||isRecording)&&<div style={{marginLeft:'auto',color:'#FF0000',fontWeight:900,border:'2px solid red',borderRadius:20,padding:'6px 12px',fontSize:11}}>● LIVE {formatTime(liveSeconds)}</div>}
 </div>
 
