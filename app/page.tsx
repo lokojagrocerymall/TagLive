@@ -95,7 +95,27 @@ else if(localStorage.getItem('taglive_admin')==='true'){ setIsAdmin(true) }
 const formatTime=(sec:number)=>{ const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60; return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}` }
 const startTimer=()=>{ if(timerRef.current) clearInterval(timerRef.current); setLiveSeconds(0); timerRef.current=setInterval(()=>setLiveSeconds(p=>p+1),1000) }
 const stopTimer=()=>{ if(timerRef.current) clearInterval(timerRef.current); timerRef.current=null; setLiveSeconds(0) }
-  useEffect(()=>{
+  // --- ADMIN CALENDAR STATES ---
+const [showMonthPicker,setShowMonthPicker]=useState(false)
+const [calYear,setCalYear]=useState(new Date().getFullYear())
+const [calMonth,setCalMonth]=useState(new Date().getMonth())
+const [monthCount,setMonthCount]=useState<number|null>(null)
+const [monthLoading,setMonthLoading]=useState(false)
+
+const fetchMonthCount=async(year:number,month:number)=>{
+setMonthLoading(true)
+setCalMonth(month)
+setCalYear(year)
+try{
+const start=new Date(year,month,1); start.setHours(0,0,0,0)
+const end=new Date(year,month+1,0); end.setHours(23,59,59,999)
+const { count }=await supabase.from('taglive_views').select('*',{count:'exact',head:true}).gte('created_at', start.toISOString()).lte('created_at', end.toISOString())
+setMonthCount(count||0)
+}catch{ setMonthCount(0) }
+setMonthLoading(false)
+}
+
+useEffect(()=>{
 const trackDevice=async()=>{
 try{
 const isAdminUser=localStorage.getItem('taglive_admin')==='true'
@@ -631,7 +651,45 @@ return (
 {(isLive||ytLive||isRecording)&&<div style={{marginLeft:'auto',color:'#FF0000',fontWeight:900,border:'2px solid red',borderRadius:20,padding:'6px 12px',fontSize:11}}>● LIVE {formatTime(liveSeconds)}</div>}
 </div>
 
-{isAdmin&&(<div style={{margin:12,background:'#000',border:'2px solid #00ff00',borderRadius:16,padding:12}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:12,color:'#00ff00'}}>ADMIN DASHBOARD</b><button onClick={()=>setShowAdmin(!showAdmin)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:showAdmin?'#00ff00':'#111',color:showAdmin?'#000':'#00ff00',fontWeight:800,fontSize:11}}>Open</button></div>{showAdmin&&(<div style={{marginTop:10}}><div style={{display:'grid',gridTemplateColumns:'repeat(5, 1fr)',gap:6,textAlign:'center'}}><div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>LIVE</div><div style={{fontSize:18,fontWeight:900,color:'#00ff00'}}>{stats.live}</div></div><div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>DAILY</div><div style={{fontSize:18,fontWeight:900,color:'#ffeb00'}}>{stats.daily}</div></div><div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>WEEKLY</div><div style={{fontSize:18,fontWeight:900,color:'#00d4ff'}}>{stats.weekly}</div></div><div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>MONTHLY</div><div style={{fontSize:18,fontWeight:900,color:'#ff00ff'}}>{stats.monthly}</div></div><div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>TOTAL</div><div style={{fontSize:18,fontWeight:900,color:'#fff'}}>{stats.total}</div></div></div></div>)}</div>)}
+{isAdmin&&(<div style={{margin:12,background:'#000',border:'2px solid #00ff00',borderRadius:16,padding:12}}>
+<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:12,color:'#00ff00'}}>ADMIN DASHBOARD</b><button onClick={()=>setShowAdmin(!showAdmin)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:showAdmin?'#00ff00':'#111',color:showAdmin?'#000':'#00ff00',fontWeight:800,fontSize:11}}>Open</button></div>
+{showAdmin&&(<div style={{marginTop:10}}>
+<div style={{display:'grid',gridTemplateColumns:'repeat(5, 1fr)',gap:6,textAlign:'center'}}>
+<div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>LIVE</div><div style={{fontSize:18,fontWeight:900,color:'#00ff00'}}>{stats.live}</div></div>
+<div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>DAILY</div><div style={{fontSize:18,fontWeight:900,color:'#ffeb00'}}>{stats.daily}</div></div>
+<div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>WEEKLY</div><div style={{fontSize:18,fontWeight:900,color:'#00d4ff'}}>{stats.weekly}</div></div>
+<div onClick={()=>setShowMonthPicker(true)} style={{background:'#111',borderRadius:10,padding:8,border:'2px solid #ff00ff',cursor:'pointer'}}><div style={{fontSize:10,color:'#fff'}}>MONTHLY ↕</div><div style={{fontSize:18,fontWeight:900,color:'#ff00ff'}}>{stats.monthly}</div></div>
+<div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>TOTAL</div><div style={{fontSize:18,fontWeight:900,color:'#fff'}}>{stats.total}</div></div>
+</div>
+
+{showMonthPicker&&(
+<div style={{marginTop:12,background:'#111',border:'2px solid #ff00ff',borderRadius:16,padding:12}}>
+<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+<b style={{fontSize:12,color:'#ff00ff'}}>📅 Year & Month Only</b>
+<div style={{display:'flex',gap:6,alignItems:'center'}}>
+<button onClick={()=>setCalYear(y=>y-1)} style={{padding:'6px 10px',borderRadius:20,border:'none',background:'#fff',fontWeight:900}}>◀</button>
+<span style={{color:'#fff',fontWeight:900,background:'#333',padding:'6px 12px',borderRadius:20}}>{calYear}</span>
+<button onClick={()=>setCalYear(y=>y+1)} style={{padding:'6px 10px',borderRadius:20,border:'none',background:'#fff',fontWeight:900}}>▶</button>
+<button onClick={()=>setShowMonthPicker(false)} style={{marginLeft:6,padding:'6px 10px',borderRadius:20,border:'none',background:'#ff0000',color:'#fff',fontWeight:900}}>✕</button>
+</div>
+</div>
+<div style={{display:'grid',gridTemplateColumns:'repeat(3, 1fr)',gap:8,marginTop:12}}>
+{['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((mName,idx)=>(
+<button key={mName} onClick={()=>fetchMonthCount(calYear,idx)} style={{padding:12,borderRadius:12,border:'none',background:calMonth===idx?'#ff00ff':'#222',color:'#fff',fontWeight:900,fontSize:13}}>{mName}</button>
+))}
+</div>
+<div style={{marginTop:12,background:'#000',borderRadius:12,padding:12,textAlign:'center',border:'1px solid #333'}}>
+{monthLoading?<div style={{color:'#fff',fontSize:12}}>Loading...</div>:
+monthCount!==null?
+<div><div style={{color:'#aaa',fontSize:11}}>{new Date(calYear,calMonth).toLocaleString('default',{month:'long'})} {calYear}</div><div style={{color:'#ff00ff',fontSize:28,fontWeight:900}}>{monthCount}</div><div style={{color:'#fff',fontSize:11}}>VIEWS</div></div>
+:<div style={{color:'#aaa',fontSize:11}}>Tap a month to see count</div>
+}
+</div>
+</div>
+)}
+
+</div>)}
+</div>)}
 
 <style>{`.studio{display:grid;gap:16;padding:16;max-width:1600px;margin:0 auto}@media(max-width:1023px){.studio{grid-template-columns:1fr}}@media(min-width:1024px){.studio{grid-template-columns:380px 460px 380px}}`}</style>
 
