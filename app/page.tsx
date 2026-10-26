@@ -19,7 +19,7 @@ const [pages,setPages]=useState<any[]>([])
 const [selectedPage,setSelectedPage]=useState<any>(null)
 const [fbStreamUrl,setFbStreamUrl]=useState('')
 const [liveId,setLiveId]=useState('')
-const [pos,setPos]=useState({ x: 360, y: 1050, scale: 0.95, rotation: 0 })
+const [pos,setPos]=useState({ x: 360, y: 1050, scale: 0.95 })
 const [bgMode,setBgMode]=useState<'face'|'black'|'image'|'split'>('face')
 const [saved,setSaved]=useState<string[]>([])
 const [dragging,setDragging]=useState(false)
@@ -32,7 +32,7 @@ const [textColor,setTextColor]=useState('#00ff00')
 const [boxColor,setBoxColor]=useState('#000000')
 const [boxOpacity,setBoxOpacity]=useState(0.85)
 const [logoImage,setLogoImage]=useState<string|null>(null)
-const [logoPos,setLogoPos]=useState({ x: 360, y: 300, scale: 0.7, rotation: 0 })
+const [logoPos,setLogoPos]=useState({ x: 360, y: 300, scale: 0.7 })
 const [isRecording,setIsRecording]=useState(false)
 const [recordedUrl,setRecordedUrl]=useState<string|null>(null)
 const [selected,setSelected]=useState<'text'|'logo'>('text')
@@ -68,7 +68,7 @@ const introFileRef=useRef<HTMLInputElement>(null)
 const outroFileRef=useRef<HTMLInputElement>(null)
 const broadcastVideoRef=useRef<HTMLVideoElement>(null)
 const broadcastImageRef=useRef<HTMLImageElement|null>(null)
-const lastTouch=useRef({ dist: 0, angle: 0, x:0, y:0, scale:1, rot:0, selScale:1, selRot:0 })
+const lastTouch=useRef({ dist: 0, x:0, y:0, scale:1, selScale:1 })
 const videoRef=useRef<HTMLVideoElement>(null)
 const canvasRef=useRef<HTMLCanvasElement>(null)
 const streamRef=useRef<MediaStream|null>(null)
@@ -138,8 +138,8 @@ setTimeout(()=>{
 }catch{}
 },[])
 
-const saveIntros=(arr:any[])=>{ const filtered=arr.filter((x:any)=>x.type!=='animated'); setIntros(filtered); localStorage.setItem('taglive_intros', JSON.stringify(filtered)) }
-const saveOutros=(arr:any[])=>{ const filtered=arr.filter((x:any)=>x.type!=='animated'); setOutros(filtered); localStorage.setItem('taglive_outros', JSON.stringify(filtered)) }
+const saveIntros=(arr:any[])=>{ setIntros(arr); localStorage.setItem('taglive_intros', JSON.stringify(arr)) }
+const saveOutros=(arr:any[])=>{ setOutros(arr); localStorage.setItem('taglive_outros', JSON.stringify(arr)) }
 const fileToBase64=(file:File)=>new Promise<string>((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result as string); r.onerror=rej; r.readAsDataURL(file) })
 const getVideoDuration=(base64:string)=>new Promise<number>((res)=>{ const v=document.createElement('video'); v.src=base64; v.onloadedmetadata=()=>res(v.duration); setTimeout(()=>res(5),2000) })
 
@@ -436,8 +436,7 @@ if(nearText||nearLogo){
       editStateRef.current.locked=true; editStateRef.current.target=tappedTarget
       setSelected(tappedTarget as any)
       lastTouch.current.selScale=tappedTarget==='logo'?logoPos.scale:pos.scale
-      lastTouch.current.selRot=tappedTarget==='logo'?logoPos.rotation:pos.rotation
-      lastTouch.current.dist=0; lastTouch.current.angle=0
+      lastTouch.current.dist=0
     }
     editStateRef.current.lastTap=0
     return
@@ -475,9 +474,9 @@ if(e.touches.length===1){
   if(!dragging) setDragging(true)
 }
 if(e.touches.length===2){
-  const dx=e.touches[1].clientX-e.touches[0].clientX; const dy=e.touches[1].clientY-e.touches[0].clientY; const dist=Math.hypot(dx,dy); const angle=Math.atan2(dy,dx)*180/Math.PI;
-  if(lastTouch.current.dist===0){ lastTouch.current.dist=dist; lastTouch.current.angle=angle; lastTouch.current.selScale=editStateRef.current.target==='logo'?logoPos.scale:pos.scale; lastTouch.current.selRot=editStateRef.current.target==='logo'?logoPos.rotation:pos.rotation }
-  if(lastTouch.current.dist>0){ const f=dist/lastTouch.current.dist; if(editStateRef.current.target==='logo'){ setLogoPos(p=>({ ...p, scale:Math.min(2,Math.max(0.2,lastTouch.current.selScale*f)), rotation:lastTouch.current.selRot+(angle-lastTouch.current.angle) })) } else { setPos(p=>({ ...p, scale:Math.min(1.3,Math.max(0.6,lastTouch.current.selScale*f)), rotation:lastTouch.current.selRot+(angle-lastTouch.current.angle) })) } }
+  const dx=e.touches[1].clientX-e.touches[0].clientX; const dy=e.touches[1].clientY-e.touches[0].clientY; const dist=Math.hypot(dx,dy);
+  if(lastTouch.current.dist===0){ lastTouch.current.dist=dist; lastTouch.current.selScale=editStateRef.current.target==='logo'?logoPos.scale:pos.scale; }
+  if(lastTouch.current.dist>0){ const f=dist/lastTouch.current.dist; if(editStateRef.current.target==='logo'){ setLogoPos(p=>({ ...p, scale:Math.min(2,Math.max(0.2,lastTouch.current.selScale*f)) })) } else { setPos(p=>({ ...p, scale:Math.min(1.3,Math.max(0.6,lastTouch.current.selScale*f)) })) } }
 }
 }
 const onTouchEnd=(e:any)=>{
@@ -540,14 +539,14 @@ else {
   else { sw=vw; sh=vw/rCanvas; sx=0; sy=(vh-sh)/2 }
   ctx.drawImage(v,sx,sy,sw,sh,0,0,c.width,c.height)
 }
-if(logoImageRef.current && showLogo){ ctx.save(); ctx.translate(logoPos.x,logoPos.y); ctx.rotate(logoPos.rotation*Math.PI/180); ctx.scale(logoPos.scale,logoPos.scale); const iw=logoImageRef.current.width, ih=logoImageRef.current.height; const maxLogoW=180; const sc=Math.min(1,maxLogoW/iw); ctx.drawImage(logoImageRef.current,-iw*sc/2,-ih*sc/2,iw*sc,ih*sc); if(editStateRef.current.locked && editStateRef.current.target==='logo'){ ctx.strokeStyle='#00ff00'; ctx.lineWidth=2; ctx.setLineDash([8,6]); ctx.strokeRect(-iw*sc/2-6,-ih*sc/2-6,iw*sc+12,ih*sc+12); ctx.setLineDash([]) } ctx.restore() }
+if(logoImageRef.current && showLogo){ ctx.save(); ctx.translate(logoPos.x,logoPos.y); ctx.scale(logoPos.scale,logoPos.scale); const iw=logoImageRef.current.width, ih=logoImageRef.current.height; const maxLogoW=180; const sc=Math.min(1,maxLogoW/iw); ctx.drawImage(logoImageRef.current,-iw*sc/2,-ih*sc/2,iw*sc,ih*sc); if(editStateRef.current.locked && editStateRef.current.target==='logo'){ ctx.strokeStyle='#00ff00'; ctx.lineWidth=2; ctx.setLineDash([8,6]); ctx.strokeRect(-iw*sc/2-6,-ih*sc/2-6,iw*sc+12,ih*sc+12); ctx.setLineDash([]) } ctx.restore() }
 if(showText){
 ctx.save();
 const isSplit=bgMode==='split'
 const drawX=isSplit?c.width*0.5:pos.x
 const drawY=isSplit?c.height*0.24:pos.y
 const maxW=isSplit?600:520
-ctx.translate(drawX,drawY); ctx.rotate(pos.rotation*Math.PI/180); ctx.scale(pos.scale,pos.scale); ctx.font=`bold ${fontSize}px sans-serif`; const pad=24; const boxW=maxW+pad*2; const paragraphs=verse.split('\n'); let allLines:{text:string,isLastInPara:boolean,paraIdx:number}[]=[]; paragraphs.forEach((para,pIdx)=>{ if(!para.trim()){ allLines.push({text:'',isLastInPara:true,paraIdx:pIdx}); return } const wrapped=wrapText(ctx,para.trim(),maxW); wrapped.forEach((l,i)=>allLines.push({text:l,isLastInPara:i===wrapped.length-1,paraIdx:pIdx})) }); const realCount=allLines.filter(l=>l.text!=='').length; const lineH=fontSize*1.38; const boxH=realCount*lineH+(paragraphs.length-1)*10+pad*2; ctx.fillStyle=hexToRgba(boxColor,boxOpacity); ctx.fillRect(-boxW/2,-boxH/2,boxW,boxH); ctx.fillStyle=textColor; let y=-boxH/2+pad+lineH/2; allLines.forEach((ln)=>{ if(!ln.text){ y+=10; return } ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(ln.text,0,y); y+=lineH });
+ctx.translate(drawX,drawY); ctx.scale(pos.scale,pos.scale); ctx.font=`bold ${fontSize}px sans-serif`; const pad=24; const boxW=maxW+pad*2; const paragraphs=verse.split('\n'); let allLines:{text:string,isLastInPara:boolean,paraIdx:number}[]=[]; paragraphs.forEach((para,pIdx)=>{ if(!para.trim()){ allLines.push({text:'',isLastInPara:true,paraIdx:pIdx}); return } const wrapped=wrapText(ctx,para.trim(),maxW); wrapped.forEach((l,i)=>allLines.push({text:l,isLastInPara:i===wrapped.length-1,paraIdx:pIdx})) }); const realCount=allLines.filter(l=>l.text!=='').length; const lineH=fontSize*1.38; const boxH=realCount*lineH+(paragraphs.length-1)*10+pad*2; ctx.fillStyle=hexToRgba(boxColor,boxOpacity); ctx.fillRect(-boxW/2,-boxH/2,boxW,boxH); ctx.fillStyle=textColor; let y=-boxH/2+pad+lineH/2; allLines.forEach((ln)=>{ if(!ln.text){ y+=10; return } ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(ln.text,0,y); y+=lineH });
 if(isSplit&&showChurchName&&churchName){
 ctx.fillStyle='#FFD700'; ctx.font=`900 ${Math.max(14,Math.floor(fontSize*0.52))}px sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle'
 const churchY=y+22; const tW=ctx.measureText(churchName.toUpperCase()).width+28
@@ -619,12 +618,12 @@ return (
 <div style={{marginTop:12,display:'flex',flexDirection:'column',gap:12}}>
 <div style={{border:'2px solid #FF0000',borderRadius:12,padding:10,background:lowData?'#fef2f2':'#fff',display:'flex',justifyContent:'space-between',alignItems:'center'}}><div><b style={{fontSize:12}}>Data Saver Mode</b><div style={{fontSize:10,opacity:.7}}>{lowData?'480p - Uses less data':'720p - High Quality'}</div></div><button onClick={()=>{const v=!lowData;setLowData(v);localStorage.setItem('taglive_lowdata',v.toString());if(isCam)setTimeout(()=>startCamera(),300)}} style={{padding:'8px 14px',borderRadius:20,border:'none',background:lowData?'#16a34a':'#111',color:'#fff',fontWeight:900,fontSize:11}}>{lowData?'480p ON':'720p'}</button></div>
 
-<div style={{border:'2px solid #7c3aed',borderRadius:16,padding:12,background:'#f9f5ff'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:14}}>Intro / Outro Studio (SAVES)</b><button onClick={()=>setShowStudio(!showStudio)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:'#111',color:'#fff',fontWeight:800,fontSize:11}}>{showStudio?'Hide':'Open'}</button></div>
+<div style={{border:'2px solid #7c3aed',borderRadius:16,padding:12,background:'#f9f5ff'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:14}}>Intro / Outro Studio</b><button onClick={()=>setShowStudio(!showStudio)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:'#111',color:'#fff',fontWeight:800,fontSize:11}}>{showStudio?'Hide':'Open'}</button></div>
 {showStudio&&(<div style={{marginTop:10}}>
 <div style={{display:'flex',gap:6,marginTop:8}}><label style={{flex:1,background:'#7c3aed',color:'#fff',padding:12,borderRadius:10,fontWeight:800,fontSize:12,textAlign:'center',cursor:'pointer'}}>Upload Intro<input ref={introFileRef} type="file" accept="video/*,image/*" onChange={handleIntroFile} style={{display:'none'}}/></label><label style={{flex:1,background:'#111',color:'#fff',padding:12,borderRadius:10,fontWeight:800,fontSize:12,textAlign:'center',cursor:'pointer'}}>Upload Outro<input ref={outroFileRef} type="file" accept="video/*,image/*" onChange={handleOutroFile} style={{display:'none'}}/></label></div>
 <div style={{marginTop:12}}>
-{intros.length>0&&<div style={{marginBottom:10}}><b style={{fontSize:12}}>Active Intro (SAVED - FULL DURATION):</b><div style={{display:'flex',flexDirection:'column',gap:4,marginTop:6}}>{intros.map((it:any)=><div key={it.id} style={{display:'flex',gap:4}}><button onClick={()=>{setActiveIntroId(it.id);localStorage.setItem('taglive_active_intro',it.id)}} style={{flex:1,padding:8,borderRadius:8,border:'none',background:activeIntroId===it.id?'#16a34a':'#eee',color:activeIntroId===it.id?'#fff':'#000',fontWeight:700,fontSize:11,textAlign:'left'}}>{activeIntroId===it.id?'✓ ':''}{it.title} ({Math.round(it.duration)}s)</button><button onClick={()=>{const n=intros.filter((x:any)=>x.id!==it.id);saveIntros(n); if(activeIntroId===it.id){setActiveIntroId(null);localStorage.removeItem('taglive_active_intro')}}} style={{padding:8,borderRadius:8,border:'none',background:'#ff0000',color:'#fff',fontSize:11}}>X</button></div>)}</div></div>}
-{outros.length>0&&<div><b style={{fontSize:12}}>Active Outro (SAVED):</b><div style={{display:'flex',flexDirection:'column',gap:4,marginTop:6}}>{outros.map((ot:any)=><div key={ot.id} style={{display:'flex',gap:4}}><button onClick={()=>{setActiveOutroId(ot.id);localStorage.setItem('taglive_active_outro',ot.id)}} style={{flex:1,padding:8,borderRadius:8,border:'none',background:activeOutroId===ot.id?'#16a34a':'#eee',color:activeOutroId===ot.id?'#fff':'#000',fontWeight:700,fontSize:11,textAlign:'left'}}>{activeOutroId===ot.id?'✓ ':''}{ot.title} ({Math.round(ot.duration)}s)</button><button onClick={()=>{const n=outros.filter((x:any)=>x.id!==ot.id);saveOutros(n); if(activeOutroId===ot.id){setActiveOutroId(null);localStorage.removeItem('taglive_active_outro')}}} style={{padding:8,borderRadius:8,border:'none',background:'#ff0000',color:'#fff',fontSize:11}}>X</button></div>)}</div></div>}
+{intros.length>0&&<div style={{marginBottom:10}}><b style={{fontSize:12}}>Active Intro:</b><div style={{display:'flex',flexDirection:'column',gap:4,marginTop:6}}>{intros.map((it:any)=><div key={it.id} style={{display:'flex',gap:4}}><button onClick={()=>{setActiveIntroId(it.id);localStorage.setItem('taglive_active_intro',it.id)}} style={{flex:1,padding:8,borderRadius:8,border:'none',background:activeIntroId===it.id?'#16a34a':'#eee',color:activeIntroId===it.id?'#fff':'#000',fontWeight:700,fontSize:11,textAlign:'left'}}>{activeIntroId===it.id?'✓ ':''}{it.title} ({Math.round(it.duration)}s)</button><button onClick={()=>{const n=intros.filter((x:any)=>x.id!==it.id);saveIntros(n); if(activeIntroId===it.id){setActiveIntroId(null);localStorage.removeItem('taglive_active_intro')}}} style={{padding:8,borderRadius:8,border:'none',background:'#ff0000',color:'#fff',fontSize:11}}>X</button></div>)}</div></div>}
+{outros.length>0&&<div><b style={{fontSize:12}}>Active Outro:</b><div style={{display:'flex',flexDirection:'column',gap:4,marginTop:6}}>{outros.map((ot:any)=><div key={ot.id} style={{display:'flex',gap:4}}><button onClick={()=>{setActiveOutroId(ot.id);localStorage.setItem('taglive_active_outro',ot.id)}} style={{flex:1,padding:8,borderRadius:8,border:'none',background:activeOutroId===ot.id?'#16a34a':'#eee',color:activeOutroId===ot.id?'#fff':'#000',fontWeight:700,fontSize:11,textAlign:'left'}}>{activeOutroId===ot.id?'✓ ':''}{ot.title} ({Math.round(ot.duration)}s)</button><button onClick={()=>{const n=outros.filter((x:any)=>x.id!==ot.id);saveOutros(n); if(activeOutroId===ot.id){setActiveOutroId(null);localStorage.removeItem('taglive_active_outro')}}} style={{padding:8,borderRadius:8,border:'none',background:'#ff0000',color:'#fff',fontSize:11}}>X</button></div>)}</div></div>}
 </div>
 </div>)}
 </div>
@@ -639,10 +638,10 @@ return (
 </div>)}</div>
 
 <div style={{border:'2px solid #7c3aed',borderRadius:16,padding:12,background:'#fff'}}>
-<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:13}}>Church Name + Logo (SAVES)</b><button onClick={()=>setShowChurchName(!showChurchName)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:showChurchName?'#7c3aed':'#111',color:'#fff',fontWeight:800,fontSize:11}}>{showChurchName?'ON':'OFF'}</button></div>
+<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:13}}>Church Name + Logo</b><button onClick={()=>setShowChurchName(!showChurchName)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:showChurchName?'#7c3aed':'#111',color:'#fff',fontWeight:800,fontSize:11}}>{showChurchName?'ON':'OFF'}</button></div>
 <input value={churchName} onChange={e=>{setChurchName(e.target.value);localStorage.setItem('taglive_church_name',e.target.value)}} placeholder="SALEM GANA JA CITY" style={{width:'100%',marginTop:8,padding:10,borderRadius:10,border:'2px solid #7c3aed',fontSize:12,fontWeight:800,boxSizing:'border-box'}}/>
 <div style={{marginTop:10,border:'1px dashed #7c3aed',borderRadius:10,padding:10,background:'#f9f5ff'}}>
-<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:11}}>SAVED LOGO</b>{logoImage&&<button onClick={removeChurchLogo} style={{padding:'4px 8px',borderRadius:6,border:'none',background:'red',color:'#fff',fontWeight:800,fontSize:10}}>Remove</button>}</div>
+<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:11}}>LOGO</b>{logoImage&&<button onClick={removeChurchLogo} style={{padding:'4px 8px',borderRadius:6,border:'none',background:'red',color:'#fff',fontWeight:800,fontSize:10}}>Remove</button>}</div>
 <div style={{display:'flex',gap:8,alignItems:'center',marginTop:8}}>
 {logoImage&&<img src={logoImage} style={{width:50,height:50,objectFit:'contain',borderRadius:8,border:'1px solid #ddd',background:'#fff'}}/>}
 <div style={{flex:1}}>
