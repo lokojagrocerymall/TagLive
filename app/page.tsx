@@ -98,12 +98,17 @@ const stopTimer=()=>{ if(timerRef.current) clearInterval(timerRef.current); time
   useEffect(()=>{
 const trackDevice=async()=>{
 try{
+const isAdminUser=localStorage.getItem('taglive_admin')==='true'
+// FIXED: DO NOT COUNT ADMIN
+if(!isAdminUser){
 let deviceId=localStorage.getItem('taglive_device')
 if(!deviceId){ deviceId=`dev_${Date.now()}_${Math.random().toString(36).slice(2,9)}`; localStorage.setItem('taglive_device', deviceId) }
 await supabase.from('taglive_devices').upsert({ device_id: deviceId, last_seen: new Date().toISOString(), user_agent: navigator.userAgent.substring(0,200) }, { onConflict: 'device_id' })
 const lastView=localStorage.getItem('tl_last_view'); const now=Date.now()
 if(!lastView || now-parseInt(lastView)>30*60*1000){ await supabase.from('taglive_views').insert({ device_id: deviceId }); localStorage.setItem('tl_last_view', now.toString()) }
-if(localStorage.getItem('taglive_admin')==='true'){
+}
+// FETCH STATS ONLY FOR ADMIN
+if(isAdminUser){
 const nowDate=new Date(); const todayStart=new Date(nowDate); todayStart.setHours(0,0,0,0)
 const weekStart=new Date(nowDate); weekStart.setDate(nowDate.getDate()-7)
 const monthStart=new Date(nowDate); monthStart.setDate(nowDate.getDate()-30)
