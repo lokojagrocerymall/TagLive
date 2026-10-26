@@ -524,7 +524,6 @@ const onTouchEnd=(e:any)=>{
   }
 }
 
-// --- FIXED: CANVAS EFFECT - PREVIOUSLY CAUSED Unexpected token div ---
 useEffect(()=>{
 let a:any
 const wrapText=(ctx:any,text:string,maxWidth:number)=>{
@@ -639,9 +638,9 @@ return (
 </div>
 )}
 
-{/* HEADER - FIXED TO MATCH SCREENSHOT 1 - BOLDER LOGO.PNG - NO SMALL TEXT */}
-<div style={{background:'#fff',borderBottom:'2px solid #111',padding:'8px 16px',display:'flex',alignItems:'center',position:'sticky',top:0,zIndex:100}}>
-<img src="/logo.png" alt="TagLive - Tag Your Live" style={{height:56,width:'auto',maxWidth:300,objectFit:'contain',display:'block'}} />
+{/* HEADER - EXACT AS CIRCLED SCREENSHOT - BOLDER */}
+<div style={{background:'#fff',borderBottom:'2px solid #111',padding:'10px 16px',display:'flex',alignItems:'center',position:'sticky',top:0,zIndex:100}}>
+<img src="/logo.png" alt="TagLive - Tag Your Live" style={{height:52,width:'auto',maxWidth:320,objectFit:'contain',display:'block'}} />
 {(isLive||ytLive||isRecording)&&<div style={{marginLeft:'auto',color:'#FF0000',fontWeight:900,border:'2px solid red',borderRadius:20,padding:'6px 12px',fontSize:11}}>● LIVE {formatTime(liveSeconds)}</div>}
 </div>
 
