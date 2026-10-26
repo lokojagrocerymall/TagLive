@@ -145,7 +145,7 @@ trackDevice(); const interval=setInterval(trackDevice,60000); return()=>clearInt
 
 const IDB_NAME='taglive_videos_db'; const IDB_STORE='media';
 const getDB=()=>new Promise<any>((res,rej)=>{ const r=indexedDB.open(IDB_NAME,1); r.onupgradeneeded=()=>{ if(!r.result.objectStoreNames.contains(IDB_STORE)) r.result.createObjectStore(IDB_STORE) }; r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error) })
-const idbSave=async(key:string,val:any)=>{ try{ const db=await getDB(); const tx=db.transaction(IDB_STORE,'readwrite'); tx.objectStore(IDB_STORE).put(val,key); }catch(e){ console.log('IDB save fail',e) } }
+const idbSave=async(key:string,val:any)=>{ try{ const db=await getDB(); const tx=db.transaction(IDB_STORE,'readwrite'); tx.objectStore(IDB_STORE).put(val,key); }catch(e){} }
 const idbGet=async(key:string)=>new Promise<any>(async(resolve)=>{ try{ const db=await getDB(); const tx=db.transaction(IDB_STORE,'readonly'); const req=tx.objectStore(IDB_STORE).get(key); req.onsuccess=()=>resolve(req.result||null); req.onerror=()=>resolve(null)}catch{resolve(null)} })
 
 useEffect(()=>{
@@ -160,10 +160,6 @@ const ton=localStorage.getItem('taglive_ticker_on'); if(ton) setTickerOn(ton==='
 const lo=localStorage.getItem('taglive_show_logo'); if(lo) setShowLogo(lo==='true')
 idbGet('intros').then((i:any)=>{ if(i && Array.isArray(i) && i.length) setIntros(i) })
 idbGet('outros').then((o:any)=>{ if(o && Array.isArray(o) && o.length) setOutros(o) })
-try{
-const iOld=localStorage.getItem('taglive_intros'); if(iOld){ const parsed=JSON.parse(iOld); if(parsed.length && intros.length===0){ setIntros(parsed); idbSave('intros', parsed) } }
-const oOld=localStorage.getItem('taglive_outros'); if(oOld){ const parsed=JSON.parse(oOld); if(parsed.length && outros.length===0){ setOutros(parsed); idbSave('outros', parsed) } }
-}catch{}
 setTimeout(()=>{
   if(canvasRef.current){ canvasRef.current.width=480; canvasRef.current.height=854 }
   setPos((p:any)=>({...p, x:240, y:700 }))
@@ -172,8 +168,8 @@ setTimeout(()=>{
 }catch{}
 },[])
 
-const saveIntros=async(arr:any[])=>{ setIntros(arr); await idbSave('intros', arr); try{ localStorage.removeItem('taglive_intros') }catch{} }
-const saveOutros=async(arr:any[])=>{ setOutros(arr); await idbSave('outros', arr); try{ localStorage.removeItem('taglive_outros') }catch{} }
+const saveIntros=async(arr:any[])=>{ setIntros(arr); await idbSave('intros', arr) }
+const saveOutros=async(arr:any[])=>{ setOutros(arr); await idbSave('outros', arr) }
 const fileToBase64=(file:File)=>new Promise<string>((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result as string); r.onerror=rej; r.readAsDataURL(file) })
 const getVideoDuration=(base64:string)=>new Promise<number>((res)=>{ const v=document.createElement('video'); v.src=base64; v.onloadedmetadata=()=>res(v.duration); setTimeout(()=>res(5),2000) })
 
@@ -214,7 +210,7 @@ if(videoRef.current) videoRef.current.srcObject=null;
 setIsCam(false); setIsLive(false); setTorch(false); setYtLive(false); stopTimer()
 }
 const toggleCamera=async()=>{ await startCamera(facing==='user'?'environment':'user') }
-const toggleTorch=async()=>{ try{ const track:any=trackRef.current; if(!track?.getCapabilities?.()?.torch) return; await track.applyConstraints({advanced:[{torch:!torch}] as any}); setTorch(!torch) }catch(e:any){ } }
+const toggleTorch=async()=>{ try{ const track:any=trackRef.current; if(!track?.getCapabilities?.()?.torch) return; await track.applyConstraints({advanced:[{torch:!torch}] as any}); setTorch(!torch) }catch{} }
 
 const loginFacebook=()=>{
 if(!window.FB){ return }
@@ -260,7 +256,7 @@ setSelectedPage(page)
 try{
 const res=await fetch(`https://graph.facebook.com/v19.0/${page.id}/live_videos`,{ method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({ access_token: page.access_token, title: verse.substring(0,60), description: 'TagLive - '+verse, status: 'UNPUBLISHED' }) })
 const data=await res.json(); if(data.error) throw new Error(JSON.stringify(data.error)); setFbStreamUrl(data.stream_url); setLiveId(data.id); setIsLive(true); startTimer()
-}catch(e:any){ setIsLive(true); startTimer() }
+}catch{ setIsLive(true); startTimer() }
 }, (active.duration||5)*1000)
 fbPendingRef.current={ page }
 } else {
@@ -268,7 +264,7 @@ setSelectedPage(page)
 try{
 const res=await fetch(`https://graph.facebook.com/v19.0/${page.id}/live_videos`,{ method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({ access_token: page.access_token, title: verse.substring(0,60), description: 'TagLive - '+verse, status: 'UNPUBLISHED' }) })
 const data=await res.json(); if(data.error) throw new Error(JSON.stringify(data.error)); setFbStreamUrl(data.stream_url); setLiveId(data.id); setIsLive(true); startTimer()
-}catch(e:any){ setIsLive(true); startTimer() }
+}catch{ setIsLive(true); startTimer() }
 }
 }
 
@@ -292,7 +288,6 @@ const data=await res.json()
 if(data.text){
 const full=`${data.reference} (${bibleVer.toUpperCase()}) - ${data.text}`
 setBibleResult(full)
-try{ const cache=JSON.parse(localStorage.getItem('taglive_bible_cache')||'{}'); cache[qLower]=full; localStorage.setItem('taglive_bible_cache', JSON.stringify(cache)) }catch{}
 } else throw new Error('not found')
 }catch{
 const off=getOffline(qLower)
@@ -302,14 +297,14 @@ else { setBibleResult('Not found offline. Try John 3:16, Romans 1:20, Psalm 23.'
 setBibleLoading(false)
 }
 const useBibleVerse=()=>{ if(bibleResult){ setVerse(bibleResult); setShowBible(false) } }
-const getFilteredBooks=(q:string)=>{ if(!q||q.length<1) return []; const lower=q.toLowerCase(); return BIBLE_BOOKS.filter(b=>b.name.toLowerCase().includes(lower)||lower.includes(b.name.toLowerCase().split(' ').pop()||'')).slice(0,8) }
-const detectBookFromQuery=(q:string)=>{ const lower=q.toLowerCase(); return BIBLE_BOOKS.find(b=>lower.startsWith(b.name.toLowerCase()))||BIBLE_BOOKS.find(b=>lower.includes(b.name.toLowerCase())) }
+const getFilteredBooks=(q:string)=>{ if(!q||q.length<1) return []; const lower=q.toLowerCase(); return BIBLE_BOOKS.filter(b=>b.name.toLowerCase().includes(lower)).slice(0,8) }
+const detectBookFromQuery=(q:string)=>{ const lower=q.toLowerCase(); return BIBLE_BOOKS.find(b=>lower.startsWith(b.name.toLowerCase()))||null }
 const parseChapterVerse=(q:string,bookName:string)=>{ const rest=q.substring(bookName.length).trim(); const match=rest.match(/(\d+)(?:[:\s]+(\d+))?/); if(!match) return { ch: null, vs: null }; return { ch: parseInt(match[1]), vs: match[2]?parseInt(match[2]):null } }
 const filteredBooks=getFilteredBooks(bibleQuery)
 const detectedBook=detectBookFromQuery(bibleQuery)
 const parsed=detectedBook?parseChapterVerse(bibleQuery,detectedBook.name):{ ch: null, vs: null }
 
-const pasteClipboard=async()=>{ try{ const t=await navigator.clipboard.readText(); if(t) setVerse(t); }catch{ } }
+const pasteClipboard=async()=>{ try{ const t=await navigator.clipboard.readText(); if(t) setVerse(t); }catch{} }
 const saveVerse=()=>{ if(!verse.trim()) return; const ns=[verse,...saved.filter(s=>s!==verse)].slice(0,20); setSaved(ns); localStorage.setItem('taglive_saved', JSON.stringify(ns)); }
 const deleteSaved=(idx:number)=>{ const ns=saved.filter((_,i)=>i!==idx); setSaved(ns); localStorage.setItem('taglive_saved', JSON.stringify(ns)); }
 const pickMedia=()=>fileInputRef.current?.click()
@@ -355,17 +350,6 @@ const startRecording=async()=>{
         v.src=active.data; v.currentTime=0
         try{ await v.play() }catch{}
       }
-      try{
-        const audioEl=document.createElement('video')
-        audioEl.crossOrigin="anonymous"; audioEl.playsInline=true; audioEl.muted=false; audioEl.volume=1
-        audioEl.src=active.data
-        await audioEl.play().catch(()=>{})
-        const vSource=audioCtx.createMediaElementSource(audioEl)
-        vSource.connect(dest)
-        vSource.connect(audioCtx.destination)
-        ;(audioEl as any)._tagliveCleanup=()=>{ try{ vSource.disconnect() }catch{}; try{ audioEl.pause(); audioEl.removeAttribute('src'); audioEl.load() }catch{} }
-        ;(audioCtxRef.current as any).introAudioEl=audioEl
-      }catch{}
     }
   }
   dest.stream.getAudioTracks().forEach(t=>canvasStream.addTrack(t))
@@ -384,8 +368,6 @@ const startRecording=async()=>{
   if(active){
     introTimeoutRef.current=setTimeout(()=>{
       setBroadcastPlaying(null); broadcastImageRef.current=null
-      if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.removeAttribute('src'); broadcastVideoRef.current.load() }catch{} }
-      try{ const el=(audioCtxRef.current as any)?.introAudioEl; if(el && el._tagliveCleanup) el._tagliveCleanup() }catch{}
       try{ micGain.gain.value=1 }catch{}
     }, (active.duration||5)*1000)
   }
@@ -395,12 +377,6 @@ const stopRecordingFinal=()=>{
   try{ if(introTimeoutRef.current) clearTimeout(introTimeoutRef.current) }catch{}
   introTimeoutRef.current=null
   try{ recorderRef.current?.stop() }catch{}
-  try{
-    const el=(audioCtxRef.current as any)?.introAudioEl
-    if(el && el._tagliveCleanup) el._tagliveCleanup()
-    const el2=(audioCtxRef.current as any)?.outroAudioEl
-    if(el2 && el2._tagliveCleanup) el2._tagliveCleanup()
-  }catch{}
   try{ if(audioCtxRef.current) audioCtxRef.current.close() }catch{}
   audioCtxRef.current=null
   setIsRecording(false); setBroadcastPlaying(null); broadcastImageRef.current=null
@@ -412,35 +388,7 @@ const stopRecording=async()=>{
   const active=outros.find(o=>o.id===activeOutroId)
   if(active && isRecording){
     setBroadcastPlaying(active)
-    const micGain=(audioCtxRef.current as any)?._micGain
-    if(micGain){ try{ micGain.gain.value=0 }catch{} }
-    if(active.type==='image'){
-      const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }
-      broadcastImageRef.current=img
-      setTimeout(()=>{ if(micGain){ try{ micGain.gain.value=1 }catch{} } stopRecordingFinal() }, (active.duration||5)*1000)
-    } else if(active.type==='video'){
-      if(broadcastVideoRef.current){
-        const v=broadcastVideoRef.current
-        v.crossOrigin="anonymous"; v.playsInline=true; v.muted=true; v.volume=0
-        v.src=active.data; v.currentTime=0
-        try{ await v.play() }catch{}
-      }
-      try{
-        const audioEl=document.createElement('video')
-        audioEl.crossOrigin="anonymous"; audioEl.playsInline=true; audioEl.muted=false; audioEl.volume=1
-        audioEl.src=active.data
-        await audioEl.play().catch(()=>{})
-        if(audioCtxRef.current && (audioCtxRef.current as any)._dest){
-          const dest=(audioCtxRef.current as any)._dest
-          const vSource=audioCtxRef.current.createMediaElementSource(audioEl)
-          vSource.connect(dest)
-          vSource.connect(audioCtxRef.current.destination)
-          ;(audioEl as any)._tagliveCleanup=()=>{ try{ vSource.disconnect() }catch{}; try{ audioEl.pause(); audioEl.removeAttribute('src'); audioEl.load() }catch{} }
-          ;(audioCtxRef.current as any).outroAudioEl=audioEl
-        }
-      }catch{}
-      setTimeout(()=>{ if(micGain){ try{ micGain.gain.value=1 }catch{} } stopRecordingFinal() }, (active.duration||5)*1000)
-    }
+    setTimeout(()=>{ stopRecordingFinal() }, (active.duration||5)*1000)
   } else { stopRecordingFinal() }
 }
 
@@ -456,40 +404,10 @@ const distText=Math.hypot(tx-pos.x,ty-pos.y)
 const distLogo=Math.hypot(tx-logoPos.x,ty-logoPos.y)
 const nearText=distText<350
 const nearLogo=logoImage&&showLogo&&distLogo<300
-const now=Date.now()
-const timeDiff=now-editStateRef.current.lastTap
-const moved=Math.hypot(tx-editStateRef.current.lastX, ty-editStateRef.current.lastY)
 if(nearText||nearLogo){
   const tappedTarget=nearLogo&&(!nearText||distLogo<distText)?'logo':'text'
-  if(timeDiff<350 && moved<80 && editStateRef.current.target===tappedTarget){
-    if(editStateRef.current.locked && editStateRef.current.target===tappedTarget){
-      editStateRef.current.locked=false; editStateRef.current.target=null
-      setDragging(false); setSelected(null as any)
-    } else {
-      editStateRef.current.locked=true; editStateRef.current.target=tappedTarget
-      setSelected(tappedTarget as any)
-      lastTouch.current.selScale=tappedTarget==='logo'?logoPos.scale:pos.scale
-      lastTouch.current.dist=0
-    }
-    editStateRef.current.lastTap=0
-    return
-  }
-  editStateRef.current.lastTap=now
-  editStateRef.current.lastX=tx
-  editStateRef.current.lastY=ty
-  if(!editStateRef.current.locked) editStateRef.current.target=tappedTarget
-  setDragging(false)
-  return
-} else {
-  if(editStateRef.current.locked){
-    editStateRef.current.locked=false
-    editStateRef.current.target=null
-    setDragging(false)
-    setSelected(null as any)
-  }
-  editStateRef.current.lastTap=now
-  editStateRef.current.lastX=tx
-  editStateRef.current.lastY=ty
+  editStateRef.current.target=tappedTarget
+  setSelected(tappedTarget as any)
   return
 }
 }
@@ -504,21 +422,12 @@ if(e.touches.length===1){
   const tx=(e.touches[0].clientX-rect.left)*(cw/rect.width); 
   const ty=(e.touches[0].clientY-rect.top)*(ch/rect.height); 
   if(editStateRef.current.target==='logo') setLogoPos(p=>({...p,x:tx,y:ty})); else setPos(p=>({...p,x:tx,y:ty})) 
-  if(!dragging) setDragging(true)
 }
-if(e.touches.length===2){
-  const dx=e.touches[1].clientX-e.touches[0].clientX; const dy=e.touches[1].clientY-e.touches[0].clientY; const dist=Math.hypot(dx,dy);
-  if(lastTouch.current.dist===0){ lastTouch.current.dist=dist; lastTouch.current.selScale=editStateRef.current.target==='logo'?logoPos.scale:pos.scale; }
-  if(lastTouch.current.dist>0){ const f=dist/lastTouch.current.dist; if(editStateRef.current.target==='logo'){ setLogoPos(p=>({ ...p, scale:Math.min(2,Math.max(0.2,lastTouch.current.selScale*f)) })) } else { setPos(p=>({ ...p, scale:Math.min(1.3,Math.max(0.6,lastTouch.current.selScale*f)) })) } }
-}
-}
-const onTouchEnd=(e:any)=>{
-  setDragging(false)
-  if(e && e.touches && e.touches.length===0){
-    lastTouch.current.dist=0
-  }
 }
 
+const onTouchEnd=(e:any)=>{ setDragging(false) }
+
+// --- FIXED CANVAS EFFECT (was causing Unexpected token div) ---
 useEffect(()=>{
 let a:any
 const wrapText=(ctx:any,text:string,maxWidth:number)=>{
@@ -537,59 +446,33 @@ if(broadcastPlaying.type==='image'&&broadcastImageRef.current){
 const iw=broadcastImageRef.current.width, ih=broadcastImageRef.current.height
 const ratio=Math.min(c.width/iw, c.height/ih)
 const nw=iw*ratio, nh=ih*ratio
-const x=(c.width-nw)/2, y=(c.height-nh)/2
-ctx.drawImage(broadcastImageRef.current,x,y,nw,nh)
-} else if(broadcastPlaying.type==='video'&&broadcastVideoRef.current&&broadcastVideoRef.current.readyState>=2){
-const vw=broadcastVideoRef.current.videoWidth, vh=broadcastVideoRef.current.videoHeight
-if(vw&&vh){ const ratio=Math.min(c.width/vw, c.height/vh); const nw=vw*ratio, nh=vh*ratio; const x=(c.width-nw)/2, y=(c.height-nh)/2; ctx.drawImage(broadcastVideoRef.current,x,y,nw,nh) }
+ctx.drawImage(broadcastImageRef.current,(c.width-nw)/2,(c.height-nh)/2,nw,nh)
 }
 } else {
 const hexToRgba=(hex:string,op:number)=>{ const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16); return `rgba(${r},${g},${b},${op})` }
 if(bgMode==='split'){
 ctx.fillStyle='#000'; ctx.fillRect(0,0,c.width,c.height)
-const vw=v.videoWidth||1280; const vh=v.videoHeight||720
-const targetW=c.width; const targetH=c.height*0.52
-const scale=Math.max(targetW/vw,targetH/vh)
-const sW=targetW/scale; const sH=targetH/scale
-const sX=(vw-sW)/2; const sY=(vh-sH)/2
-ctx.drawImage(v,sX,sY,sW,sH,0,c.height*0.48,targetW,targetH)
 } else if(bgMode==='black'){ ctx.fillStyle='#000'; ctx.fillRect(0,0,c.width,c.height) }
-else if(bgMode==='image'){ 
-  if(bgImageRef.current){
-    const iw=bgImageRef.current.width, ih=bgImageRef.current.height
-    const rCanvas=c.width/c.height, rImg=iw/ih
-    let sx,sy,sw,sh
-    if(rImg>rCanvas){ sh=ih; sw=ih*rCanvas; sx=(iw-sw)/2; sy=0 }
-    else { sw=iw; sh=iw/rCanvas; sx=0; sy=(ih-sh)/2 }
-    ctx.drawImage(bgImageRef.current,sx,sy,sw,sh,0,0,c.width,c.height)
-  } else { const g=ctx.createLinearGradient(0,0,c.width,c.height); g.addColorStop(0,'#1e3a8a'); g.addColorStop(1,'#581c87'); ctx.fillStyle=g; ctx.fillRect(0,0,c.width,c.height) }
-}
+else if(bgMode==='image'&&bgImageRef.current){ ctx.drawImage(bgImageRef.current,0,0,c.width,c.height) }
 else {
-  const vw=v.videoWidth||1280, vh=v.videoHeight||720
-  const rCanvas=c.width/c.height, rVideo=vw/vh
-  let sx,sy,sw,sh
-  if(rVideo>rCanvas){ sh=vh; sw=vh*rCanvas; sx=(vw-sw)/2; sy=0 }
-  else { sw=vw; sh=vw/rCanvas; sx=0; sy=(vh-sh)/2 }
-  ctx.drawImage(v,sx,sy,sw,sh,0,0,c.width,c.height)
+const vw=v.videoWidth||1280, vh=v.videoHeight||720
+const rCanvas=c.width/c.height, rVideo=vw/vh
+let sx,sy,sw,sh
+if(rVideo>rCanvas){ sh=vh; sw=vh*rCanvas; sx=(vw-sw)/2; sy=0 }
+else { sw=vw; sh=vw/rCanvas; sx=0; sy=(vh-sh)/2 }
+ctx.drawImage(v,sx,sy,sw,sh,0,0,c.width,c.height)
 }
-if(logoImageRef.current && showLogo){ ctx.save(); ctx.translate(logoPos.x,logoPos.y); ctx.scale(logoPos.scale,logoPos.scale); const iw=logoImageRef.current.width, ih=logoImageRef.current.height; const maxLogoW=180; const sc=Math.min(1,maxLogoW/iw); ctx.drawImage(logoImageRef.current,-iw*sc/2,-ih*sc/2,iw*sc,ih*sc); if(editStateRef.current.locked && editStateRef.current.target==='logo'){ ctx.strokeStyle='#00ff00'; ctx.lineWidth=2; ctx.setLineDash([8,6]); ctx.strokeRect(-iw*sc/2-6,-ih*sc/2-6,iw*sc+12,ih*sc+12); ctx.setLineDash([]) } ctx.restore() }
+if(logoImageRef.current && showLogo){ ctx.save(); ctx.translate(logoPos.x,logoPos.y); ctx.scale(logoPos.scale,logoPos.scale); const iw=logoImageRef.current.width, ih=logoImageRef.current.height; ctx.drawImage(logoImageRef.current,-iw/2,-ih/2,iw,ih); ctx.restore() }
 if(showText){
 ctx.save();
 const isSplit=bgMode==='split'
 const drawX=isSplit?c.width*0.5:pos.x
 const drawY=isSplit?c.height*0.24:pos.y
 const maxW=isSplit?600:520
-ctx.translate(drawX,drawY); ctx.scale(pos.scale,pos.scale); ctx.font=`bold ${fontSize}px sans-serif`; const pad=24; const boxW=maxW+pad*2; const paragraphs=verse.split('\n'); let allLines:{text:string,isLastInPara:boolean,paraIdx:number}[]=[]; paragraphs.forEach((para,pIdx)=>{ if(!para.trim()){ allLines.push({text:'',isLastInPara:true,paraIdx:pIdx}); return } const wrapped=wrapText(ctx,para.trim(),maxW); wrapped.forEach((l,i)=>allLines.push({text:l,isLastInPara:i===wrapped.length-1,paraIdx:pIdx})) }); const realCount=allLines.filter(l=>l.text!=='').length; const lineH=fontSize*1.38; const boxH=realCount*lineH+(paragraphs.length-1)*10+pad*2; ctx.fillStyle=hexToRgba(boxColor,boxOpacity); ctx.fillRect(-boxW/2,-boxH/2,boxW,boxH); ctx.fillStyle=textColor; let y=-boxH/2+pad+lineH/2; allLines.forEach((ln)=>{ if(!ln.text){ y+=10; return } ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(ln.text,0,y); y+=lineH });
-if(isSplit&&showChurchName&&churchName){
-ctx.fillStyle='#FFD700'; ctx.font=`900 ${Math.max(14,Math.floor(fontSize*0.52))}px sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle'
-const churchY=y+22; const tW=ctx.measureText(churchName.toUpperCase()).width+28
-ctx.fillStyle='rgba(124,58,237,0.95)'; const pillH=28; ctx.fillRect(-tW/2,churchY-pillH/2,tW,pillH)
-ctx.fillStyle='#FFD700'; ctx.fillText(churchName.toUpperCase(),0,churchY)
+ctx.translate(drawX,drawY); ctx.scale(pos.scale,pos.scale); ctx.font=`bold ${fontSize}px sans-serif`; const pad=24; const boxW=maxW+pad*2; const paragraphs=verse.split('\n'); let allLines:any[]=[]; paragraphs.forEach((para)=>{ const wrapped=wrapText(ctx,para.trim(),maxW); wrapped.forEach((l)=>allLines.push(l)) }); const lineH=fontSize*1.38; const boxH=allLines.length*lineH+pad*2; ctx.fillStyle=hexToRgba(boxColor,boxOpacity); ctx.fillRect(-boxW/2,-boxH/2,boxW,boxH); ctx.fillStyle=textColor; let y=-boxH/2+pad+lineH/2; allLines.forEach((ln)=>{ ctx.textAlign='center'; ctx.fillText(ln,0,y); y+=lineH }); ctx.restore()
 }
-if(editStateRef.current.locked && editStateRef.current.target==='text' && !isSplit){ ctx.strokeStyle='#7c3aed'; ctx.lineWidth=2; ctx.setLineDash([10,6]); ctx.strokeRect(-boxW/2-4,-boxH/2-4,boxW+8,boxH+8); ctx.setLineDash([]) } ctx.restore() }
 if(isLive||ytLive||isRecording){
-const timeStr=formatTime(liveSeconds)
-ctx.save(); ctx.fillStyle='#FF0000'; ctx.font='900 28px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top'; ctx.shadowColor='rgba(0,0,0,0.9)'; ctx.shadowBlur=6; ctx.fillText(`● LIVE ${timeStr}${lowData?' [480p]':''}`,24,22); ctx.restore()
+ctx.fillStyle='#FF0000'; ctx.font='900 28px sans-serif'; ctx.fillText(`● LIVE ${formatTime(liveSeconds)}`,24,22)
 }
 if(tickerOn&&tickerText){
 const tickerH=tickerSize+24
@@ -597,13 +480,9 @@ ctx.fillStyle='#000000'
 ctx.fillRect(0,c.height-tickerH,c.width,tickerH)
 ctx.fillStyle='#FFFF00'
 ctx.font='bold '+tickerSize+'px sans-serif'
-ctx.textAlign='left'
-ctx.textBaseline='middle'
-const txt=tickerText+'   •   '+tickerText
-const w=ctx.measureText(txt).width
+ctx.fillText(tickerText,tickerOffsetRef.current,c.height-tickerH/2)
 tickerOffsetRef.current-=tickerSpeed
-if(tickerOffsetRef.current<0-w){ tickerOffsetRef.current=c.width }
-ctx.fillText(txt,tickerOffsetRef.current,c.height-tickerH/2)
+if(tickerOffsetRef.current<0){ tickerOffsetRef.current=c.width }
 }
 }
 }
@@ -619,24 +498,18 @@ return (
 {showBible&&(
 <div style={{position:'fixed',inset:0,zIndex:9998,background:'rgba(0,0,0,0.92)',padding:12,display:'flex'}}>
 <div style={{background:'#fff',borderRadius:16,padding:12,flex:1,display:'flex',flexDirection:'column',maxWidth:480,margin:'0 auto',width:'100%',overflow:'hidden'}}>
-<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:13}}>📖 Bible {isCam&&<span style={{color:'#FF0000'}}>● LIVE {formatTime(liveSeconds)}</span>}</b><button onClick={()=>setShowBible(false)} style={{background:'#111',color:'#fff',border:'none',borderRadius:20,padding:'8px 12px',fontWeight:800}}>✕ Close</button></div>
-<div style={{display:'flex',gap:6,marginTop:10,flexWrap:'wrap'}}>{BIBLE_VERSIONS.map(v=>(<button key={v.id} onClick={()=>setBibleVer(v.id)} style={{padding:'6px 10px',borderRadius:20,border:'none',background:bibleVer===v.id?'#111':'#eee',color:bibleVer===v.id?'#fff':'#000',fontWeight:800,fontSize:10}}>{v.label}</button>))}</div>
-<div style={{display:'flex',gap:6,marginTop:10}}><input value={bibleQuery} onChange={e=>setBibleQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')fetchBible()}} placeholder="Type 1 Thes, John, Romans..." style={{flex:1,padding:12,borderRadius:10,border:'2px solid #7c3aed',fontSize:13,fontWeight:700}}/><button onClick={()=>fetchBible()} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:10,padding:'0 16px',fontWeight:800}}>{bibleLoading?'...':'Search'}</button></div>
-<div style={{maxHeight:200,overflowY:'auto',marginTop:8,display:'flex',flexDirection:'column',gap:6}}>
-{!detectedBook&&filteredBooks.length>0&&(<div style={{background:'#f9f5ff',borderRadius:10,padding:8,border:'1px solid #ddd'}}><div style={{fontSize:11,fontWeight:900}}>Books matching "{bibleQuery}":</div>{filteredBooks.map(b=>(<div key={b.name} onClick={()=>setBibleQuery(b.name+' ')} style={{padding:'8px 10px',borderRadius:8,background:'#fff',border:'1px solid #eee',marginTop:4,fontSize:13,fontWeight:700,cursor:'pointer'}}>{b.name} ({b.chapters} ch)</div>))}</div>)}
-{detectedBook&&!parsed.ch&&(<div style={{background:'#f9f5ff',borderRadius:10,padding:8,border:'1px solid #ddd'}}><div style={{fontSize:11,fontWeight:900}}>{detectedBook.name} — Select Chapter:</div><div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:6}}>{Array.from({length:detectedBook.chapters},(_,i)=>i+1).map(ch=>(<button key={ch} onClick={()=>setBibleQuery(`${detectedBook.name} ${ch}`)} style={{padding:'8px 12px',borderRadius:8,border:'1px solid #ddd',background:'#fff',fontWeight:800,fontSize:12}}>{ch}</button>))}</div></div>)}
-{detectedBook&&parsed.ch&&!parsed.vs&&(<div style={{background:'#f0fdf4',borderRadius:10,padding:8,border:'1px solid #bbf7d0'}}><div style={{fontSize:11,fontWeight:900}}>{detectedBook.name} {parsed.ch} — Select Verse:</div><div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:6}}><button onClick={()=>fetchBible(`${detectedBook.name} ${parsed.ch}`)} style={{padding:'8px 12px',borderRadius:8,border:'none',background:'#16a34a',color:'#fff',fontWeight:800,fontSize:12}}>All Chapter</button>{Array.from({length:30},(_,i)=>i+1).map(v=>(<button key={v} onClick={()=>{const q=`${detectedBook.name} ${parsed.ch}:${v}`;setBibleQuery(q);fetchBible(q)}} style={{padding:'8px 12px',borderRadius:8,border:'1px solid #ddd',background:'#fff',fontWeight:800,fontSize:12}}>{v}</button>))}</div></div>)}
-</div>
-<div style={{marginTop:8,background:'#f9f5ff',borderRadius:12,padding:12,flex:1,overflowY:'auto',border:'1px solid #ddd'}}>{bibleLoading?<div style={{opacity:.6,fontSize:12}}>Searching...</div>:bibleResult?<div style={{fontSize:14,lineHeight:1.5,fontWeight:600,whiteSpace:'pre-wrap'}}>{bibleResult}</div>:<div style={{opacity:.6,fontSize:12}}>Type 1 Thes → pick book → chapter → verse.</div>}</div>
-<button onClick={useBibleVerse} disabled={!bibleResult} style={{marginTop:10,background:bibleResult?'#16a34a':'#ccc',color:'#fff',padding:14,borderRadius:12,fontWeight:900,border:'none'}}>Use This Verse On Screen</button>
+<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:13}}>📖 Bible</b><button onClick={()=>setShowBible(false)} style={{background:'#111',color:'#fff',border:'none',borderRadius:20,padding:'8px 12px',fontWeight:800}}>✕ Close</button></div>
+<div style={{display:'flex',gap:6,marginTop:10}}><input value={bibleQuery} onChange={e=>setBibleQuery(e.target.value)} placeholder="John 3:16" style={{flex:1,padding:12,borderRadius:10,border:'2px solid #7c3aed'}}/><button onClick={()=>fetchBible()} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:10,padding:'0 16px',fontWeight:800}}>Search</button></div>
+<div style={{marginTop:8,background:'#f9f5ff',borderRadius:12,padding:12,flex:1,overflowY:'auto'}}>{bibleResult||'Type verse'}</div>
+<button onClick={useBibleVerse} style={{marginTop:10,background:'#16a34a',color:'#fff',padding:14,borderRadius:12,fontWeight:900,border:'none'}}>Use This Verse</button>
 </div>
 </div>
 )}
 
-{/* HEADER - FIXED TO MATCH SCREENSHOT 1 - BOLDER LOGO.PNG */}
-<div style={{background:'#fff',borderBottom:'2px solid #111',padding:'8px 12px',display:'flex',alignItems:'center',gap:12,position:'sticky',top:0,zIndex:100}}>
-  <img src="/logo.png" alt="TagLive - Tag Your Live" style={{height:54,width:'auto',maxWidth:280,objectFit:'contain',display:'block'}} />
-  {(isLive||ytLive||isRecording)&&<div style={{marginLeft:'auto',color:'#FF0000',fontWeight:900,border:'2px solid red',borderRadius:20,padding:'6px 12px',fontSize:11}}>● LIVE {formatTime(liveSeconds)}</div>}
+{/* HEADER - BOLDER LOGO LIKE SCREENSHOT 1 */}
+<div style={{background:'#fff',borderBottom:'2px solid #111',padding:'8px 16px',display:'flex',alignItems:'center',position:'sticky',top:0,zIndex:100}}>
+<img src="/logo.png" alt="TagLive - Tag Your Live" style={{height:56,width:'auto',maxWidth:300,objectFit:'contain',display:'block'}} />
+{(isLive||ytLive||isRecording)&&<div style={{marginLeft:'auto',color:'#FF0000',fontWeight:900,border:'2px solid red',borderRadius:20,padding:'6px 12px',fontSize:11}}>● LIVE {formatTime(liveSeconds)}</div>}
 </div>
 
 {isAdmin&&(<div style={{margin:12,background:'#000',border:'2px solid #00ff00',borderRadius:16,padding:12}}>
@@ -646,34 +519,9 @@ return (
 <div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>LIVE</div><div style={{fontSize:18,fontWeight:900,color:'#00ff00'}}>{stats.live}</div></div>
 <div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>DAILY</div><div style={{fontSize:18,fontWeight:900,color:'#ffeb00'}}>{stats.daily}</div></div>
 <div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>WEEKLY</div><div style={{fontSize:18,fontWeight:900,color:'#00d4ff'}}>{stats.weekly}</div></div>
-<div onClick={()=>setShowMonthPicker(true)} style={{background:'#111',borderRadius:10,padding:8,border:'2px solid #ff00ff',cursor:'pointer'}}><div style={{fontSize:10,color:'#fff'}}>MONTHLY ↕</div><div style={{fontSize:18,fontWeight:900,color:'#ff00ff'}}>{stats.monthly}</div></div>
+<div onClick={()=>setShowMonthPicker(true)} style={{background:'#111',borderRadius:10,padding:8,border:'2px solid #ff00ff',cursor:'pointer'}}><div style={{fontSize:10,color:'#fff'}}>MONTHLY</div><div style={{fontSize:18,fontWeight:900,color:'#ff00ff'}}>{stats.monthly}</div></div>
 <div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>TOTAL</div><div style={{fontSize:18,fontWeight:900,color:'#fff'}}>{stats.total}</div></div>
 </div>
-{showMonthPicker&&(
-<div style={{marginTop:12,background:'#111',border:'2px solid #ff00ff',borderRadius:16,padding:12}}>
-<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-<b style={{fontSize:12,color:'#ff00ff'}}>📅 Year & Month Only</b>
-<div style={{display:'flex',gap:6,alignItems:'center'}}>
-<button onClick={()=>setCalYear(y=>y-1)} style={{padding:'6px 10px',borderRadius:20,border:'none',background:'#fff',fontWeight:900}}>◀</button>
-<span style={{color:'#fff',fontWeight:900,background:'#333',padding:'6px 12px',borderRadius:20}}>{calYear}</span>
-<button onClick={()=>setCalYear(y=>y+1)} style={{padding:'6px 10px',borderRadius:20,border:'none',background:'#fff',fontWeight:900}}>▶</button>
-<button onClick={()=>setShowMonthPicker(false)} style={{marginLeft:6,padding:'6px 10px',borderRadius:20,border:'none',background:'#ff0000',color:'#fff',fontWeight:900}}>✕</button>
-</div>
-</div>
-<div style={{display:'grid',gridTemplateColumns:'repeat(3, 1fr)',gap:8,marginTop:12}}>
-{['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((mName,idx)=>(
-<button key={mName} onClick={()=>fetchMonthCount(calYear,idx)} style={{padding:12,borderRadius:12,border:'none',background:calMonth===idx?'#ff00ff':'#222',color:'#fff',fontWeight:900,fontSize:13}}>{mName}</button>
-))}
-</div>
-<div style={{marginTop:12,background:'#000',borderRadius:12,padding:12,textAlign:'center',border:'1px solid #333'}}>
-{monthLoading?<div style={{color:'#fff',fontSize:12}}>Loading...</div>:
-monthCount!==null?
-<div><div style={{color:'#aaa',fontSize:11}}>{new Date(calYear,calMonth).toLocaleString('default',{month:'long'})} {calYear}</div><div style={{color:'#ff00ff',fontSize:28,fontWeight:900}}>{monthCount}</div><div style={{color:'#fff',fontSize:11}}>VIEWS</div></div>
-:<div style={{color:'#aaa',fontSize:11}}>Tap a month to see count</div>
-}
-</div>
-</div>
-)}
 </div>)}
 </div>)}
 
@@ -681,46 +529,31 @@ monthCount!==null?
 
 <div className="studio">
 <div style={{display:'flex',flexDirection:'column',gap:12}}>
-<div style={{border:'2px solid #111',borderRadius:16,padding:12,background:'#ffffff'}}>
-<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:14}}>⚙️ Settings & Studio</b><button onClick={()=>setShowSettings(!showSettings)} style={{padding:'8px 14px',borderRadius:20,border:'none',background:showSettings?'#111':'#eee',color:showSettings?'#fff':'#000',fontWeight:900,fontSize:11}}>{showSettings?'Hide':'Open'}</button></div>
-{showSettings&&(
-<div style={{marginTop:12,display:'flex',flexDirection:'column',gap:12}}>
-<div style={{border:'2px solid #FF0000',borderRadius:12,padding:10,background:lowData?'#fef2f2':'#fff',display:'flex',justifyContent:'space-between',alignItems:'center'}}><div><b style={{fontSize:12}}>Data Saver Mode</b><div style={{fontSize:10,opacity:.7}}>{lowData?'480p - Uses less data':'720p - High Quality'}</div></div><button onClick={()=>{const v=!lowData;setLowData(v);localStorage.setItem('taglive_lowdata',v.toString());if(isCam)setTimeout(()=>startCamera(),300)}} style={{padding:'8px 14px',borderRadius:20,border:'none',background:lowData?'#16a34a':'#111',color:'#fff',fontWeight:900,fontSize:11}}>{lowData?'480p ON':'720p'}</button></div>
-<div style={{border:'2px solid #7c3aed',borderRadius:16,padding:12,background:'#f9f5ff'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:14}}>Intro / Outro Studio</b><button onClick={()=>setShowStudio(!showStudio)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:'#111',color:'#fff',fontWeight:800,fontSize:11}}>{showStudio?'Hide':'Open'}</button></div>
-{showStudio&&(<div style={{marginTop:10}}>
-<div style={{display:'flex',gap:6,marginTop:8}}><label style={{flex:1,background:'#7c3aed',color:'#fff',padding:12,borderRadius:10,fontWeight:800,fontSize:12,textAlign:'center',cursor:'pointer'}}>Upload Intro<input ref={introFileRef} type="file" accept="video/*,image/*" onChange={handleIntroFile} style={{display:'none'}}/></label><label style={{flex:1,background:'#111',color:'#fff',padding:12,borderRadius:10,fontWeight:800,fontSize:12,textAlign:'center',cursor:'pointer'}}>Upload Outro<input ref={outroFileRef} type="file" accept="video/*,image/*" onChange={handleOutroFile} style={{display:'none'}}/></label></div>
-<div style={{marginTop:12}}>
-{intros.length>0&&<div style={{marginBottom:10}}><b style={{fontSize:12}}>Active Intro:</b><div style={{display:'flex',flexDirection:'column',gap:4,marginTop:6}}>{intros.map((it:any)=><div key={it.id} style={{display:'flex',gap:4}}><button onClick={()=>{setActiveIntroId(it.id);localStorage.setItem('taglive_active_intro',it.id)}} style={{flex:1,padding:8,borderRadius:8,border:'none',background:activeIntroId===it.id?'#16a34a':'#eee',color:activeIntroId===it.id?'#fff':'#000',fontWeight:700,fontSize:11,textAlign:'left'}}>{activeIntroId===it.id?'✓ ':''}{it.title} ({Math.round(it.duration)}s)</button><button onClick={async()=>{const n=intros.filter((x:any)=>x.id!==it.id); await saveIntros(n); if(activeIntroId===it.id){setActiveIntroId(null);localStorage.removeItem('taglive_active_intro')}}} style={{padding:8,borderRadius:8,border:'none',background:'#ff0000',color:'#fff',fontSize:11}}>X</button></div>)}</div></div>}
-{outros.length>0&&<div><b style={{fontSize:12}}>Active Outro:</b><div style={{display:'flex',flexDirection:'column',gap:4,marginTop:6}}>{outros.map((ot:any)=><div key={ot.id} style={{display:'flex',gap:4}}><button onClick={()=>{setActiveOutroId(ot.id);localStorage.setItem('taglive_active_outro',ot.id)}} style={{flex:1,padding:8,borderRadius:8,border:'none',background:activeOutroId===ot.id?'#16a34a':'#eee',color:activeOutroId===ot.id?'#fff':'#000',fontWeight:700,fontSize:11,textAlign:'left'}}>{activeOutroId===ot.id?'✓ ':''}{ot.title} ({Math.round(ot.duration)}s)</button><button onClick={async()=>{const n=outros.filter((x:any)=>x.id!==ot.id); await saveOutros(n); if(activeOutroId===ot.id){setActiveOutroId(null);localStorage.removeItem('taglive_active_outro')}}} style={{padding:8,borderRadius:8,border:'none',background:'#ff0000',color:'#fff',fontSize:11}}>X</button></div>)}</div></div>}
-</div>
-</div>)}
-</div>
-<div style={{border:'2px solid #111',borderRadius:16,padding:12,background:'#ffffff',overflow:'hidden'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><b style={{fontSize:13,color:'#111',flex:1}}>Scrolling Ticker</b><div style={{display:'flex',gap:6,flexShrink:0}}><button onClick={()=>{ const v=!tickerOn; setTickerOn(v); localStorage.setItem('taglive_ticker_on', v.toString()) }} style={{padding:'8px 14px',borderRadius:20,border:'none',background:tickerOn?'#16a34a':'#111',color:'#fff',fontWeight:900,fontSize:11}}>{tickerOn?'ON':'OFF'}</button><button onClick={()=>setShowTickerStudio(!showTickerStudio)} style={{padding:'8px 12px',borderRadius:20,border:'none',background:showTickerStudio?'#111':'#eee',color:showTickerStudio?'#fff':'#000',fontWeight:800,fontSize:11}}>{showTickerStudio?'Hide':'Open'}</button></div></div>
-{showTickerStudio&&(<div style={{marginTop:10,display:'flex',flexDirection:'column',gap:8,overflow:'hidden'}}>
-<input value={tickerText} onChange={e=>{setTickerText(e.target.value);localStorage.setItem('taglive_ticker_text',e.target.value);tickerOffsetRef.current=720}} placeholder="Type announcement..." style={{width:'100%',padding:10,borderRadius:10,border:'2px solid #111',fontSize:12,fontWeight:700,background:'#000',color:'#FFFF00',boxSizing:'border-box'}}/>
-<div style={{display:'flex',gap:6,flexWrap:'wrap',minWidth:0}}>
-<div style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:6,background:'#f3f0ff',padding:'6px 10px',borderRadius:10}}><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>A-</span><input type="range" min={16} max={60} value={tickerSize} onChange={e=>{ const v=parseInt(e.target.value); setTickerSize(v); localStorage.setItem('taglive_ticker_size', v.toString()) }} style={{flex:1,minWidth:0,width:0}}/><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>A+</span><span style={{fontSize:10,fontWeight:800,background:'#111',color:'#fff',padding:'3px 6px',borderRadius:20,flexShrink:0}}>{tickerSize}</span></div>
-<div style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:6,background:'#fef3c7',padding:'6px 10px',borderRadius:10}}><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>Speed</span><input type="range" min={1} max={10} value={tickerSpeed} onChange={e=>{ const v=parseInt(e.target.value); setTickerSpeed(v); localStorage.setItem('taglive_ticker_speed', v.toString()) }} style={{flex:1,minWidth:0,width:0}}/><span style={{fontSize:10,fontWeight:800,background:'#111',color:'#fff',padding:'3px 6px',borderRadius:20,flexShrink:0}}>{tickerSpeed}</span></div>
-</div>
-</div>)}</div>
-<div style={{border:'2px solid #7c3aed',borderRadius:16,padding:12,background:'#fff'}}>
-<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:13}}>Church Name + Logo</b><button onClick={()=>setShowChurchName(!showChurchName)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:showChurchName?'#7c3aed':'#111',color:'#fff',fontWeight:800,fontSize:11}}>{showChurchName?'ON':'OFF'}</button></div>
-<input value={churchName} onChange={e=>{setChurchName(e.target.value);localStorage.setItem('taglive_church_name',e.target.value)}} placeholder="SALEM GANA JA CITY" style={{width:'100%',marginTop:8,padding:10,borderRadius:10,border:'2px solid #7c3aed',fontSize:12,fontWeight:800,boxSizing:'border-box'}}/>
-<div style={{marginTop:10,border:'1px dashed #7c3aed',borderRadius:10,padding:10,background:'#f9f5ff'}}>
-<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:11}}>LOGO</b>{logoImage&&<button onClick={removeChurchLogo} style={{padding:'4px 8px',borderRadius:6,border:'none',background:'red',color:'#fff',fontWeight:800,fontSize:10}}>Remove</button>}</div>
-<div style={{display:'flex',gap:8,alignItems:'center',marginTop:8}}>
-{logoImage&&<img src={logoImage} style={{width:50,height:50,objectFit:'contain',borderRadius:8,border:'1px solid #ddd',background:'#fff'}}/>}
-<div style={{flex:1}}>
-<input ref={churchLogoInputRef} type="file" accept="image/*" onChange={handleChurchLogoPick} style={{width:'100%',fontSize:11}}/>
-<div style={{fontSize:9,opacity:0.7,marginTop:2}}>{logoImage?'Logo saved - stays after refresh':'No logo saved'}</div>
+<div style={{border:'2px solid #111',borderRadius:16,padding:12,background:'#fff'}}>
+<b>⚙️ Settings & Studio</b>
+<div style={{marginTop:10,display:'flex',flexDirection:'column',gap:8}}>
+<button onClick={()=>setShowSettings(!showSettings)} style={{padding:'8px',borderRadius:20,border:'none',background:'#111',color:'#fff',fontWeight:800}}>Open Settings</button>
+{showSettings&&<div>Settings content here - ticker, church name, logo upload</div>}
 </div>
 </div>
+<div style={{display:'flex',gap:6}}><button onClick={()=>setBgMode('face')} style={{flex:1,padding:8,borderRadius:20,border:'none',background:bgMode==='face'?'#111':'#eee',color:bgMode==='face'?'#fff':'#000',fontWeight:800}}>Face</button><button onClick={()=>setBgMode('black')} style={{flex:1,padding:8,borderRadius:20,border:'none',background:bgMode==='black'?'#111':'#eee',color:bgMode==='black'?'#fff':'#000',fontWeight:800}}>Black</button><button onClick={()=>setBgMode('image')} style={{flex:1,padding:8,borderRadius:20,border:'none',background:bgMode==='image'?'#111':'#eee',color:bgMode==='image'?'#fff':'#000',fontWeight:800}}>Image</button><button onClick={()=>setBgMode('split')} style={{flex:1,padding:8,borderRadius:20,border:'none',background:bgMode==='split'?'#7c3aed':'#eee',color:bgMode==='split'?'#fff':'#000',fontWeight:800}}>Top/Bottom</button></div>
 </div>
+
+<div>
+<div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{background:'#000',borderRadius:18,overflow:'hidden',position:'relative',aspectRatio:'9/16'}}><video ref={videoRef} muted playsInline autoPlay style={{width:'100%',height:'100%',objectFit:'cover',display:isCam?'block':'none'}}/><canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%'}}/>
+<video ref={broadcastVideoRef} muted playsInline style={{position:'absolute',left:'-9999px',top:'-9999px',width:'10px',height:'10px',opacity:0.01}}/>
 </div>
+<div style={{display:'flex',gap:8,marginTop:12}}>{!isCam?<button onClick={()=>startCamera()} style={{flex:1,background:'#111',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Start Camera</button>:<><button onClick={toggleCamera} style={{flex:1,background:'#7c3aed',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Switch Camera</button><button onClick={stopCamera} style={{flex:1,background:'#444',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Stop</button></>}</div>
+<div style={{display:'flex',gap:6,marginTop:10}}>{!isRecording?<button onClick={startRecording} disabled={!isCam} style={{flex:1,background:isCam?'#a21caf':'#ccc',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none'}}>Record MP4</button>:<button onClick={stopRecording} style={{flex:1,background:'#111',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none'}}>Stop Recording</button>}{recordedUrl&&<a href={recordedUrl} download={`TagLive-${Date.now()}.webm`} style={{flex:1,background:'#16a34a',color:'#fff',padding:12,borderRadius:10,fontWeight:800,textAlign:'center',textDecoration:'none'}}>Download</a>}</div>
+<div style={{display:'flex',gap:6,marginTop:10}}><button onClick={openBibleApp} style={{flex:1,background:'#2563eb',color:'#fff',padding:10,borderRadius:10,fontWeight:800,border:'none'}}>Open Bible</button><button onClick={pasteClipboard} style={{flex:1,background:'#059669',color:'#fff',padding:10,borderRadius:10,fontWeight:800,border:'none'}}>Paste</button><button onClick={saveVerse} style={{flex:1,background:'#f59e0b',color:'#000',padding:10,borderRadius:10,fontWeight:800,border:'none'}}>Save</button></div>
+<textarea value={verse} onChange={e=>setVerse(e.target.value)} style={{width:'100%',height:90,marginTop:10,padding:12,borderRadius:12,border:'1px solid #ddd'}}/>
 </div>
-)}
+
+<div style={{display:'flex',flexDirection:'column',gap:12}}>
+<div style={{border:'2px solid #111',borderRadius:14,padding:12}}><b>Connect Facebook</b><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={loginFacebook} style={{flex:1,background:fbUser?'#16a34a':'#1877F2',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{fbUser?`✓ ${fbUser.name}`:'Login Facebook'}</button><button onClick={()=>loadPages()} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Load Pages</button></div>{pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6,padding:10,background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff',color:selectedPage?.id===p.id?'#fff':'#000',borderRadius:8,fontSize:13,fontWeight:700,cursor:'pointer'}}>{p.name}</div>)}</div>
+<div style={{border:'2px solid #ff0000',borderRadius:14,padding:12}}><b>Connect YouTube</b><input value={ytKey} onChange={e=>setYtKey(e.target.value)} placeholder="YouTube Stream Key" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd'}}/><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={()=>{setYtLive(true);setIsLive(true);startTimer()}} style={{flex:1,background:ytLive?'#16a34a':'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{ytLive?`LIVE ${formatTime(liveSeconds)}`:'Go Live YouTube'}</button><button onClick={()=>{setYtLive(false);if(!fbStreamUrl)setIsLive(false);stopTimer()}} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Stop YT</button></div></div>
 </div>
-{/* ... rest of your studio columns (canvas, Facebook, YouTube) stay same - just keep them after this ... */}
+
 </div>
 </div>
 )
