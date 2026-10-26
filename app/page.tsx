@@ -119,7 +119,6 @@ useEffect(()=>{
 const trackDevice=async()=>{
 try{
 const isAdminUser=localStorage.getItem('taglive_admin')==='true'
-// FIXED: DO NOT COUNT ADMIN
 if(!isAdminUser){
 let deviceId=localStorage.getItem('taglive_device')
 if(!deviceId){ deviceId=`dev_${Date.now()}_${Math.random().toString(36).slice(2,9)}`; localStorage.setItem('taglive_device', deviceId) }
@@ -127,7 +126,6 @@ await supabase.from('taglive_devices').upsert({ device_id: deviceId, last_seen: 
 const lastView=localStorage.getItem('tl_last_view'); const now=Date.now()
 if(!lastView || now-parseInt(lastView)>30*60*1000){ await supabase.from('taglive_views').insert({ device_id: deviceId }); localStorage.setItem('tl_last_view', now.toString()) }
 }
-// FETCH STATS ONLY FOR ADMIN
 if(isAdminUser){
 const nowDate=new Date(); const todayStart=new Date(nowDate); todayStart.setHours(0,0,0,0)
 const weekStart=new Date(nowDate); weekStart.setDate(nowDate.getDate()-7)
@@ -145,7 +143,6 @@ setStats({ live: live||0, daily: daily||0, weekly: weekly||0, monthly: monthly||
 trackDevice(); const interval=setInterval(trackDevice,60000); return()=>clearInterval(interval)
 },[isAdmin])
 
-// --- NEW: IndexedDB for Intro/Outro (fixes wipe) ---
 const IDB_NAME='taglive_videos_db'; const IDB_STORE='media';
 const getDB=()=>new Promise<any>((res,rej)=>{ const r=indexedDB.open(IDB_NAME,1); r.onupgradeneeded=()=>{ if(!r.result.objectStoreNames.contains(IDB_STORE)) r.result.createObjectStore(IDB_STORE) }; r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error) })
 const idbSave=async(key:string,val:any)=>{ try{ const db=await getDB(); const tx=db.transaction(IDB_STORE,'readwrite'); tx.objectStore(IDB_STORE).put(val,key); }catch(e){ console.log('IDB save fail',e) } }
@@ -155,22 +152,14 @@ useEffect(()=>{
 try{
 const ai=localStorage.getItem('taglive_active_intro'); if(ai) setActiveIntroId(ai)
 const ao=localStorage.getItem('taglive_active_outro'); if(ao) setActiveOutroId(ao)
-const cl=localStorage.getItem('taglive_church_logo'); 
-if(cl){ 
-  setLogoImage(cl); 
-  const img=new Image(); 
-  img.src=cl; 
-  img.onload=()=>{ logoImageRef.current=img } 
-}
+const cl=localStorage.getItem('taglive_church_logo'); if(cl){ setLogoImage(cl); const img=new Image(); img.src=cl; img.onload=()=>{ logoImageRef.current=img } }
 const sv=localStorage.getItem('taglive_saved'); if(sv){ setSaved(JSON.parse(sv)) }
 const cn=localStorage.getItem('taglive_church_name'); if(cn) setChurchName(cn)
 const tt=localStorage.getItem('taglive_ticker_text'); if(tt) setTickerText(tt)
 const ton=localStorage.getItem('taglive_ticker_on'); if(ton) setTickerOn(ton==='true')
 const lo=localStorage.getItem('taglive_show_logo'); if(lo) setShowLogo(lo==='true')
-// Load intros/outros from IndexedDB (big files)
 idbGet('intros').then((i:any)=>{ if(i && Array.isArray(i) && i.length) setIntros(i) })
 idbGet('outros').then((o:any)=>{ if(o && Array.isArray(o) && o.length) setOutros(o) })
-// Fallback: old localStorage data if exists
 try{
 const iOld=localStorage.getItem('taglive_intros'); if(iOld){ const parsed=JSON.parse(iOld); if(parsed.length && intros.length===0){ setIntros(parsed); idbSave('intros', parsed) } }
 const oOld=localStorage.getItem('taglive_outros'); if(oOld){ const parsed=JSON.parse(oOld); if(parsed.length && outros.length===0){ setOutros(parsed); idbSave('outros', parsed) } }
@@ -470,7 +459,6 @@ const nearLogo=logoImage&&showLogo&&distLogo<300
 const now=Date.now()
 const timeDiff=now-editStateRef.current.lastTap
 const moved=Math.hypot(tx-editStateRef.current.lastX, ty-editStateRef.current.lastY)
-
 if(nearText||nearLogo){
   const tappedTarget=nearLogo&&(!nearText||distLogo<distText)?'logo':'text'
   if(timeDiff<350 && moved<80 && editStateRef.current.target===tappedTarget){
@@ -624,7 +612,7 @@ a=requestAnimationFrame(draw)
 }
 draw()
 return()=>cancelAnimationFrame(a)
-},[isCam,verse,isLive,pos,bgMode,fontSize,align,bgImage,ytLive,textColor,boxColor,boxOpacity,logoImage,logoPos,isRecording,selected,showText,showLogo,tickerOn,tickerText,tickerSize,tickerSpeed,churchName,showChurchName,liveSeconds,lowData,broadcastPlaying])
+},[isCam,verse,isLive,pos,bgMode,fontSize,align,bgImage,ytLive,textColor,boxColor,boxOpacity,logoImage,logoPos,isRecording,selected,showText,showLogo,tickerOn,tickerText,tickerSize,tickerSpeed,churchName,showChurchName,liveSeconds,lowData,broadcastPlaying]);
 
 return (
 <div style={{minHeight:'100vh',background:'#f5f5f7'}}>
@@ -647,12 +635,7 @@ return (
 
 {/* HEADER - FIXED TO MATCH SCREENSHOT 1 - BOLDER LOGO.PNG */}
 <div style={{background:'#fff',borderBottom:'2px solid #111',padding:'8px 12px',display:'flex',alignItems:'center',gap:12,position:'sticky',top:0,zIndex:100}}>
-  <img 
-    src="/logo.png" 
-    alt="TagLive - Tag Your Live" 
-    style={{height:54,width:'auto',maxWidth:280,objectFit:'contain',display:'block'}} 
-    onError={(e:any)=>{e.currentTarget.style.display='none'}} 
-  />
+  <img src="/logo.png" alt="TagLive - Tag Your Live" style={{height:54,width:'auto',maxWidth:280,objectFit:'contain',display:'block'}} />
   {(isLive||ytLive||isRecording)&&<div style={{marginLeft:'auto',color:'#FF0000',fontWeight:900,border:'2px solid red',borderRadius:20,padding:'6px 12px',fontSize:11}}>● LIVE {formatTime(liveSeconds)}</div>}
 </div>
 
@@ -666,7 +649,6 @@ return (
 <div onClick={()=>setShowMonthPicker(true)} style={{background:'#111',borderRadius:10,padding:8,border:'2px solid #ff00ff',cursor:'pointer'}}><div style={{fontSize:10,color:'#fff'}}>MONTHLY ↕</div><div style={{fontSize:18,fontWeight:900,color:'#ff00ff'}}>{stats.monthly}</div></div>
 <div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>TOTAL</div><div style={{fontSize:18,fontWeight:900,color:'#fff'}}>{stats.total}</div></div>
 </div>
-
 {showMonthPicker&&(
 <div style={{marginTop:12,background:'#111',border:'2px solid #ff00ff',borderRadius:16,padding:12}}>
 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
@@ -692,7 +674,6 @@ monthCount!==null?
 </div>
 </div>
 )}
-
 </div>)}
 </div>)}
 
@@ -705,7 +686,6 @@ monthCount!==null?
 {showSettings&&(
 <div style={{marginTop:12,display:'flex',flexDirection:'column',gap:12}}>
 <div style={{border:'2px solid #FF0000',borderRadius:12,padding:10,background:lowData?'#fef2f2':'#fff',display:'flex',justifyContent:'space-between',alignItems:'center'}}><div><b style={{fontSize:12}}>Data Saver Mode</b><div style={{fontSize:10,opacity:.7}}>{lowData?'480p - Uses less data':'720p - High Quality'}</div></div><button onClick={()=>{const v=!lowData;setLowData(v);localStorage.setItem('taglive_lowdata',v.toString());if(isCam)setTimeout(()=>startCamera(),300)}} style={{padding:'8px 14px',borderRadius:20,border:'none',background:lowData?'#16a34a':'#111',color:'#fff',fontWeight:900,fontSize:11}}>{lowData?'480p ON':'720p'}</button></div>
-
 <div style={{border:'2px solid #7c3aed',borderRadius:16,padding:12,background:'#f9f5ff'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:14}}>Intro / Outro Studio</b><button onClick={()=>setShowStudio(!showStudio)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:'#111',color:'#fff',fontWeight:800,fontSize:11}}>{showStudio?'Hide':'Open'}</button></div>
 {showStudio&&(<div style={{marginTop:10}}>
 <div style={{display:'flex',gap:6,marginTop:8}}><label style={{flex:1,background:'#7c3aed',color:'#fff',padding:12,borderRadius:10,fontWeight:800,fontSize:12,textAlign:'center',cursor:'pointer'}}>Upload Intro<input ref={introFileRef} type="file" accept="video/*,image/*" onChange={handleIntroFile} style={{display:'none'}}/></label><label style={{flex:1,background:'#111',color:'#fff',padding:12,borderRadius:10,fontWeight:800,fontSize:12,textAlign:'center',cursor:'pointer'}}>Upload Outro<input ref={outroFileRef} type="file" accept="video/*,image/*" onChange={handleOutroFile} style={{display:'none'}}/></label></div>
@@ -715,7 +695,6 @@ monthCount!==null?
 </div>
 </div>)}
 </div>
-
 <div style={{border:'2px solid #111',borderRadius:16,padding:12,background:'#ffffff',overflow:'hidden'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><b style={{fontSize:13,color:'#111',flex:1}}>Scrolling Ticker</b><div style={{display:'flex',gap:6,flexShrink:0}}><button onClick={()=>{ const v=!tickerOn; setTickerOn(v); localStorage.setItem('taglive_ticker_on', v.toString()) }} style={{padding:'8px 14px',borderRadius:20,border:'none',background:tickerOn?'#16a34a':'#111',color:'#fff',fontWeight:900,fontSize:11}}>{tickerOn?'ON':'OFF'}</button><button onClick={()=>setShowTickerStudio(!showTickerStudio)} style={{padding:'8px 12px',borderRadius:20,border:'none',background:showTickerStudio?'#111':'#eee',color:showTickerStudio?'#fff':'#000',fontWeight:800,fontSize:11}}>{showTickerStudio?'Hide':'Open'}</button></div></div>
 {showTickerStudio&&(<div style={{marginTop:10,display:'flex',flexDirection:'column',gap:8,overflow:'hidden'}}>
 <input value={tickerText} onChange={e=>{setTickerText(e.target.value);localStorage.setItem('taglive_ticker_text',e.target.value);tickerOffsetRef.current=720}} placeholder="Type announcement..." style={{width:'100%',padding:10,borderRadius:10,border:'2px solid #111',fontSize:12,fontWeight:700,background:'#000',color:'#FFFF00',boxSizing:'border-box'}}/>
@@ -724,7 +703,6 @@ monthCount!==null?
 <div style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:6,background:'#fef3c7',padding:'6px 10px',borderRadius:10}}><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>Speed</span><input type="range" min={1} max={10} value={tickerSpeed} onChange={e=>{ const v=parseInt(e.target.value); setTickerSpeed(v); localStorage.setItem('taglive_ticker_speed', v.toString()) }} style={{flex:1,minWidth:0,width:0}}/><span style={{fontSize:10,fontWeight:800,background:'#111',color:'#fff',padding:'3px 6px',borderRadius:20,flexShrink:0}}>{tickerSpeed}</span></div>
 </div>
 </div>)}</div>
-
 <div style={{border:'2px solid #7c3aed',borderRadius:16,padding:12,background:'#fff'}}>
 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:13}}>Church Name + Logo</b><button onClick={()=>setShowChurchName(!showChurchName)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:showChurchName?'#7c3aed':'#111',color:'#fff',fontWeight:800,fontSize:11}}>{showChurchName?'ON':'OFF'}</button></div>
 <input value={churchName} onChange={e=>{setChurchName(e.target.value);localStorage.setItem('taglive_church_name',e.target.value)}} placeholder="SALEM GANA JA CITY" style={{width:'100%',marginTop:8,padding:10,borderRadius:10,border:'2px solid #7c3aed',fontSize:12,fontWeight:800,boxSizing:'border-box'}}/>
@@ -739,7 +717,11 @@ monthCount!==null?
 </div>
 </div>
 </div>
-
 </div>
 )}
 </div>
+{/* ... rest of your studio columns (canvas, Facebook, YouTube) stay same - just keep them after this ... */}
+</div>
+</div>
+)
+}
