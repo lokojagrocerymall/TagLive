@@ -84,6 +84,14 @@ const audioCtxRef=useRef<any>(null)
 // FIX FOR INTRO STOP - TV STUDIO MODE
 const introTimeoutRef=useRef<any>(null)
 const fbPendingRef=useRef<any>(null)
+// FIX: ADMIN DASHBOARD CHECK - RESTORED
+useEffect(()=>{
+try{
+const params=new URLSearchParams(window.location.search)
+if(params.get('admin')==='taglive2026'){ localStorage.setItem('taglive_admin','true'); setIsAdmin(true) }
+else if(localStorage.getItem('taglive_admin')==='true'){ setIsAdmin(true) }
+}catch{}
+},[])
 const formatTime=(sec:number)=>{ const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60; return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}` }
 const startTimer=()=>{ if(timerRef.current) clearInterval(timerRef.current); setLiveSeconds(0); timerRef.current=setInterval(()=>setLiveSeconds(p=>p+1),1000) }
 const stopTimer=()=>{ if(timerRef.current) clearInterval(timerRef.current); timerRef.current=null; setLiveSeconds(0) }
