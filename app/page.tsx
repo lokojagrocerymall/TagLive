@@ -87,7 +87,6 @@ const introTimeoutRef=useRef<any>(null)
 const fbPendingRef=useRef<any>(null)
 const heartbeatRef=useRef<any>(null)
 
-// 2. FB SDK loader with App ID 1951327349161990 - your Facebook button will now work
 useEffect(()=>{
 if(typeof window==='undefined') return
 if(window.FB) return
@@ -126,7 +125,6 @@ const [calMonth,setCalMonth]=useState(new Date().getMonth())
 const [monthCount,setMonthCount]=useState<number|null>(null)
 const [monthLoading,setMonthLoading]=useState(false)
 
-// 3. fetchMonthCount using Date.UTC - Global UTC
 const fetchMonthCount=async(year:number,month:number)=>{
 setMonthLoading(true)
 setCalMonth(month)
@@ -140,7 +138,6 @@ setMonthCount(count||0)
 setMonthLoading(false)
 }
 
-// 4. Tracking: getGlobalDeviceId with migration, live_presence + taglive_devices with user_id, daily unique UTC, LIVE 45s cutoff, 15s heartbeat, offline detection
 const getGlobalDeviceId=()=>{
 try{
 let gid=localStorage.getItem('taglive_global_device')
@@ -338,7 +335,6 @@ const createFbLiveAuto=async(page:any)=>{
 const active=intros.find(i=>i.id===activeIntroId)
 if(active){
 setBroadcastPlaying(active)
-  }
 introTimeoutRef.current=setTimeout(async()=>{
 setBroadcastPlaying(null); broadcastImageRef.current=null;
 if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause() }catch{} }
@@ -357,8 +353,7 @@ const data=await res.json(); if(data.error) throw new Error(JSON.stringify(data.
 }catch(e:any){ setIsLive(true); startTimer() }
 }
 }
-
-const openBibleApp=()=>{ setShowBible(true) }
+  const openBibleApp=()=>{ setShowBible(true) }
 const fetchBible=async(overrideQuery?:string)=>{
 const queryToUse=overrideQuery||bibleQuery
 if(!queryToUse.trim()) return
@@ -529,7 +524,7 @@ const stopRecording=async()=>{
     }
   } else { stopRecordingFinal() }
 }
-  const editStateRef=useRef({ locked:false, target:null as any, lastTap:0, lastX:0, lastY:0 })
+const editStateRef=useRef({ locked:false, target:null as any, lastTap:0, lastX:0, lastY:0 })
 
 const onTouchStart=(e:any)=>{
 const canvas=canvasRef.current; if(!canvas) return
@@ -598,13 +593,14 @@ if(e.touches.length===2){
 }
 }
 const onTouchEnd=(e:any)=>{
-    setDragging(false)
-  if(e && e.touches && e.touches.length===0){
-    lastTouch.current.dist=0
-  }
+if(editStateRef.current.locked && e.touches.length===0){
+  setDragging(false)
 }
-
-useEffect(()=>{
+if(e.touches.length===0){
+  lastTouch.current.dist=0
+}
+}
+  useEffect(()=>{
 let a:any
 const wrapText=(ctx:any,text:string,maxWidth:number)=>{
 const words=text.split(' '); let lines:string[]=[]; let cur='';
@@ -717,7 +713,6 @@ return (
 </div>
 )}
 
-{/* HEADER - FIXED - ICON + TITLE + SUBTITLE - EXACT AS YOU CIRCLED */}
 <div style={{background:'#fff',borderBottom:'2px solid #111',padding:'10px 14px',display:'flex',alignItems:'center',gap:10,position:'sticky',top:0,zIndex:100}}>
 <img src="/logo.png" alt="TagLive" style={{width:44,height:44,objectFit:'contain',borderRadius:8,flexShrink:0,display:'block'}} />
 <div style={{display:'flex',flexDirection:'column',lineHeight:1.1}}>
