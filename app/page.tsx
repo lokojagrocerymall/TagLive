@@ -51,11 +51,11 @@ const [showTickerStudio,setShowTickerStudio]=useState(false)
 const [showAdmin,setShowAdmin]=useState(false)
 const [showSettings,setShowSettings]=useState(false)
 const [broadcastPlaying,setBroadcastPlaying]=useState<any>(null)
-const [tickerText,setTickerText]=useState('📢 ANNOUNCEMENT: Wealthcome to KPAKO NYANKPA INT\'L MINISTRY - Sunday Service 9AM | Midweek Service Wednesday 6PM | Invite Someone!')
+const [tickerText,setTickerText]=useState("📢 ANNOUNCEMENT: Wealthcome to KPAKO NYANKPA INTL MINISTRY - Sunday Service 9AM | Midweek Service Wednesday 6PM | Invite Someone!")
 const [tickerOn,setTickerOn]=useState(false)
 const [tickerSize,setTickerSize]=useState(26)
 const [tickerSpeed,setTickerSpeed]=useState(2)
-const [churchName,setChurchName]=useState("KPAKO NYANKPA INT'L MINISTRY")
+const [churchName,setChurchName]=useState("KPAKO NYANKPA INTL MINISTRY")
 const [showChurchName,setShowChurchName]=useState(true)
 const [liveSeconds,setLiveSeconds]=useState(0)
 const timerRef=useRef<any>(null)
@@ -115,7 +115,7 @@ if(params.get('admin')==='taglive2026'){ localStorage.setItem('taglive_admin','t
 else if(localStorage.getItem('taglive_admin')==='true'){ setIsAdmin(true) }
 }catch{}
 },[])
-const formatTime=(sec:number)=>{ const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60; return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}` }
+const formatTime=(sec:number)=>{ const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60; return h.toString().padStart(2,'0')+':'+m.toString().padStart(2,'0')+':'+s.toString().padStart(2,'0') }
 const startTimer=()=>{ if(timerRef.current) clearInterval(timerRef.current); setLiveSeconds(0); timerRef.current=setInterval(()=>setLiveSeconds(p=>p+1),1000) }
 const stopTimer=()=>{ if(timerRef.current) clearInterval(timerRef.current); timerRef.current=null; setLiveSeconds(0) }
 
@@ -147,12 +147,12 @@ if(oldId){
   localStorage.setItem('taglive_global_device', oldId)
   return oldId
 }
-gid=`gid_${Date.now()}_${Math.random().toString(36).slice(2,9)}`
+gid='gid_' + Date.now() + '_' + Math.random().toString(36).slice(2,9)
 localStorage.setItem('taglive_global_device', gid)
 localStorage.setItem('taglive_device', gid)
 return gid
 }catch{
-return `gid_${Date.now()}_${Math.random().toString(36).slice(2,9)}`
+return 'gid_' + Date.now() + '_' + Math.random().toString(36).slice(2,9)
 }
 }
 
@@ -257,8 +257,8 @@ const oOld=localStorage.getItem('taglive_outros'); if(oOld){ const parsed=JSON.p
 }catch{}
 setTimeout(()=>{
   if(canvasRef.current){ canvasRef.current.width=480; canvasRef.current.height=854 }
-  setPos((p:any)=>({...p, x:240, y:700 }))
-  setLogoPos((p:any)=>({...p, x:90, y:90 }))
+  setPos((p:any)=>{ return {...p, x:240, y:700 }})
+  setLogoPos((p:any)=>{ return {...p, x:90, y:90 }})
 },600)
 }catch{}
 },[])
@@ -273,7 +273,7 @@ const file=e.target.files?.[0]; if(!file) return
 const base64=await fileToBase64(file)
 let dur=5
 if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }
-const item={ id:`id_${Date.now()}`, type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }
+const item={ id:'id_' + Date.now(), type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }
 const n=[...intros,item]; await saveIntros(n); setActiveIntroId(item.id); localStorage.setItem('taglive_active_intro', item.id); e.target.value=''
 }
 const handleOutroFile=async(e:any)=>{
@@ -281,7 +281,7 @@ const file=e.target.files?.[0]; if(!file) return
 const base64=await fileToBase64(file)
 let dur=5
 if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }
-const item={ id:`id_${Date.now()}`, type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }
+const item={ id:'id_' + Date.now(), type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }
 const n=[...outros,item]; await saveOutros(n); setActiveOutroId(item.id); localStorage.setItem('taglive_active_outro', item.id); e.target.value=''
 }
 
@@ -340,7 +340,7 @@ setBroadcastPlaying(null); broadcastImageRef.current=null;
 if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause() }catch{} }
 setSelectedPage(page)
 try{
-const res=await fetch(`https://graph.facebook.com/v19.0/${page.id}/live_videos`,{ method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({ access_token: page.access_token, title: verse.substring(0,60), description: 'TagLive - '+verse, status: 'UNPUBLISHED' }) })
+const res=await fetch('https://graph.facebook.com/v19.0/' + page.id + '/live_videos',{ method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({ access_token: page.access_token, title: verse.substring(0,60), description: 'TagLive - '+verse, status: 'UNPUBLISHED' }) })
 const data=await res.json(); if(data.error) throw new Error(JSON.stringify(data.error)); setFbStreamUrl(data.stream_url); setLiveId(data.id); setIsLive(true); startTimer()
 }catch(e:any){ setIsLive(true); startTimer() }
 }, (active.duration||5)*1000)
@@ -348,7 +348,7 @@ fbPendingRef.current={ page }
 } else {
 setSelectedPage(page)
 try{
-const res=await fetch(`https://graph.facebook.com/v19.0/${page.id}/live_videos`,{ method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({ access_token: page.access_token, title: verse.substring(0,60), description: 'TagLive - '+verse, status: 'UNPUBLISHED' }) })
+const res=await fetch('https://graph.facebook.com/v19.0/' + page.id + '/live_videos',{ method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({ access_token: page.access_token, title: verse.substring(0,60), description: 'TagLive - '+verse, status: 'UNPUBLISHED' }) })
 const data=await res.json(); if(data.error) throw new Error(JSON.stringify(data.error)); setFbStreamUrl(data.stream_url); setLiveId(data.id); setIsLive(true); startTimer()
 }catch(e:any){ setIsLive(true); startTimer() }
 }
@@ -368,10 +368,10 @@ if(found) return OFFLINE_KJV[found]+' [OFFLINE KJV]'
 return null
 }
 try{
-const res=await fetch(`https://bible-api.com/${encodeURIComponent(queryToUse)}?translation=${bibleVer}`)
+const res=await fetch('https://bible-api.com/' + encodeURIComponent(queryToUse) + '?translation=' + bibleVer)
 const data=await res.json()
 if(data.text){
-const full=`${data.reference} (${bibleVer.toUpperCase()}) - ${data.text}`
+const full=data.reference + ' (' + bibleVer.toUpperCase() + ') - ' + data.text
 setBibleResult(full)
 try{ const cache=JSON.parse(localStorage.getItem('taglive_bible_cache')||'{}'); cache[qLower]=full; localStorage.setItem('taglive_bible_cache', JSON.stringify(cache)) }catch{}
 } else throw new Error('not found')
@@ -583,13 +583,13 @@ if(e.touches.length===1){
   const cw=canvas.width||480; const ch=canvas.height||854
   const tx=(e.touches[0].clientX-rect.left)*(cw/rect.width); 
   const ty=(e.touches[0].clientY-rect.top)*(ch/rect.height); 
-  if(editStateRef.current.target==='logo') setLogoPos(p=>({...p,x:tx,y:ty})); else setPos(p=>({...p,x:tx,y:ty})) 
+  if(editStateRef.current.target==='logo') setLogoPos(p=>{ return {...p,x:tx,y:ty}}); else setPos(p=>{ return {...p,x:tx,y:ty}}) 
   if(!dragging) setDragging(true)
 }
 if(e.touches.length===2){
   const dx=e.touches[1].clientX-e.touches[0].clientX; const dy=e.touches[1].clientY-e.touches[0].clientY; const dist=Math.hypot(dx,dy);
   if(lastTouch.current.dist===0){ lastTouch.current.dist=dist; lastTouch.current.selScale=editStateRef.current.target==='logo'?logoPos.scale:pos.scale; }
-  if(lastTouch.current.dist>0){ const f=dist/lastTouch.current.dist; if(editStateRef.current.target==='logo'){ setLogoPos(p=>({ ...p, scale:Math.min(2,Math.max(0.2,lastTouch.current.selScale*f)) })) } else { setPos(p=>({ ...p, scale:Math.min(1.3,Math.max(0.6,lastTouch.current.selScale*f)) })) } }
+  if(lastTouch.current.dist>0){ const f=dist/lastTouch.current.dist; if(editStateRef.current.target==='logo'){ setLogoPos(p=>{ return { ...p, scale:Math.min(2,Math.max(0.2,lastTouch.current.selScale*f)) }}) } else { setPos(p=>{ return { ...p, scale:Math.min(1.3,Math.max(0.6,lastTouch.current.selScale*f)) }}) } }
 }
 }
 const onTouchEnd=(e:any)=>{
@@ -704,8 +704,8 @@ return (
 <div style={{display:'flex',gap:6,marginTop:10}}><input value={bibleQuery} onChange={e=>setBibleQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')fetchBible()}} placeholder="Type 1 Thes, John, Romans..." style={{flex:1,padding:12,borderRadius:10,border:'2px solid #7c3aed',fontSize:13,fontWeight:700}}/><button onClick={()=>fetchBible()} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:10,padding:'0 16px',fontWeight:800}}>{bibleLoading?'...':'Search'}</button></div>
 <div style={{maxHeight:200,overflowY:'auto',marginTop:8,display:'flex',flexDirection:'column',gap:6}}>
 {!detectedBook&&filteredBooks.length>0&&(<div style={{background:'#f9f5ff',borderRadius:10,padding:8,border:'1px solid #ddd'}}><div style={{fontSize:11,fontWeight:900}}>Books matching "{bibleQuery}":</div>{filteredBooks.map(b=>(<div key={b.name} onClick={()=>setBibleQuery(b.name+' ')} style={{padding:'8px 10px',borderRadius:8,background:'#fff',border:'1px solid #eee',marginTop:4,fontSize:13,fontWeight:700,cursor:'pointer'}}>{b.name} ({b.chapters} ch)</div>))}</div>)}
-{detectedBook&&!parsed.ch&&(<div style={{background:'#f9f5ff',borderRadius:10,padding:8,border:'1px solid #ddd'}}><div style={{fontSize:11,fontWeight:900}}>{detectedBook.name} — Select Chapter:</div><div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:6}}>{Array.from({length:detectedBook.chapters},(_,i)=>i+1).map(ch=>(<button key={ch} onClick={()=>setBibleQuery(`${detectedBook.name} ${ch}`)} style={{padding:'8px 12px',borderRadius:8,border:'1px solid #ddd',background:'#fff',fontWeight:800,fontSize:12}}>{ch}</button>))}</div></div>)}
-{detectedBook&&parsed.ch&&!parsed.vs&&(<div style={{background:'#f0fdf4',borderRadius:10,padding:8,border:'1px solid #bbf7d0'}}><div style={{fontSize:11,fontWeight:900}}>{detectedBook.name} {parsed.ch} — Select Verse:</div><div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:6}}><button onClick={()=>fetchBible(`${detectedBook.name} ${parsed.ch}`)} style={{padding:'8px 12px',borderRadius:8,border:'none',background:'#16a34a',color:'#fff',fontWeight:800,fontSize:12}}>All Chapter</button>{Array.from({length:30},(_,i)=>i+1).map(v=>(<button key={v} onClick={()=>{const q=`${detectedBook.name} ${parsed.ch}:${v}`;setBibleQuery(q);fetchBible(q)}} style={{padding:'8px 12px',borderRadius:8,border:'1px solid #ddd',background:'#fff',fontWeight:800,fontSize:12}}>{v}</button>))}</div></div>)}
+{detectedBook&&!parsed.ch&&(<div style={{background:'#f9f5ff',borderRadius:10,padding:8,border:'1px solid #ddd'}}><div style={{fontSize:11,fontWeight:900}}>{detectedBook.name} — Select Chapter:</div><div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:6}}>{Array.from({length:detectedBook.chapters},(_,i)=>i+1).map(ch=>(<button key={ch} onClick={()=>setBibleQuery(detectedBook.name + ' ' + ch)} style={{padding:'8px 12px',borderRadius:8,border:'1px solid #ddd',background:'#fff',fontWeight:800,fontSize:12}}>{ch}</button>))}</div></div>)}
+{detectedBook&&parsed.ch&&!parsed.vs&&(<div style={{background:'#f0fdf4',borderRadius:10,padding:8,border:'1px solid #bbf7d0'}}><div style={{fontSize:11,fontWeight:900}}>{detectedBook.name} {parsed.ch} — Select Verse:</div><div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:6}}><button onClick={()=>fetchBible(detectedBook.name + ' ' + parsed.ch)} style={{padding:'8px 12px',borderRadius:8,border:'none',background:'#16a34a',color:'#fff',fontWeight:800,fontSize:12}}>All Chapter</button>{Array.from({length:30},(_,i)=>i+1).map(v=>(<button key={v} onClick={()=>{const q=detectedBook.name + ' ' + parsed.ch + ':' + v;setBibleQuery(q);fetchBible(q)}} style={{padding:'8px 12px',borderRadius:8,border:'1px solid #ddd',background:'#fff',fontWeight:800,fontSize:12}}>{v}</button>))}</div></div>)}
 </div>
 <div style={{marginTop:8,background:'#f9f5ff',borderRadius:12,padding:12,flex:1,overflowY:'auto',border:'1px solid #ddd'}}>{bibleLoading?<div style={{opacity:.6,fontSize:12}}>Searching...</div>:bibleResult?<div style={{fontSize:14,lineHeight:1.5,fontWeight:600,whiteSpace:'pre-wrap'}}>{bibleResult}</div>:<div style={{opacity:.6,fontSize:12}}>Type 1 Thes → pick book → chapter → verse.</div>}</div>
 <button onClick={useBibleVerse} disabled={!bibleResult} style={{marginTop:10,background:bibleResult?'#16a34a':'#ccc',color:'#fff',padding:14,borderRadius:12,fontWeight:900,border:'none'}}>Use This Verse On Screen</button>
@@ -809,9 +809,9 @@ monthCount!==null?
 <div style={{display:'flex',alignItems:'center',gap:6,marginTop:10,flexWrap:'wrap',minWidth:0}}><div style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:6,background:'#f3f0ff',padding:'6px 10px',borderRadius:10}}><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>A-</span><input type="range" min={18} max={48} value={fontSize} onChange={e=>setFontSize(parseInt(e.target.value))} style={{flex:1,minWidth:0,width:0}}/><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>A+</span><span style={{fontSize:10,fontWeight:800,background:'#111',color:'#fff',padding:'3px 6px',borderRadius:20,flexShrink:0}}>{fontSize}</span></div><button onClick={()=>setAlign(align==='justify'?'center':'justify')} style={{padding:'8px 10px',borderRadius:10,border:'none',background:align==='justify'?'#111':'#ddd',color:align==='justify'?'#fff':'#000',fontWeight:800,fontSize:10,flexShrink:0}}>{align==='justify'?'Justify':'Center'}</button><button onClick={pickMedia} style={{padding:'8px 10px',borderRadius:10,border:'none',background:'#7c3aed',color:'#fff',fontWeight:800,fontSize:10,flexShrink:0}}>Media</button><input ref={fileInputRef} type="file" accept="image/*" onChange={onFilePick} style={{display:'none'}}/></div>
 
 <div style={{display:'flex',gap:6,marginTop:8,alignItems:'center',background:'#fff',border:'1px solid #eee',padding:8,borderRadius:10,flexWrap:'wrap',minWidth:0}}><div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}><span style={{fontSize:10,fontWeight:800}}>Text</span><input type="color" value={textColor} onChange={e=>setTextColor(e.target.value)} style={{width:28,height:28,border:'none',borderRadius:6}}/></div><div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}><span style={{fontSize:10,fontWeight:800}}>Box</span><input type="color" value={boxColor} onChange={e=>setBoxColor(e.target.value)} style={{width:28,height:28,border:'none',borderRadius:6}}/></div><div style={{display:'flex',alignItems:'center',gap:4,flex:1,minWidth:0}}><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>Opac</span><input type="range" min={0} max={1} step={0.05} value={boxOpacity} onChange={e=>setBoxOpacity(parseFloat(e.target.value))} style={{flex:1,minWidth:0,width:0}}/></div>
-<button onClick={()=>{ const v=!showLogo; setShowLogo(v); localStorage.setItem('taglive_show_logo', v.toString()); if(v){ setLogoPos((p:any)=>({...p, x:80, y:80})) } }} style={{padding:'6px 10px',borderRadius:8,border:'none',background:showLogo?'#16a34a':'#111',color:'#fff',fontWeight:800,fontSize:10,flexShrink:0}}>{showLogo?'Logo':'No Logo'}</button>
+<button onClick={()=>{ const v=!showLogo; setShowLogo(v); localStorage.setItem('taglive_show_logo', v.toString()); if(v){ setLogoPos((p:any)=>{ return {...p, x:80, y:80}} ) } }} style={{padding:'6px 10px',borderRadius:8,border:'none',background:showLogo?'#16a34a':'#111',color:'#fff',fontWeight:800,fontSize:10,flexShrink:0}}>{showLogo?'Logo':'No Logo'}</button>
 <input ref={logoInputRef} type="file" accept="image/*" onChange={onLogoPick} style={{display:'none'}}/>
-<button onClick={()=>{ const v=!showText; setShowText(v); if(v){ setPos((p:any)=>({...p, x:240, y:680})) } }} style={{padding:'6px 10px',borderRadius:8,border:'none',background:showText?'#111':'#ddd',color:showText?'#fff':'#000',fontWeight:800,fontSize:10,flexShrink:0}}>{showText?'Text':'No Text'}</button>
+<button onClick={()=>{ const v=!showText; setShowText(v); if(v){ setPos((p:any)=>{ return {...p, x:240, y:680}} ) } }} style={{padding:'6px 10px',borderRadius:8,border:'none',background:showText?'#111':'#ddd',color:showText?'#fff':'#000',fontWeight:800,fontSize:10,flexShrink:0}}>{showText?'Text':'No Text'}</button>
 </div>
 </div>
 
