@@ -691,7 +691,9 @@ ctx.fillText(txt,tickerOffsetRef.current,c.height-tickerH/2)
 a=requestAnimationFrame(draw)
 }
 draw();
-return()=>{ cancelAnimationFrame(a); }
+return () => {
+  cancelAnimationFrame(a);
+};
 },[isCam,verse,isLive,pos,bgMode,fontSize,align,bgImage,ytLive,textColor,boxColor,boxOpacity,logoImage,logoPos,isRecording,selected,showText,showLogo,tickerOn,tickerText,tickerSize,tickerSpeed,churchName,showChurchName,liveSeconds,lowData,broadcastPlaying]);
 
 return (
