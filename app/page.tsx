@@ -601,7 +601,7 @@ if(e.touches.length===0){
 }
 }
   useEffect(()=>{
-let a:any
+let a:any = 0
 const wrapText=(ctx:any,text:string,maxWidth:number)=>{
 const words=text.split(' '); let lines:string[]=[]; let cur='';
 for(let w of words){ const test=cur+w+' '; if(ctx.measureText(test).width>maxWidth&&cur!==''){ lines.push(cur.trim()); cur=w+' ' } else cur=test }
@@ -690,8 +690,8 @@ ctx.fillText(txt,tickerOffsetRef.current,c.height-tickerH/2)
 }
 a=requestAnimationFrame(draw)
 }
-draw()
-return()=>cancelAnimationFrame(a)
+draw();
+return()=>{ cancelAnimationFrame(a); }
 },[isCam,verse,isLive,pos,bgMode,fontSize,align,bgImage,ytLive,textColor,boxColor,boxOpacity,logoImage,logoPos,isRecording,selected,showText,showLogo,tickerOn,tickerText,tickerSize,tickerSpeed,churchName,showChurchName,liveSeconds,lowData,broadcastPlaying]);
 
 return (
