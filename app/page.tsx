@@ -49,7 +49,7 @@ const [showTickerStudio,setShowTickerStudio]=useState(false)
 const [showAdmin,setShowAdmin]=useState(false)
 const [showSettings,setShowSettings]=useState(false)
 const [broadcastPlaying,setBroadcastPlaying]=useState<any>(null)
-const [tickerText,setTickerText]=useState('📢 ANNOUNCEMENT: Wealthcome To KPAKO NYAMKPA INTL MINISTRY Sunday Service 9AM | Midweek Service Wednesday 6PM | Invite Someone!')
+const [tickerText,setTickerText]=useState('📢 ANNOUNCEMENT: Sunday Service 9AM | Midweek Service Wednesday 6PM | Invite Someone!')
 const [tickerOn,setTickerOn]=useState(false)
 const [tickerSize,setTickerSize]=useState(26)
 const [tickerSpeed,setTickerSpeed]=useState(2)
@@ -123,8 +123,13 @@ if(!isAdminUser){
 let deviceId=localStorage.getItem('taglive_device')
 if(!deviceId){ deviceId=`dev_${Date.now()}_${Math.random().toString(36).slice(2,9)}`; localStorage.setItem('taglive_device', deviceId) }
 await supabase.from('taglive_devices').upsert({ device_id: deviceId, last_seen: new Date().toISOString(), user_agent: navigator.userAgent.substring(0,200) }, { onConflict: 'device_id' })
-const lastView=localStorage.getItem('tl_last_view'); const now=Date.now()
-if(!lastView || now-parseInt(lastView)>30*60*1000){ await supabase.from('taglive_views').insert({ device_id: deviceId }); localStorage.setItem('tl_last_view', now.toString()) }
+// --- FIXED DAILY COUNT: 1 DEVICE = 1 COUNT PER DAY ---
+const lastViewDate=localStorage.getItem('tl_last_view_date')
+const todayStr=new Date().toDateString()
+if(lastViewDate!==todayStr){ 
+  await supabase.from('taglive_views').insert({ device_id: deviceId }); 
+  localStorage.setItem('tl_last_view_date', todayStr)
+}
 }
 if(isAdminUser){
 const nowDate=new Date(); const todayStart=new Date(nowDate); todayStart.setHours(0,0,0,0)
