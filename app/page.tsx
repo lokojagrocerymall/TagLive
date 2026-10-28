@@ -2,13 +2,15 @@
 export const dynamic = 'force-dynamic'
 import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@supabase/supabase-js'
+import { useAuth } from './AuthContext'
 const supabase = createClient('https://gqifluvkrjzsebfdjcio.supabase.co','eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdxaWZsdXZrcmp6c2ViZmRqY2lvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIzNzY4NDgsImV4cCI6MjEwNzk1Mjg0OH0.zonQMk22nXN0VsbHyI88hT27ntl-VxEEi8k2G8-k5lc')
-declare global { interface Window { FB: any } }
+declare global { interface Window { FB: any; fbAsyncInit: any } }
 const OFFLINE_KJV: Record<string,string> = {"john 3:16":"John 3:16 - For God so loved the world that He gave His only begotten Son...","romans 1:20":"Romans 1:20 - For the invisible things of Him from the creation...","romans 8:28":"Romans 8:28 - And we know that all things work together...","psalm 23":"Psalm 23 - The LORD is my shepherd...","jeremiah 29:11":"Jeremiah 29:11 - For I know the thoughts that I think...","philippians 4:13":"Philippians 4:13 - I can do all things through Christ...","isaiah 41:10":"Isaiah 41:10 - Fear thou not; for I am with thee...","john 14:6":"John 14:6 - I am the way, the truth, and the life...","2 timothy 1:7":"2 Timothy 1:7 - For God hath not given us the spirit of fear...","psalm 91:1":"Psalm 91:1 - He that dwelleth in the secret place...","matthew 28:19":"Matthew 28:19 - Go ye therefore, and teach all nations...","genesis 1:1":"Genesis 1:1 - In the beginning God created...","proverbs 3:5":"Proverbs 3:5 - Trust in the LORD with all thine heart...","john 1:1":"John 1:1 - In the beginning was the Word...","romans 10:9":"Romans 10:9 - That if thou shalt confess with thy mouth..."}
 const BIBLE_VERSIONS = [{ id: 'kjv', label: 'KJV' },{ id: 'akjv', label: 'NKJV-like' },{ id: 'web', label: 'NIV-like' },{ id: 'bbe', label: 'GNB-like' },{ id: 'asv', label: 'RSV-like' },{ id: 'lsv', label: 'ESV-like' },{ id: 'oeb-cw', label: 'AMP-like' },{ id: 'webbe', label: 'WEBBE' },]
 const BIBLE_BOOKS = [{ name: "Genesis", chapters: 50 },{ name: "Exodus", chapters: 40 },{ name: "Leviticus", chapters: 27 },{ name: "Numbers", chapters: 36 },{ name: "Deuteronomy", chapters: 34 },{ name: "Joshua", chapters: 24 },{ name: "Judges", chapters: 21 },{ name: "Ruth", chapters: 4 },{ name: "1 Samuel", chapters: 31 },{ name: "2 Samuel", chapters: 24 },{ name: "1 Kings", chapters: 22 },{ name: "2 Kings", chapters: 25 },{ name: "1 Chronicles", chapters: 29 },{ name: "2 Chronicles", chapters: 36 },{ name: "Ezra", chapters: 10 },{ name: "Nehemiah", chapters: 13 },{ name: "Esther", chapters: 10 },{ name: "Job", chapters: 42 },{ name: "Psalm", chapters: 150 },{ name: "Proverbs", chapters: 31 },{ name: "Ecclesiastes", chapters: 12 },{ name: "Song of Solomon", chapters: 8 },{ name: "Isaiah", chapters: 66 },{ name: "Jeremiah", chapters: 52 },{ name: "Lamentations", chapters: 5 },{ name: "Ezekiel", chapters: 48 },{ name: "Daniel", chapters: 12 },{ name: "Hosea", chapters: 14 },{ name: "Joel", chapters: 3 },{ name: "Amos", chapters: 9 },{ name: "Obadiah", chapters: 1 },{ name: "Jonah", chapters: 4 },{ name: "Micah", chapters: 7 },{ name: "Nahum", chapters: 3 },{ name: "Habakkuk", chapters: 3 },{ name: "Zephaniah", chapters: 3 },{ name: "Haggai", chapters: 2 },{ name: "Zechariah", chapters: 14 },{ name: "Malachi", chapters: 4 },{ name: "Matthew", chapters: 28 },{ name: "Mark", chapters: 16 },{ name: "Luke", chapters: 24 },{ name: "John", chapters: 21 },{ name: "Acts", chapters: 28 },{ name: "Romans", chapters: 16 },{ name: "1 Corinthians", chapters: 16 },{ name: "2 Corinthians", chapters: 13 },{ name: "Galatians", chapters: 6 },{ name: "Ephesians", chapters: 6 },{ name: "Philippians", chapters: 4 },{ name: "Colossians", chapters: 4 },{ name: "1 Thessalonians", chapters: 5 },{ name: "2 Thessalonians", chapters: 3 },{ name: "1 Timothy", chapters: 6 },{ name: "2 Timothy", chapters: 4 },{ name: "Titus", chapters: 3 },{ name: "Philemon", chapters: 1 },{ name: "Hebrews", chapters: 13 },{ name: "James", chapters: 5 },{ name: "1 Peter", chapters: 5 },{ name: "2 Peter", chapters: 3 },{ name: "1 John", chapters: 5 },{ name: "2 John", chapters: 1 },{ name: "3 John", chapters: 1 },{ name: "Jude", chapters: 1 },{ name: "Revelation", chapters: 22 }]
 
 export default function LiveStudio(){
+const { user } = useAuth()
 const [verse,setVerse]=useState("John 3:16 - For God so loved the world that He gave His only begotten Son...")
 const [isCam,setIsCam]=useState(false)
 const [isLive,setIsLive]=useState(false)
@@ -49,7 +51,7 @@ const [showTickerStudio,setShowTickerStudio]=useState(false)
 const [showAdmin,setShowAdmin]=useState(false)
 const [showSettings,setShowSettings]=useState(false)
 const [broadcastPlaying,setBroadcastPlaying]=useState<any>(null)
-const [tickerText,setTickerText]=useState('📢 ANNOUNCEMENT: Sunday Service 9AM | Midweek Service Wednesday 6PM | Invite Someone!')
+const [tickerText,setTickerText]=useState('📢 ANNOUNCEMENT: Wealthcome to KPAKO NYANKPA INT\'L MINISTRY - Sunday Service 9AM | Midweek Service Wednesday 6PM | Invite Someone!')
 const [tickerOn,setTickerOn]=useState(false)
 const [tickerSize,setTickerSize]=useState(26)
 const [tickerSpeed,setTickerSpeed]=useState(2)
@@ -81,10 +83,32 @@ const recorderRef=useRef<MediaRecorder|null>(null)
 const chunksRef=useRef<Blob[]>([])
 const churchLogoInputRef=useRef<HTMLInputElement>(null)
 const audioCtxRef=useRef<any>(null)
-// FIX FOR INTRO STOP - TV STUDIO MODE
 const introTimeoutRef=useRef<any>(null)
 const fbPendingRef=useRef<any>(null)
-// FIX: ADMIN DASHBOARD CHECK - RESTORED
+const heartbeatRef=useRef<any>(null)
+
+// 2. FB SDK loader with App ID 1951327349161990 - your Facebook button will now work
+useEffect(()=>{
+if(typeof window==='undefined') return
+if(window.FB) return
+window.fbAsyncInit=function(){
+  window.FB.init({
+    appId:'1951327349161990',
+    cookie:true,
+    xfbml:true,
+    version:'v19.0'
+  })
+}
+const id='facebook-jssdk'
+if(document.getElementById(id)) return
+const js=document.createElement('script')
+js.id=id
+js.src='https://connect.facebook.net/en_US/sdk.js'
+js.async=true
+js.defer=true
+document.head.appendChild(js)
+},[])
+
 useEffect(()=>{
 try{
 const params=new URLSearchParams(window.location.search)
@@ -95,53 +119,117 @@ else if(localStorage.getItem('taglive_admin')==='true'){ setIsAdmin(true) }
 const formatTime=(sec:number)=>{ const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60; return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}` }
 const startTimer=()=>{ if(timerRef.current) clearInterval(timerRef.current); setLiveSeconds(0); timerRef.current=setInterval(()=>setLiveSeconds(p=>p+1),1000) }
 const stopTimer=()=>{ if(timerRef.current) clearInterval(timerRef.current); timerRef.current=null; setLiveSeconds(0) }
-  // --- ADMIN CALENDAR STATES ---
+
 const [showMonthPicker,setShowMonthPicker]=useState(false)
 const [calYear,setCalYear]=useState(new Date().getFullYear())
 const [calMonth,setCalMonth]=useState(new Date().getMonth())
 const [monthCount,setMonthCount]=useState<number|null>(null)
 const [monthLoading,setMonthLoading]=useState(false)
 
+// 3. fetchMonthCount using Date.UTC - Global UTC
 const fetchMonthCount=async(year:number,month:number)=>{
 setMonthLoading(true)
 setCalMonth(month)
 setCalYear(year)
 try{
-const start=new Date(year,month,1); start.setHours(0,0,0,0)
-const end=new Date(year,month+1,0); end.setHours(23,59,59,999)
+const start=new Date(Date.UTC(year,month,1,0,0,0,0))
+const end=new Date(Date.UTC(year,month+1,0,23,59,59,999))
 const { count }=await supabase.from('taglive_views').select('*',{count:'exact',head:true}).gte('created_at', start.toISOString()).lte('created_at', end.toISOString())
 setMonthCount(count||0)
 }catch{ setMonthCount(0) }
 setMonthLoading(false)
 }
 
+// 4. Tracking: getGlobalDeviceId with migration, live_presence + taglive_devices with user_id, daily unique UTC, LIVE 45s cutoff, 15s heartbeat, offline detection
+const getGlobalDeviceId=()=>{
+try{
+let gid=localStorage.getItem('taglive_global_device')
+if(gid) return gid
+const oldId=localStorage.getItem('taglive_device')
+if(oldId){
+  localStorage.setItem('taglive_global_device', oldId)
+  return oldId
+}
+gid=`gid_${Date.now()}_${Math.random().toString(36).slice(2,9)}`
+localStorage.setItem('taglive_global_device', gid)
+localStorage.setItem('taglive_device', gid)
+return gid
+}catch{
+return `gid_${Date.now()}_${Math.random().toString(36).slice(2,9)}`
+}
+}
+
 useEffect(()=>{
+let mounted=true
 const trackDevice=async()=>{
 try{
 const isAdminUser=localStorage.getItem('taglive_admin')==='true'
+const deviceId=getGlobalDeviceId()
 if(!isAdminUser){
-let deviceId=localStorage.getItem('taglive_device')
-if(!deviceId){ deviceId=`dev_${Date.now()}_${Math.random().toString(36).slice(2,9)}`; localStorage.setItem('taglive_device', deviceId) }
-await supabase.from('taglive_devices').upsert({ device_id: deviceId, last_seen: new Date().toISOString(), user_agent: navigator.userAgent.substring(0,200) }, { onConflict: 'device_id' })
-const lastView=localStorage.getItem('tl_last_view'); const now=Date.now()
-if(!lastView || now-parseInt(lastView)>30*60*1000){ await supabase.from('taglive_views').insert({ device_id: deviceId }); localStorage.setItem('tl_last_view', now.toString()) }
+const nowUTC=new Date()
+const todayUTCStart=new Date(Date.UTC(nowUTC.getUTCFullYear(), nowUTC.getUTCMonth(), nowUTC.getUTCDate(), 0,0,0,0))
+const lastViewKey='tl_last_view_utc'
+const lastViewStr=localStorage.getItem(lastViewKey)
+const lastViewTime=lastViewStr?parseInt(lastViewStr):0
+const isNewDayUTC=Date.now()-lastViewTime>24*60*60*1000 || new Date(lastViewTime).getUTCDate()!==nowUTC.getUTCDate() || new Date(lastViewTime).getUTCMonth()!==nowUTC.getUTCMonth()
+
+await supabase.from('taglive_devices').upsert({ 
+  device_id: deviceId, 
+  last_seen: new Date().toISOString(), 
+  user_agent: navigator.userAgent.substring(0,200),
+  user_id: user?.id || null
+}, { onConflict: 'device_id' })
+
+try{
+await supabase.from('live_presence').upsert({
+  device_id: deviceId,
+  user_id: user?.id || null,
+  last_seen: new Date().toISOString(),
+  is_online: true
+}, { onConflict: 'device_id' })
+}catch{}
+
+if(isNewDayUTC || !lastViewStr || Date.now()-lastViewTime>30*60*1000){
+  await supabase.from('taglive_views').insert({ device_id: deviceId, user_id: user?.id || null })
+  localStorage.setItem(lastViewKey, Date.now().toString())
 }
-if(isAdminUser){
-const nowDate=new Date(); const todayStart=new Date(nowDate); todayStart.setHours(0,0,0,0)
-const weekStart=new Date(nowDate); weekStart.setDate(nowDate.getDate()-7)
-const monthStart=new Date(nowDate); monthStart.setDate(nowDate.getDate()-30)
-const fiveMinAgo=new Date(nowDate.getTime()-5*60*1000)
-const { count: live }=await supabase.from('taglive_devices').select('*',{count:'exact',head:true}).gt('last_seen', fiveMinAgo.toISOString())
+}
+if(isAdminUser || true){
+const nowDate=new Date()
+const todayUTC=new Date(Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), nowDate.getUTCDate(), 0,0,0,0))
+const weekUTC=new Date(todayUTC); weekUTC.setUTCDate(todayUTC.getUTCDate()-7)
+const monthUTC=new Date(todayUTC); monthUTC.setUTCDate(todayUTC.getUTCDate()-30)
+const liveCutoff=new Date(nowDate.getTime()-45*1000)
+
+const { count: live }=await supabase.from('taglive_devices').select('*',{count:'exact',head:true}).gt('last_seen', liveCutoff.toISOString())
 const { count: total }=await supabase.from('taglive_views').select('*',{count:'exact',head:true})
-const { count: daily }=await supabase.from('taglive_views').select('*',{count:'exact',head:true}).gte('created_at', todayStart.toISOString())
-const { count: weekly }=await supabase.from('taglive_views').select('*',{count:'exact',head:true}).gte('created_at', weekStart.toISOString())
-const { count: monthly }=await supabase.from('taglive_views').select('*',{count:'exact',head:true}).gte('created_at', monthStart.toISOString())
-setStats({ live: live||0, daily: daily||0, weekly: weekly||0, monthly: monthly||0, total: total||0 })
+const { count: daily }=await supabase.from('taglive_views').select('*',{count:'exact',head:true}).gte('created_at', todayUTC.toISOString())
+const { count: weekly }=await supabase.from('taglive_views').select('*',{count:'exact',head:true}).gte('created_at', weekUTC.toISOString())
+const { count: monthly }=await supabase.from('taglive_views').select('*',{count:'exact',head:true}).gte('created_at', monthUTC.toISOString())
+if(mounted) setStats({ live: live||0, daily: daily||0, weekly: weekly||0, monthly: monthly||0, total: total||0 })
 }
 }catch{}
 }
-trackDevice(); const interval=setInterval(trackDevice,60000); return()=>clearInterval(interval)
-},[isAdmin])
+trackDevice()
+heartbeatRef.current=setInterval(trackDevice, 15*1000)
+
+const handleOffline=async()=>{
+try{
+const deviceId=getGlobalDeviceId()
+await supabase.from('live_presence').upsert({ device_id: deviceId, is_online: false, last_seen: new Date().toISOString() }, { onConflict: 'device_id' })
+}catch{}
+}
+
+window.addEventListener('beforeunload', handleOffline)
+window.addEventListener('offline', handleOffline)
+
+return()=>{
+  mounted=false
+  clearInterval(heartbeatRef.current)
+  window.removeEventListener('beforeunload', handleOffline)
+  window.removeEventListener('offline', handleOffline)
+}
+},[isAdmin, user])
 
 const IDB_NAME='taglive_videos_db'; const IDB_STORE='media';
 const getDB=()=>new Promise<any>((res,rej)=>{ const r=indexedDB.open(IDB_NAME,1); r.onupgradeneeded=()=>{ if(!r.result.objectStoreNames.contains(IDB_STORE)) r.result.createObjectStore(IDB_STORE) }; r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error) })
@@ -223,7 +311,7 @@ const toggleCamera=async()=>{ await startCamera(facing==='user'?'environment':'u
 const toggleTorch=async()=>{ try{ const track:any=trackRef.current; if(!track?.getCapabilities?.()?.torch) return; await track.applyConstraints({advanced:[{torch:!torch}] as any}); setTorch(!torch) }catch(e:any){ } }
 
 const loginFacebook=()=>{
-if(!window.FB){ return }
+if(!window.FB){ alert('Facebook SDK still loading, wait 3s'); return }
 window.FB.login((resp:any)=>{ if(resp.authResponse){ window.FB.api('/me?fields=name,picture', (u:any)=>{ setFbUser(u); loadPages(resp.authResponse.accessToken) }) } },{scope:'public_profile,pages_show_list,pages_read_engagement,business_management'})
 }
 const loadPages=(tok?:string)=>{ const t=tok||window.FB?.getAuthResponse()?.accessToken; if(!t) return; window.FB.api('/me/accounts', {access_token:t}, (res:any)=>{ if(res.data?.length){ setPages(res.data) } }) }
@@ -250,15 +338,7 @@ const createFbLiveAuto=async(page:any)=>{
 const active=intros.find(i=>i.id===activeIntroId)
 if(active){
 setBroadcastPlaying(active)
-if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
-if(active.type==='video'&&broadcastVideoRef.current){
-  broadcastVideoRef.current.src=active.data;
-  broadcastVideoRef.current.crossOrigin="anonymous";
-  broadcastVideoRef.current.muted=false;
-  broadcastVideoRef.current.volume=1;
-  broadcastVideoRef.current.playsInline=true;
-  try{ await broadcastVideoRef.current.play() }catch{}
-}
+  }
 introTimeoutRef.current=setTimeout(async()=>{
 setBroadcastPlaying(null); broadcastImageRef.current=null;
 if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause() }catch{} }
@@ -518,7 +598,7 @@ if(e.touches.length===2){
 }
 }
 const onTouchEnd=(e:any)=>{
-  setDragging(false)
+    setDragging(false)
   if(e && e.touches && e.touches.length===0){
     lastTouch.current.dist=0
   }
@@ -609,7 +689,6 @@ const w=ctx.measureText(txt).width
 tickerOffsetRef.current-=tickerSpeed
 if(tickerOffsetRef.current<0-w){ tickerOffsetRef.current=c.width }
 ctx.fillText(txt,tickerOffsetRef.current,c.height-tickerH/2)
-}
 }
 }
 }
