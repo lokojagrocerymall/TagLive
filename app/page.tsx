@@ -123,13 +123,8 @@ if(!isAdminUser){
 let deviceId=localStorage.getItem('taglive_device')
 if(!deviceId){ deviceId=`dev_${Date.now()}_${Math.random().toString(36).slice(2,9)}`; localStorage.setItem('taglive_device', deviceId) }
 await supabase.from('taglive_devices').upsert({ device_id: deviceId, last_seen: new Date().toISOString(), user_agent: navigator.userAgent.substring(0,200) }, { onConflict: 'device_id' })
-// --- FIXED DAILY COUNT: 1 DEVICE = 1 COUNT PER DAY ---
-const lastViewDate=localStorage.getItem('tl_last_view_date')
-const todayStr=new Date().toDateString()
-if(lastViewDate!==todayStr){ 
-  await supabase.from('taglive_views').insert({ device_id: deviceId }); 
-  localStorage.setItem('tl_last_view_date', todayStr)
-}
+const lastView=localStorage.getItem('tl_last_view'); const now=Date.now()
+if(!lastView || now-parseInt(lastView)>30*60*1000){ await supabase.from('taglive_views').insert({ device_id: deviceId }); localStorage.setItem('tl_last_view', now.toString()) }
 }
 if(isAdminUser){
 const nowDate=new Date(); const todayStart=new Date(nowDate); todayStart.setHours(0,0,0,0)
@@ -758,9 +753,9 @@ monthCount!==null?
 </div>
 <div style={{display:'flex',gap:8,marginTop:12}}>{!isCam?<button onClick={()=>startCamera()} style={{flex:1,background:'#111',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Start Camera {lowData?'(480p)':''}</button>:<><button onClick={toggleCamera} style={{flex:1,background:'#7c3aed',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Switch Camera</button><button onClick={stopCamera} style={{flex:1,background:'#444',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Stop</button></>}</div>
 <div style={{display:'flex',gap:6,marginTop:10}}>
-{!isRecording?<button onClick={startRecording} disabled={!isCam} style={{flex:1,background:isCam?'#a21caf':'#ccc',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Record MP4 + Intro FULL</button>
+{!isRecording?<button onClick={startRecording} disabled={!isCam} style={{flex:1,background:isCam?'#a21caf':'#ccc',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Record</button>
 :<><button onClick={stopRecording} style={{flex:1,background:'#111',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Stop + Outro ({formatTime(liveSeconds)})</button>{broadcastPlaying&&<button onClick={stopIntroOnly} style={{background:'#ff0000',color:'#fff',padding:12,borderRadius:10,fontWeight:900,border:'none',fontSize:11}}>STOP INTRO</button>}</>}
-{recordedUrl&&<a href={recordedUrl} download={`TagLive-${Date.now()}.webm`} style={{flex:1,background:'#16a34a',color:'#fff',padding:12,borderRadius:10,fontWeight:800,textAlign:'center',textDecoration:'none',fontSize:12}}>Download MP4</a>}
+{recordedUrl&&<a href={recordedUrl} download={`TagLive-${Date.now()}.mp4`} style={{flex:1,background:'#16a34a',color:'#fff',padding:12,borderRadius:10,fontWeight:800,textAlign:'center',textDecoration:'none',fontSize:12}}>Download</a>}
 </div>
 {recordedUrl&&<video src={recordedUrl} controls playsInline style={{width:'100%',marginTop:8,borderRadius:12}}/>}
 <div style={{display:'flex',gap:6,marginTop:10}}><button onClick={openBibleApp} style={{flex:1,background:'#2563eb',color:'#fff',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Open Bible</button><button onClick={pasteClipboard} style={{flex:1,background:'#059669',color:'#fff',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Paste</button><button onClick={saveVerse} style={{flex:1,background:'#f59e0b',color:'#000',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Save</button></div>
