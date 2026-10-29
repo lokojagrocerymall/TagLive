@@ -544,6 +544,7 @@ const stopRecording=async()=>{
   } else { stopRecordingFinal() }
 }
   const editStateRef=useRef({ locked:false, target:null as any, lastTap:0, lastX:0, lastY:0 })
+  const telegramBtnRef=useRef<HTMLDivElement>(null)
 
 const onTouchStart=(e:any)=>{
 const canvas=canvasRef.current; if(!canvas) return
@@ -622,8 +623,15 @@ useEffect(()=>{
 let a:any
 const wrapText=(ctx:any,text:string,maxWidth:number)=>{
 const words=text.split(' '); let lines:string[]=[]; let cur='';
-for(let w of words){ const test=cur+w+' '; if(ctx.measureText(test).width>maxWidth&&cur!==''){ lines.push(cur.trim()); cur=w+' ' } else cur=test }
-if(cur) lines.push(cur.trim()); return lines
+for(let w of words){ 
+  const test=cur+w+' '; 
+  if(ctx.measureText(test).width>maxWidth&&cur!==''){ 
+    lines.push(cur.trim()); 
+    cur=w+' ' 
+  } else cur=test 
+}
+if(cur) lines.push(cur.trim()); 
+return lines
 }
 const draw=()=>{
 const c=canvasRef.current, v=videoRef.current
@@ -675,10 +683,32 @@ if(logoImageRef.current && showLogo){ ctx.save(); ctx.translate(logoPos.x,logoPo
 if(showText){
 ctx.save();
 const isSplit=bgMode==='split'
+// FIXED: Smaller maxW so no overflow
 const drawX=isSplit?c.width*0.5:pos.x
 const drawY=isSplit?c.height*0.24:pos.y
-const maxW=isSplit?600:520
-ctx.translate(drawX,drawY); ctx.scale(pos.scale,pos.scale); ctx.font='bold '+fontSize+'px sans-serif'; const pad=24; const boxW=maxW+pad*2; const paragraphs=verse.split('\n'); let allLines:{text:string,isLastInPara:boolean,paraIdx:number}[]=[]; paragraphs.forEach((para,pIdx)=>{ if(!para.trim()){ allLines.push({text:'',isLastInPara:true,paraIdx:pIdx}); return } const wrapped=wrapText(ctx,para.trim(),maxW); wrapped.forEach((l,i)=>allLines.push({text:l,isLastInPara:i===wrapped.length-1,paraIdx:pIdx})) }); const realCount=allLines.filter(l=>l.text!=='').length; const lineH=fontSize*1.38; const boxH=realCount*lineH+(paragraphs.length-1)*10+pad*2; ctx.fillStyle=hexToRgba(boxColor,boxOpacity); ctx.fillRect(-boxW/2,-boxH/2,boxW,boxH); ctx.fillStyle=textColor; let y=-boxH/2+pad+lineH/2; allLines.forEach((ln)=>{ if(!ln.text){ y+=10; return } ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(ln.text,0,y); y+=lineH });
+const maxW=isSplit?360:380
+ctx.translate(drawX,drawY); ctx.scale(pos.scale,pos.scale); ctx.font='bold '+fontSize+'px sans-serif'; const pad=18; const boxW=maxW+pad*2; const paragraphs=verse.split('\n'); let allLines:{text:string,isLastInPara:boolean,paraIdx:number}[]=[]; paragraphs.forEach((para,pIdx)=>{ if(!para.trim()){ allLines.push({text:'',isLastInPara:true,paraIdx:pIdx}); return } const wrapped=wrapText(ctx,para.trim(),maxW); wrapped.forEach((l,i)=>allLines.push({text:l,isLastInPara:i===wrapped.length-1,paraIdx:pIdx})) }); const realCount=allLines.filter(l=>l.text!=='').length; const lineH=fontSize*1.32; const boxH=realCount*lineH+(paragraphs.length-1)*8+pad*2; ctx.fillStyle=hexToRgba(boxColor,boxOpacity); ctx.fillRect(-boxW/2,-boxH/2,boxW,boxH); ctx.fillStyle=textColor; let y=-boxH/2+pad+lineH/2; 
+
+// FIXED JUSTIFY LOGIC
+allLines.forEach((ln)=>{
+  if(!ln.text){ y+=8; return }
+  if(align==='justify' && !ln.isLastInPara && ln.text.split(' ').length>1){
+    const words=ln.text.split(' ')
+    const totalWordsWidth=words.reduce((acc,w,idx)=>acc+ctx.measureText(w).width+(idx>0?ctx.measureText(' ').width:0),0)
+    const extraSpace=(maxW-totalWordsWidth)/ (words.length-1)
+    let curX=-maxW/2
+    ctx.textAlign='left'; ctx.textBaseline='middle'
+    words.forEach((w,idx)=>{
+      ctx.fillText(w,curX,y)
+      curX+=ctx.measureText(w).width+ctx.measureText(' ').width+extraSpace
+    })
+  } else {
+    ctx.textAlign='center'; ctx.textBaseline='middle'
+    ctx.fillText(ln.text,0,y)
+  }
+  y+=lineH
+});
+
 if(isSplit&&showChurchName&&churchName){
 ctx.fillStyle='#FFD700'; ctx.font='900 '+Math.max(14,Math.floor(fontSize*0.52))+'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'
 const churchY=y+22; const tW=ctx.measureText(churchName.toUpperCase()).width+28
@@ -825,7 +855,7 @@ monthCount!==null?
 
 <div style={{display:'flex',gap:6,marginTop:12}}><button onClick={()=>setBgMode('face')} style={{flex:1,padding:8,borderRadius:20,border:'none',background:bgMode==='face'?'#111':'#eee',color:bgMode==='face'?'#fff':'#000',fontWeight:800,fontSize:12}}>Face</button><button onClick={()=>setBgMode('black')} style={{flex:1,padding:8,borderRadius:20,border:'none',background:bgMode==='black'?'#111':'#eee',color:bgMode==='black'?'#fff':'#000',fontWeight:800,fontSize:12}}>Black</button><button onClick={()=>setBgMode('image')} style={{flex:1,padding:8,borderRadius:20,border:'none',background:bgMode==='image'?'#111':'#eee',color:bgMode==='image'?'#fff':'#000',fontWeight:800,fontSize:12}}>Image</button><button onClick={()=>setBgMode('split')} style={{flex:1,padding:8,borderRadius:20,border:'none',background:bgMode==='split'?'#7c3aed':'#eee',color:bgMode==='split'?'#fff':'#000',fontWeight:800,fontSize:12}}>Top/Bottom</button></div>
 
-<div style={{display:'flex',alignItems:'center',gap:6,marginTop:10,flexWrap:'wrap',minWidth:0}}><div style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:6,background:'#f3f0ff',padding:'6px 10px',borderRadius:10}}><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>A-</span><input type="range" min={18} max={48} value={fontSize} onChange={e=>setFontSize(parseInt(e.target.value))} style={{flex:1,minWidth:0,width:0}}/><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>A+</span><span style={{fontSize:10,fontWeight:800,background:'#111',color:'#fff',padding:'3px 6px',borderRadius:20,flexShrink:0}}>{fontSize}</span></div><button onClick={()=>setAlign(align==='justify'?'center':'justify')} style={{padding:'8px 10px',borderRadius:10,border:'none',background:align==='justify'?'#111':'#ddd',color:align==='justify'?'#fff':'#000',fontWeight:800,fontSize:10,flexShrink:0}}>{align==='justify'?'Justify':'Center'}</button><button onClick={pickMedia} style={{padding:'8px 10px',borderRadius:10,border:'none',background:'#7c3aed',color:'#fff',fontWeight:800,fontSize:10,flexShrink:0}}>Media</button><input ref={fileInputRef} type="file" accept="image/*" onChange={onFilePick} style={{display:'none'}}/></div>
+<div style={{display:'flex',alignItems:'center',gap:6,marginTop:10,flexWrap:'wrap',minWidth:0}}><div style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:6,background:'#f3f0ff',padding:'6px 10px',borderRadius:10}}><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>A-</span><input type="range" min={18} max={48} value={fontSize} onChange={e=>setFontSize(parseInt(e.target.value))} style={{flex:1,minWidth:0,width:0}}/><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>A+</span><span style={{fontSize:10,fontWeight:800,background:'#111',color:'#fff',padding:'3px 6px',borderRadius:20,flexShrink:0}}>{fontSize}</span></div><button onClick={()=>setAlign(a=>a==='justify'?'center':'justify')} style={{padding:'8px 14px',borderRadius:10,border:'none',background:align==='justify'?'#111':'#7c3aed',color:'#fff',fontWeight:900,fontSize:11,flexShrink:0}}>{align==='justify'?'Justify ✓':'Center'}</button><button onClick={pickMedia} style={{padding:'8px 10px',borderRadius:10,border:'none',background:'#7c3aed',color:'#fff',fontWeight:800,fontSize:10,flexShrink:0}}>Media</button><input ref={fileInputRef} type="file" accept="image/*" onChange={onFilePick} style={{display:'none'}}/></div>
 
 <div style={{display:'flex',gap:6,marginTop:8,alignItems:'center',background:'#fff',border:'1px solid #eee',padding:8,borderRadius:10,flexWrap:'wrap',minWidth:0}}><div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}><span style={{fontSize:10,fontWeight:800}}>Text</span><input type="color" value={textColor} onChange={e=>setTextColor(e.target.value)} style={{width:28,height:28,border:'none',borderRadius:6}}/></div><div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}><span style={{fontSize:10,fontWeight:800}}>Box</span><input type="color" value={boxColor} onChange={e=>setBoxColor(e.target.value)} style={{width:28,height:28,border:'none',borderRadius:6}}/></div><div style={{display:'flex',alignItems:'center',gap:4,flex:1,minWidth:0}}><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>Opac</span><input type="range" min={0} max={1} step={0.05} value={boxOpacity} onChange={e=>setBoxOpacity(parseFloat(e.target.value))} style={{flex:1,minWidth:0,width:0}}/></div>
 <button onClick={()=>{ const v=!showLogo; setShowLogo(v); localStorage.setItem('taglive_show_logo', v.toString()); if(v){ setLogoPos((p:any)=>({...p, x:80, y:80})) } }} style={{padding:'6px 10px',borderRadius:8,border:'none',background:showLogo?'#16a34a':'#111',color:'#fff',fontWeight:800,fontSize:10,flexShrink:0}}>{showLogo?'Logo':'No Logo'}</button>
@@ -870,7 +900,7 @@ monthCount!==null?
 
 </div>
 
-{/* TELEGRAM POPUP + FLOATING BUTTON - NEW */}
+{/* TELEGRAM POPUP */}
 {showTelegramPopup&&(
 <div style={{position:'fixed',inset:0,zIndex:9999,background:'rgba(0,0,0,0.65)',display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
 <div style={{background:'#1e1e1e',borderRadius:28,padding:22,maxWidth:360,width:'100%',boxShadow:'0 20px 60px rgba(0,0,0,0.6)',border:'1px solid #333',animation:'popIn 0.3s ease'}}>
@@ -888,10 +918,42 @@ For more upcoming updates or you have any suggestion kindly join on our Telegram
 </div>
 </div>
 )}
+
+{/* DRAGGABLE TELEGRAM BUTTON - FIXED */}
 {!showTelegramPopup&&(
-<a href={TELEGRAM_LINK} target="_blank" rel="noopener noreferrer" style={{position:'fixed',bottom:20,right:20,zIndex:9998,width:56,height:56,borderRadius:28,background:'#2AABEE',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 8px 24px rgba(42,171,238,0.5)',textDecoration:'none',fontSize:28,animation:'floatPulse 2s infinite'}}>✈️</a>
+<div ref={telegramBtnRef} 
+onMouseDown={(e)=>{
+  const el=telegramBtnRef.current; if(!el) return
+  const startX=e.clientX; const startY=e.clientY
+  const rect=el.getBoundingClientRect()
+  const shiftX=startX-rect.left; const shiftY=startY-rect.top
+  const onMove=(ev:any)=>{
+    el.style.left=(ev.clientX-shiftX)+'px'
+    el.style.top=(ev.clientY-shiftY)+'px'
+    el.style.right='auto'; el.style.bottom='auto'
+  }
+  const onUp=()=>{document.removeEventListener('mousemove',onMove); document.removeEventListener('mouseup',onUp)}
+  document.addEventListener('mousemove',onMove); document.addEventListener('mouseup',onUp)
+}}
+onTouchStart={(e)=>{
+  const el=telegramBtnRef.current; if(!el) return
+  const t=e.touches[0]
+  const rect=el.getBoundingClientRect()
+  const shiftX=t.clientX-rect.left; const shiftY=t.clientY-rect.top
+  const onMove=(ev:any)=>{
+    const tt=ev.touches[0]
+    el.style.left=(tt.clientX-shiftX)+'px'
+    el.style.top=(tt.clientY-shiftY)+'px'
+    el.style.right='auto'; el.style.bottom='auto'
+  }
+  const onUp=()=>{document.removeEventListener('touchmove',onMove); document.removeEventListener('touchend',onUp)}
+  document.addEventListener('touchmove',onMove,{passive:false}); document.addEventListener('touchend',onUp)
+}}
+style={{position:'fixed',bottom:90,right:20,zIndex:9998,width:56,height:56,borderRadius:28,background:'#2AABEE',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 8px 24px rgba(42,171,238,0.5)',cursor:'grab',touchAction:'none',userSelect:'none'}}>
+<a href={TELEGRAM_LINK} target="_blank" rel="noopener noreferrer" style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',textDecoration:'none',fontSize:28,pointerEvents:'auto'}}>✈️</a>
+</div>
 )}
-<style>{`@keyframes popIn{from{transform:scale(0.8);opacity:0}to{transform:scale(1);opacity:1}} @keyframes floatPulse{0%{transform:scale(1)}50%{transform:scale(1.08)}100%{transform:scale(1)}}`}</style>
+<style>{`@keyframes popIn{from{transform:scale(0.8);opacity:0}to{transform:scale(1);opacity:1}}`}</style>
 
 </div>
 )
