@@ -65,6 +65,9 @@ const [bibleQuery,setBibleQuery]=useState('Romans 1:20')
 const [bibleResult,setBibleResult]=useState('')
 const [bibleLoading,setBibleLoading]=useState(false)
 const [lowData,setLowData]=useState(false)
+// TELEGRAM POPUP - NEW
+const [showTelegramPopup,setShowTelegramPopup]=useState(false)
+const TELEGRAM_LINK="https://t.me/+fjt4YW3hTr9jYWM8"
 const tickerOffsetRef=useRef(720)
 const introFileRef=useRef<HTMLInputElement>(null)
 const outroFileRef=useRef<HTMLInputElement>(null)
@@ -115,6 +118,22 @@ if(params.get('admin')==='taglive2026'){ localStorage.setItem('taglive_admin','t
 else if(localStorage.getItem('taglive_admin')==='true'){ setIsAdmin(true) }
 }catch{}
 },[])
+
+// TELEGRAM POPUP LOGIC - NEW
+useEffect(()=>{
+try{
+const joined=localStorage.getItem('taglive_telegram_joined')
+if(joined==='true') return
+const dismissed=localStorage.getItem('taglive_telegram_dismissed_time')
+if(dismissed){
+  const diff=Date.now()-parseInt(dismissed)
+  if(diff < 24*60*60*1000) return
+}
+const t=setTimeout(()=>setShowTelegramPopup(true),1500)
+return()=>clearTimeout(t)
+}catch{}
+},[])
+
 const formatTime=(sec:number)=>{ const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60; return h.toString().padStart(2,'0')+':'+m.toString().padStart(2,'0')+':'+s.toString().padStart(2,'0') }
 const startTimer=()=>{ if(timerRef.current) clearInterval(timerRef.current); setLiveSeconds(0); timerRef.current=setInterval(()=>setLiveSeconds(p=>p+1),1000) }
 const stopTimer=()=>{ if(timerRef.current) clearInterval(timerRef.current); timerRef.current=null; setLiveSeconds(0) }
@@ -850,6 +869,30 @@ monthCount!==null?
 </div>
 
 </div>
+
+{/* TELEGRAM POPUP + FLOATING BUTTON - NEW */}
+{showTelegramPopup&&(
+<div style={{position:'fixed',inset:0,zIndex:9999,background:'rgba(0,0,0,0.65)',display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+<div style={{background:'#1e1e1e',borderRadius:28,padding:22,maxWidth:360,width:'100%',boxShadow:'0 20px 60px rgba(0,0,0,0.6)',border:'1px solid #333',animation:'popIn 0.3s ease'}}>
+<div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}>
+<div style={{width:38,height:38,borderRadius:20,background:'#2AABEE',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20}}>✈️</div>
+<b style={{color:'#fff',fontSize:18,fontWeight:800,letterSpacing:0.2}}>Join Our Group</b>
+</div>
+<div style={{color:'#ccc',fontSize:14,lineHeight:1.5,fontWeight:500,marginBottom:20}}>
+For more upcoming updates or you have any suggestion kindly join on our Telegram channel.
+</div>
+<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+<button onClick={()=>{localStorage.setItem('taglive_telegram_dismissed_time', Date.now().toString()); setShowTelegramPopup(false)}} style={{background:'transparent',color:'#aaa',border:'none',fontWeight:700,fontSize:15,padding:'10px 16px',cursor:'pointer'}}>Later</button>
+<a href={TELEGRAM_LINK} target="_blank" rel="noopener noreferrer" onClick={()=>{localStorage.setItem('taglive_telegram_joined','true'); setShowTelegramPopup(false)}} style={{background:'#9d1c6a',color:'#fff',border:'none',borderRadius:12,padding:'12px 28px',fontWeight:900,fontSize:15,textDecoration:'none',display:'inline-block'}}>Join</a>
+</div>
+</div>
+</div>
+)}
+{!showTelegramPopup&&(
+<a href={TELEGRAM_LINK} target="_blank" rel="noopener noreferrer" style={{position:'fixed',bottom:20,right:20,zIndex:9998,width:56,height:56,borderRadius:28,background:'#2AABEE',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 8px 24px rgba(42,171,238,0.5)',textDecoration:'none',fontSize:28,animation:'floatPulse 2s infinite'}}>✈️</a>
+)}
+<style>{`@keyframes popIn{from{transform:scale(0.8);opacity:0}to{transform:scale(1);opacity:1}} @keyframes floatPulse{0%{transform:scale(1)}50%{transform:scale(1.08)}100%{transform:scale(1)}}`}</style>
+
 </div>
 )
 }
