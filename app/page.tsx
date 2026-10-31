@@ -185,16 +185,14 @@ useEffect(()=>{
 let mounted=true
 const trackDevice=async()=>{
 try{
-const isAdminUser=localStorage.getItem('taglive_admin')==='true'
 const deviceId=getGlobalDeviceId()
-const geo=await getGeoLocation()
-if(!isAdminUser){
-const nowUTC=new Date()
-const todayUTCStart=new Date(Date.UTC(nowUTC.getUTCFullYear(), nowUTC.getUTCMonth(), nowUTC.getUTCDate(), 0,0,0,0))
-const lastViewKey='tl_last_view_utc'
-const lastViewStr=localStorage.getItem(lastViewKey)
-const lastViewTime=lastViewStr?parseInt(lastViewStr):0
-const isNewDayUTC=Date.now()-lastViewTime>24*60*60*1000 || new Date(lastViewTime).getUTCDate()!==nowUTC.getUTCDate() || new Date(lastViewTime).getUTCMonth()!==nowUTC.getUTCMonth()
+let geo={ country: null, city: null, code: null }
+try{ geo=await getGeoLocation() }catch{}
+
+// --- FIX 1: Device presence - never block views if this fails ---
+try{
+const isAdminLocal=localStorage.getItem('taglive_admin')==='true'
+if(!isAdminLocal){
 await supabase.from('taglive_devices').upsert({ 
   device_id: deviceId, 
   last_seen: new Date().toISOString(), 
@@ -212,12 +210,30 @@ await supabase.from('live_presence').upsert({
   is_online: true
 }, { onConflict: 'device_id' })
 }catch{}
-if(isNewDayUTC || !lastViewStr || Date.now()-lastViewTime>30*60*1000){
-  await supabase.from('taglive_views').insert({ device_id: deviceId, user_id: user?.id || null, country: geo.country, city: geo.city })
-  localStorage.setItem(lastViewKey, Date.now().toString())
+}
+}catch(e){ console.log('device upsert fail',e) }
+
+// --- FIX 2: VIEWS INSERT - this was frozen at 32 because RLS blocked it ---
+try{
+const isAdminLocal=localStorage.getItem('taglive_admin')==='true'
+if(!isAdminLocal){
+const lastViewKey='tl_last_view_utc'
+const lastViewStr=localStorage.getItem(lastViewKey)
+const lastViewTime=lastViewStr?parseInt(lastViewStr):0
+const shouldInsert=!lastViewStr || (Date.now()-lastViewTime > 30*60*1000)
+if(shouldInsert){
+const { error }=await supabase.from('taglive_views').insert({ device_id: deviceId, user_id: user?.id || null, country: geo.country, city: geo.city })
+if(!error){
+localStorage.setItem(lastViewKey, Date.now().toString())
+}else{
+console.log('VIEWS INSERT RLS ERROR:', error.message)
 }
 }
-if(true){
+}
+}catch(e){ console.log('views insert fail',e) }
+
+// --- FIX 3: STATS always fetch even for admin ---
+try{
 const nowDate=new Date()
 const todayUTC=new Date(Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), nowDate.getUTCDate(), 0,0,0,0))
 const weekUTC=new Date(todayUTC); weekUTC.setUTCDate(todayUTC.getUTCDate()-7)
@@ -241,7 +257,8 @@ if(liveRows && mounted){
   setCountries(Object.values(map))
 }
 }catch{}
-}
+}catch(e){ console.log('stats fail',e) }
+
 }catch{}
 }
 trackDevice()
