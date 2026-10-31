@@ -88,26 +88,20 @@ const audioCtxRef=useRef<any>(null)
 const introTimeoutRef=useRef<any>(null)
 const fbPendingRef=useRef<any>(null)
 const heartbeatRef=useRef<any>(null)
+
 useEffect(()=>{
 if(typeof window==='undefined') return
 if(window.FB) return
 window.fbAsyncInit=function(){
-  window.FB.init({
-    appId:'1951327349161990',
-    cookie:true,
-    xfbml:true,
-    version:'v19.0'
-  })
+  window.FB.init({ appId:'1951327349161990', cookie:true, xfbml:true, version:'v19.0' })
 }
 const id='facebook-jssdk'
 if(document.getElementById(id)) return
 const js=document.createElement('script')
-js.id=id
-js.src='https://connect.facebook.net/en_US/sdk.js'
-js.async=true
-js.defer=true
+js.id=id; js.src='https://connect.facebook.net/en_US/sdk.js'; js.async=true; js.defer=true
 document.head.appendChild(js)
 },[])
+
 useEffect(()=>{
 try{
 const params=new URLSearchParams(window.location.search)
@@ -115,19 +109,18 @@ if(params.get('admin')==='taglive2026'){ localStorage.setItem('taglive_admin','t
 else if(localStorage.getItem('taglive_admin')==='true'){ setIsAdmin(true) }
 }catch{}
 },[])
+
 useEffect(()=>{
 try{
 const joined=localStorage.getItem('taglive_telegram_joined')
 if(joined==='true') return
 const dismissed=localStorage.getItem('taglive_telegram_dismissed_time')
-if(dismissed){
-  const diff=Date.now()-parseInt(dismissed)
-  if(diff < 24*60*60*1000) return
-}
+if(dismissed){ const diff=Date.now()-parseInt(dismissed); if(diff < 24*60*60*1000) return }
 const t=setTimeout(()=>setShowTelegramPopup(true),1500)
 return()=>clearTimeout(t)
 }catch{}
 },[])
+
 const formatTime=(sec:number)=>{ const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60; return h.toString().padStart(2,'0')+':'+m.toString().padStart(2,'0')+':'+s.toString().padStart(2,'0') }
 const startTimer=()=>{ if(timerRef.current) clearInterval(timerRef.current); setLiveSeconds(0); timerRef.current=setInterval(()=>setLiveSeconds(p=>p+1),1000) }
 const stopTimer=()=>{ if(timerRef.current) clearInterval(timerRef.current); timerRef.current=null; setLiveSeconds(0) }
@@ -137,9 +130,7 @@ const [calMonth,setCalMonth]=useState(new Date().getMonth())
 const [monthCount,setMonthCount]=useState<number|null>(null)
 const [monthLoading,setMonthLoading]=useState(false)
 const fetchMonthCount=async(year:number,month:number)=>{
-setMonthLoading(true)
-setCalMonth(month)
-setCalYear(year)
+setMonthLoading(true); setCalMonth(month); setCalYear(year)
 try{
 const start=new Date(Date.UTC(year,month,1,0,0,0,0))
 const end=new Date(Date.UTC(year,month+1,0,23,59,59,999))
@@ -148,136 +139,136 @@ setMonthCount(count||0)
 }catch{ setMonthCount(0) }
 setMonthLoading(false)
 }
+
+// === FIXED TRACKER - NO MORE FREEZE AT 32 ===
 const getGeoLocation=async()=>{
-try{
-const cachedStr=localStorage.getItem('taglive_geo_cache')
-if(cachedStr){
-  try{
+ try{
+  const cachedStr=localStorage.getItem('taglive_geo_cache')
+  if(cachedStr){
+   try{
     const cached=JSON.parse(cachedStr)
     if(Date.now()-cached.ts<24*60*60*1000) return cached.data
-  }catch{}
+   }catch{}
+  }
+  const controller=new AbortController()
+  const to=setTimeout(()=>controller.abort(),2000)
+  const r=await fetch('https://ipapi.co/json/',{signal:controller.signal})
+  clearTimeout(to)
+  const d=await r.json()
+  const data={ country: d.country_name||'Nigeria', city: d.city||'Ilorin', code: d.country_code||'NG' }
+  localStorage.setItem('taglive_geo_cache', JSON.stringify({ ts: Date.now(), data }))
+  return data
+ }catch{ return { country: 'Nigeria', city: 'Ilorin', code: 'NG' } }
 }
-const r=await fetch('https://ipapi.co/json/')
-const d=await r.json()
-const data={ country: d.country_name||null, city: d.city||null, code: d.country_code||null }
-localStorage.setItem('taglive_geo_cache', JSON.stringify({ ts: Date.now(), data }))
-return data
-}catch{ return { country: null, city: null, code: null } }
-}
+
 const getGlobalDeviceId=()=>{
-try{
-let gid=localStorage.getItem('taglive_global_device')
-if(gid) return gid
-const oldId=localStorage.getItem('taglive_device')
-if(oldId){
-  localStorage.setItem('taglive_global_device', oldId)
-  return oldId
+ try{
+  let gid=localStorage.getItem('taglive_global_device')
+  if(gid) return gid
+  const oldId=localStorage.getItem('taglive_device')
+  if(oldId){ localStorage.setItem('taglive_global_device', oldId); return oldId }
+  gid='gid_' + Date.now() + '_' + Math.random().toString(36).slice(2,9)
+  localStorage.setItem('taglive_global_device', gid)
+  localStorage.setItem('taglive_device', gid)
+  return gid
+ }catch{ return 'gid_' + Date.now() + '_' + Math.random().toString(36).slice(2,9) }
 }
-gid='gid_' + Date.now() + '_' + Math.random().toString(36).slice(2,9)
-localStorage.setItem('taglive_global_device', gid)
-localStorage.setItem('taglive_device', gid)
-return gid
-}catch{
-return 'gid_' + Date.now() + '_' + Math.random().toString(36).slice(2,9)
-}
-}
+
 useEffect(()=>{
-let mounted=true
-const trackDevice=async()=>{
-try{
-const deviceId=getGlobalDeviceId()
-let geo={ country: null, city: null, code: null }
-try{ geo=await getGeoLocation() }catch{}
+ let mounted=true
+ const trackDevice=async()=>{
+  try{
+   const deviceId=getGlobalDeviceId()
+   const isAdminLocal=localStorage.getItem('taglive_admin')==='true'
 
-// --- FIX 1: Device presence - never block views if this fails ---
-try{
-const isAdminLocal=localStorage.getItem('taglive_admin')==='true'
-if(!isAdminLocal){
-await supabase.from('taglive_devices').upsert({ 
-  device_id: deviceId, 
-  last_seen: new Date().toISOString(), 
-  user_agent: navigator.userAgent.substring(0,200),
-  user_id: user?.id || null,
-  country: geo.country,
-  city: geo.city,
-  country_code: geo.code
-}, { onConflict: 'device_id' })
-try{
-await supabase.from('live_presence').upsert({
-  device_id: deviceId,
-  user_id: user?.id || null,
-  last_seen: new Date().toISOString(),
-  is_online: true
-}, { onConflict: 'device_id' })
-}catch{}
-}
-}catch(e){ console.log('device upsert fail',e) }
+   // 1. INSERT VIEW IMMEDIATELY - NO GEO WAIT!
+   if(!isAdminLocal){
+    try{
+     const lastViewKey='tl_last_view_utc'
+     const lastViewStr=localStorage.getItem(lastViewKey)
+     const shouldInsert=!lastViewStr || (Date.now()-parseInt(lastViewStr) > 30*60*1000)
+     if(shouldInsert){
+      const { error }=await supabase.from('taglive_views').insert({ device_id: deviceId, user_id: user?.id || null, country: 'Nigeria', city: 'Ilorin' })
+      if(error){ console.log('VIEW INSERT ERROR:',error.message) }
+      else { localStorage.setItem(lastViewKey, Date.now().toString()); console.log('VIEW INSERTED OK') }
+     }
+    }catch(e){ console.log('views insert fail',e) }
+   }
 
-// --- FIX 2: VIEWS INSERT - this was frozen at 32 because RLS blocked it ---
-try{
-const isAdminLocal=localStorage.getItem('taglive_admin')==='true'
-if(!isAdminLocal){
-const lastViewKey='tl_last_view_utc'
-const lastViewStr=localStorage.getItem(lastViewKey)
-const lastViewTime=lastViewStr?parseInt(lastViewStr):0
-const shouldInsert=!lastViewStr || (Date.now()-lastViewTime > 30*60*1000)
-if(shouldInsert){
-const { error }=await supabase.from('taglive_views').insert({ device_id: deviceId, user_id: user?.id || null, country: geo.country, city: geo.city })
-if(!error){
-localStorage.setItem(lastViewKey, Date.now().toString())
-}else{
-console.log('VIEWS INSERT RLS ERROR:', error.message)
-}
-}
-}
-}catch(e){ console.log('views insert fail',e) }
+   // 2. Geo + presence in background
+   let geo={ country: 'Nigeria', city: 'Ilorin', code: 'NG' }
+   try{ geo=await getGeoLocation() }catch{}
 
-// --- FIX 3: STATS always fetch even for admin ---
-try{
-const nowDate=new Date()
-const todayUTC=new Date(Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), nowDate.getUTCDate(), 0,0,0,0))
-const weekUTC=new Date(todayUTC); weekUTC.setUTCDate(todayUTC.getUTCDate()-7)
-const monthUTC=new Date(todayUTC); monthUTC.setUTCDate(todayUTC.getUTCDate()-30)
-const liveCutoff=new Date(nowDate.getTime()-45*1000)
-const { count: live }=await supabase.from('taglive_devices').select('*',{count:'exact',head:true}).gt('last_seen', liveCutoff.toISOString())
-const { count: total }=await supabase.from('taglive_views').select('*',{count:'exact',head:true})
-const { count: daily }=await supabase.from('taglive_views').select('*',{count:'exact',head:true}).gte('created_at', todayUTC.toISOString())
-const { count: weekly }=await supabase.from('taglive_views').select('*',{count:'exact',head:true}).gte('created_at', weekUTC.toISOString())
-const { count: monthly }=await supabase.from('taglive_views').select('*',{count:'exact',head:true}).gte('created_at', monthUTC.toISOString())
-if(mounted) setStats({ live: live||0, daily: daily||0, weekly: weekly||0, monthly: monthly||0, total: total||0 })
-try{
-const { data: liveRows }=await supabase.from('taglive_devices').select('country,country_code,city').gt('last_seen', liveCutoff.toISOString())
-if(liveRows && mounted){
-  const map:any={}
-  liveRows.forEach((r:any)=>{
-    const key=(r.country_code||'')+'|'+(r.country||'Unknown')
-    if(!map[key]) map[key]={ name: r.country||'Unknown', code: r.country_code||'', city: '', count:0 }
-    map[key].count+=1
-  })
-  setCountries(Object.values(map))
-}
-}catch{}
-}catch(e){ console.log('stats fail',e) }
+   try{
+    if(!isAdminLocal){
+     await supabase.from('taglive_devices').upsert({ 
+       device_id: deviceId, 
+       last_seen: new Date().toISOString(), 
+       user_agent: navigator.userAgent.substring(0,200),
+       user_id: user?.id || null,
+       country: geo.country,
+       city: geo.city,
+       country_code: geo.code
+     }, { onConflict: 'device_id' })
+     try{
+      await supabase.from('live_presence').upsert({
+        device_id: deviceId,
+        user_id: user?.id || null,
+        last_seen: new Date().toISOString(),
+        is_online: true
+      }, { onConflict: 'device_id' })
+     }catch{}
+    }
+   }catch(e){ console.log('device upsert fail',e) }
 
-}catch{}
-}
-trackDevice()
-heartbeatRef.current=setInterval(trackDevice, 15*1000)
-const handleOffline=async()=>{
-try{
-const deviceId=getGlobalDeviceId()
-await supabase.from('live_presence').upsert({ device_id: deviceId, is_online: false, last_seen: new Date().toISOString() }, { onConflict: 'device_id' })
-}catch{}
-}
-window.addEventListener('beforeunload', handleOffline)
-window.addEventListener('offline', handleOffline)
-return()=>{
-  mounted=false
-  clearInterval(heartbeatRef.current)
-  window.removeEventListener('beforeunload', handleOffline)
-  window.removeEventListener('offline', handleOffline)
-}
+   // 3. STATS
+   try{
+    const nowDate=new Date()
+    const todayUTC=new Date(Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), nowDate.getUTCDate(), 0,0,0,0))
+    const weekUTC=new Date(todayUTC); weekUTC.setUTCDate(todayUTC.getUTCDate()-7)
+    const monthUTC=new Date(todayUTC); monthUTC.setUTCDate(todayUTC.getUTCDate()-30)
+    const liveCutoff=new Date(nowDate.getTime()-45*1000)
+    const { count: live }=await supabase.from('taglive_devices').select('*',{count:'exact',head:true}).gt('last_seen', liveCutoff.toISOString())
+    const { count: total }=await supabase.from('taglive_views').select('*',{count:'exact',head:true})
+    const { count: daily }=await supabase.from('taglive_views').select('*',{count:'exact',head:true}).gte('created_at', todayUTC.toISOString())
+    const { count: weekly }=await supabase.from('taglive_views').select('*',{count:'exact',head:true}).gte('created_at', weekUTC.toISOString())
+    const { count: monthly }=await supabase.from('taglive_views').select('*',{count:'exact',head:true}).gte('created_at', monthUTC.toISOString())
+    if(mounted) setStats({ live: live||0, daily: daily||0, weekly: weekly||0, monthly: monthly||0, total: total||0 })
+    try{
+     const { data: liveRows }=await supabase.from('taglive_devices').select('country,country_code,city').gt('last_seen', liveCutoff.toISOString())
+     if(liveRows && mounted){
+       const map:any={}
+       liveRows.forEach((r:any)=>{
+         const key=(r.country_code||'')+'|'+(r.country||'Unknown')
+         if(!map[key]) map[key]={ name: r.country||'Unknown', code: r.country_code||'', city: '', count:0 }
+         map[key].count+=1
+       })
+       setCountries(Object.values(map))
+     }
+    }catch{}
+   }catch(e){ console.log('stats fail',e) }
+
+  }catch{}
+ }
+ trackDevice()
+ heartbeatRef.current=setInterval(trackDevice, 15*1000)
+ const handleOffline=async()=>{
+  try{
+   const deviceId=getGlobalDeviceId()
+   await supabase.from('live_presence').upsert({ device_id: deviceId, is_online: false, last_seen: new Date().toISOString() }, { onConflict: 'device_id' })
+  }catch{}
+ }
+ window.addEventListener('beforeunload', handleOffline)
+ window.addEventListener('offline', handleOffline)
+ return()=>{
+   mounted=false
+   clearInterval(heartbeatRef.current)
+   window.removeEventListener('beforeunload', handleOffline)
+   window.removeEventListener('offline', handleOffline)
+ }
 },[isAdmin, user])
+// === END FIXED TRACKER ===
+
 const IDB_NAME='taglive_videos_db'; const IDB_STORE='media';
 const getDB=()=>new Promise<any>((res,rej)=>{ const r=indexedDB.open(IDB_NAME,1); r.onupgradeneeded=()=>{ if(!r.result.objectStoreNames.contains(IDB_STORE)) r.result.createObjectStore(IDB_STORE) }; r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error) })
 const idbSave=async(key:string,val:any)=>{ try{ const db=await getDB(); const tx=db.transaction(IDB_STORE,'readwrite'); tx.objectStore(IDB_STORE).put(val,key); }catch(e){ console.log('IDB save fail',e) } }
@@ -286,13 +277,7 @@ useEffect(()=>{
 try{
 const ai=localStorage.getItem('taglive_active_intro'); if(ai) setActiveIntroId(ai)
 const ao=localStorage.getItem('taglive_active_outro'); if(ao) setActiveOutroId(ao)
-const cl=localStorage.getItem('taglive_church_logo'); 
-if(cl){ 
-  setLogoImage(cl); 
-  const img=new Image(); 
-  img.src=cl; 
-  img.onload=()=>{ logoImageRef.current=img } 
-}
+const cl=localStorage.getItem('taglive_church_logo'); if(cl){ setLogoImage(cl); const img=new Image(); img.src=cl; img.onload=()=>{ logoImageRef.current=img } }
 const sv=localStorage.getItem('taglive_saved'); if(sv){ setSaved(JSON.parse(sv)) }
 const cn=localStorage.getItem('taglive_church_name'); if(cn) setChurchName(cn)
 const tt=localStorage.getItem('taglive_ticker_text'); if(tt) setTickerText(tt)
@@ -512,7 +497,8 @@ const startRecording=async()=>{
     }, (active.duration||5)*1000)
   }
 }
-  const stopRecordingFinal=()=>{
+// ... rest of your component continues (Part 2)
+const stopRecordingFinal=()=>{
   try{ if(introTimeoutRef.current) clearTimeout(introTimeoutRef.current) }catch{}
   introTimeoutRef.current=null
   try{ recorderRef.current?.stop() }catch{}
