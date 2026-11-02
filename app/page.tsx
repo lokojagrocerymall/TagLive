@@ -141,27 +141,7 @@ setMonthCount(count||0)
 setMonthLoading(false)
 }
 
-// === FINAL TRACKER + AUDIO FIX ===
-const getGeoLocation=async()=>{
- try{
-  const cachedStr=localStorage.getItem('taglive_geo_cache')
-  if(cachedStr){
-   try{
-    const cached=JSON.parse(cachedStr)
-    if(Date.now()-cached.ts<24*60*60*1000) return cached.data
-   }catch{}
-  }
-  const controller=new AbortController()
-  const to=setTimeout(()=>controller.abort(),2000)
-  const r=await fetch('https://ipapi.co/json/',{signal:controller.signal})
-  clearTimeout(to)
-  const d=await r.json()
-  const data={ country: d.country_name||'Nigeria', city: d.city||'Ilorin', code: d.country_code||'NG' }
-  localStorage.setItem('taglive_geo_cache', JSON.stringify({ ts: Date.now(), data }))
-  return data
- }catch{ return { country: 'Nigeria', city: 'Ilorin', code: 'NG' } }
-}
-
+// === FIXED COUNTER - ONLY CHANGE ===
 const getGlobalDeviceId=()=>{
  try{
   let gid=localStorage.getItem('taglive_global_device')
@@ -170,105 +150,75 @@ const getGlobalDeviceId=()=>{
   if(oldId){ localStorage.setItem('taglive_global_device', oldId); return oldId }
   gid='gid_' + Date.now() + '_' + Math.random().toString(36).slice(2,9)
   localStorage.setItem('taglive_global_device', gid)
-  localStorage.setItem('taglive_device', gid)
   return gid
- }catch{ return 'gid_' + Date.now() + '_' + Math.random().toString(36).slice(2,9) }
+ }catch{ return 'gid_' + Date.now() }
 }
 
 useEffect(()=>{
  let mounted=true
- const trackDevice=async()=>{
+ const track=async()=>{
   try{
    const deviceId=getGlobalDeviceId()
    const isAdminLocal=localStorage.getItem('taglive_admin')==='true'
-
-   // 1. VIEWS - admin never counts, 24h monetization
+   
+   // VIEWS - new key v2 to force recount
    if(!isAdminLocal){
-    try{
-     const DAY_MS=24*60*60*1000
-     const lastViewKey='tl_last_view_utc'
-     const lastViewStr=localStorage.getItem(lastViewKey)
-     const shouldInsert=!lastViewStr || (Date.now()-parseInt(lastViewStr) > DAY_MS)
+     const DAY_MS=86400000
+     const lastKey='tl_v2_last'
+     const lastStr=localStorage.getItem(lastKey)
+     const shouldInsert=!lastStr || (Date.now()-parseInt(lastStr) > DAY_MS)
      if(shouldInsert){
-      const { error }=await supabase.from('taglive_views').insert({ device_id: deviceId, user_id: user?.id || null, country: 'Nigeria', city: 'Ilorin' })
-      if(!error) localStorage.setItem(lastViewKey, Date.now().toString())
+       const {error}=await supabase.from('taglive_views').insert({ device_id: deviceId })
+       if(!error) localStorage.setItem(lastKey, Date.now().toString())
      }
-    }catch(e){}
    }
+   
+   // LIVE - always insert even for admin
+   await supabase.from('taglive_devices').upsert({
+     device_id: deviceId,
+     last_seen: new Date().toISOString(),
+     country: 'Nigeria',
+     city: 'Ilorin',
+     country_code: 'NG',
+     user_agent: navigator.userAgent.substring(0,80)
+   },{onConflict:'device_id'})
 
-   // 2. LIVE PRESENCE - count EVERYONE including admin, so LIVE shows 1
-   let geo={ country: 'Nigeria', city: 'Ilorin', code: 'NG' }
-   try{ geo=await getGeoLocation() }catch{}
-
-   try{
-     await supabase.from('taglive_devices').upsert({ 
-       device_id: deviceId, 
-       last_seen: new Date().toISOString(), 
-       user_agent: navigator.userAgent.substring(0,200),
-       user_id: user?.id || null,
-       country: geo.country,
-       city: geo.city,
-       country_code: geo.code
-     }, { onConflict: 'device_id' })
-     await supabase.from('live_presence').upsert({
-        device_id: deviceId,
-        user_id: user?.id || null,
-        last_seen: new Date().toISOString(),
-        is_online: true
-      }, { onConflict: 'device_id' })
-   }catch(e){}
-
-   // 3. STATS
-   try{
-    const nowDate=new Date()
-    const todayUTC=new Date(Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), nowDate.getUTCDate(), 0,0,0,0))
-    const weekUTC=new Date(todayUTC); weekUTC.setUTCDate(todayUTC.getUTCDate()-7)
-    const monthUTC=new Date(todayUTC); monthUTC.setUTCDate(todayUTC.getUTCDate()-30)
-    const liveCutoff=new Date(nowDate.getTime()-45*1000)
-    const { count: live }=await supabase.from('taglive_devices').select('*',{count:'exact',head:true}).gt('last_seen', liveCutoff.toISOString())
-    const { count: total }=await supabase.from('taglive_views').select('*',{count:'exact',head:true})
-    const { count: daily }=await supabase.from('taglive_views').select('*',{count:'exact',head:true}).gte('created_at', todayUTC.toISOString())
-    const { count: weekly }=await supabase.from('taglive_views').select('*',{count:'exact',head:true}).gte('created_at', weekUTC.toISOString())
-    const { count: monthly }=await supabase.from('taglive_views').select('*',{count:'exact',head:true}).gte('created_at', monthUTC.toISOString())
-    if(mounted) setStats({ live: live||0, daily: daily||0, weekly: weekly||0, monthly: monthly||0, total: total||0 })
-    try{
-     const { data: liveRows }=await supabase.from('taglive_devices').select('country,country_code,city').gt('last_seen', liveCutoff.toISOString())
-     if(liveRows && mounted){
-       const map:any={}
-       liveRows.forEach((r:any)=>{
-         const key=(r.country_code||'')+'|'+(r.country||'Unknown')
-         if(!map[key]) map[key]={ name: r.country||'Unknown', code: r.country_code||'', city: '', count:0 }
-         map[key].count+=1
-       })
-       setCountries(Object.values(map))
-     }
-    }catch{}
-   }catch(e){}
-
+   // STATS
+   const now=new Date()
+   const today=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()))
+   const week=new Date(today); week.setUTCDate(week.getUTCDate()-7)
+   const monthStart=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),1))
+   const liveCut=new Date(now.getTime()-90*1000)
+   
+   const {count:live}=await supabase.from('taglive_devices').select('*',{count:'exact',head:true}).gt('last_seen', liveCut.toISOString())
+   const {count:total}=await supabase.from('taglive_views').select('*',{count:'exact',head:true})
+   const {count:daily}=await supabase.from('taglive_views').select('*',{count:'exact',head:true}).gte('created_at', today.toISOString())
+   const {count:weekly}=await supabase.from('taglive_views').select('*',{count:'exact',head:true}).gte('created_at', week.toISOString())
+   const {count:monthly}=await supabase.from('taglive_views').select('*',{count:'exact',head:true}).gte('created_at', monthStart.toISOString())
+   
+   if(mounted) setStats({ live: live||0, daily: daily||0, weekly: weekly||0, monthly: monthly||0, total: total||0 })
+   
+   const {data:rows}=await supabase.from('taglive_devices').select('country,country_code').gt('last_seen', liveCut.toISOString())
+   if(rows && mounted){
+     const map:any={}
+     rows.forEach((r:any)=>{
+       const k=(r.country_code||'NG')+'|'+(r.country||'Nigeria')
+       if(!map[k]) map[k]={ name: r.country||'Nigeria', code: r.country_code||'NG', count:0 }
+       map[k].count+=1
+     })
+     setCountries(Object.values(map))
+   }
   }catch{}
  }
- trackDevice()
- heartbeatRef.current=setInterval(trackDevice, 15*1000)
- const handleOffline=async()=>{
-  try{
-   const deviceId=getGlobalDeviceId()
-   await supabase.from('live_presence').upsert({ device_id: deviceId, is_online: false, last_seen: new Date().toISOString() }, { onConflict: 'device_id' })
-  }catch{}
- }
- window.addEventListener('beforeunload', handleOffline)
- window.addEventListener('offline', handleOffline)
- return()=>{
-   mounted=false
-   clearInterval(heartbeatRef.current)
-   window.removeEventListener('beforeunload', handleOffline)
-   window.removeEventListener('offline', handleOffline)
- }
-},[isAdmin, user])
-// === END TRACKER ===
+ track()
+ heartbeatRef.current=setInterval(track, 10*1000)
+ return()=>{ mounted=false; clearInterval(heartbeatRef.current) }
+},[isAdmin])
+// === END FIXED COUNTER ===
 
 const IDB_NAME='taglive_videos_db'; const IDB_STORE='media';
 const getDB=()=>new Promise<any>((res,rej)=>{ const r=indexedDB.open(IDB_NAME,1); r.onupgradeneeded=()=>{ if(!r.result.objectStoreNames.contains(IDB_STORE)) r.result.createObjectStore(IDB_STORE) }; r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error) })
-const idbSave=async(key:string,val:any)=>{ try{ const db=await getDB(); const tx=db.transaction(IDB_STORE,'readwrite'); tx.objectStore(IDB_STORE).put(val,key); }catch(e){} }
+const idbSave=async(key:string,val:any)=>{ try{ const db=await getDB(); const tx=db.transaction(IDB_STORE,'readwrite'); tx.objectStore(IDB_STORE).put(val,key); }catch{} }
 const idbGet=async(key:string)=>new Promise<any>(async(resolve)=>{ try{ const db=await getDB(); const tx=db.transaction(IDB_STORE,'readonly'); const req=tx.objectStore(IDB_STORE).get(key); req.onsuccess=()=>resolve(req.result||null); req.onerror=()=>resolve(null)}catch{resolve(null)} })
 useEffect(()=>{
 try{
@@ -282,56 +232,28 @@ const ton=localStorage.getItem('taglive_ticker_on'); if(ton) setTickerOn(ton==='
 const lo=localStorage.getItem('taglive_show_logo'); if(lo) setShowLogo(lo==='true')
 idbGet('intros').then((i:any)=>{ if(i && Array.isArray(i) && i.length) setIntros(i) })
 idbGet('outros').then((o:any)=>{ if(o && Array.isArray(o) && o.length) setOutros(o) })
-try{
-const iOld=localStorage.getItem('taglive_intros'); if(iOld){ const parsed=JSON.parse(iOld); if(parsed.length && intros.length===0){ setIntros(parsed); idbSave('intros', parsed) } }
-const oOld=localStorage.getItem('taglive_outros'); if(oOld){ const parsed=JSON.parse(oOld); if(parsed.length && outros.length===0){ setOutros(parsed); idbSave('outros', parsed) } }
-}catch{}
-setTimeout(()=>{
-  if(canvasRef.current){ canvasRef.current.width=480; canvasRef.current.height=854 }
-  setPos((p:any)=>{ return {...p, x:240, y:700 }})
-  setLogoPos((p:any)=>{ return {...p, x:90, y:90 }})
-},600)
 }catch{}
 },[])
-const saveIntros=async(arr:any[])=>{ setIntros(arr); await idbSave('intros', arr); try{ localStorage.removeItem('taglive_intros') }catch{} }
-const saveOutros=async(arr:any[])=>{ setOutros(arr); await idbSave('outros', arr); try{ localStorage.removeItem('taglive_outros') }catch{} }
+const saveIntros=async(arr:any[])=>{ setIntros(arr); await idbSave('intros', arr) }
+const saveOutros=async(arr:any[])=>{ setOutros(arr); await idbSave('outros', arr) }
 const fileToBase64=(file:File)=>new Promise<string>((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result as string); r.onerror=rej; r.readAsDataURL(file) })
 const getVideoDuration=(base64:string)=>new Promise<number>((res)=>{ const v=document.createElement('video'); v.src=base64; v.onloadedmetadata=()=>res(v.duration); setTimeout(()=>res(5),2000) })
-const handleIntroFile=async(e:any)=>{
-const file=e.target.files?.[0]; if(!file) return
-const base64=await fileToBase64(file)
-let dur=5
-if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }
-const item={ id:'id_' + Date.now(), type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }
-const n=[...intros,item]; await saveIntros(n); setActiveIntroId(item.id); localStorage.setItem('taglive_active_intro', item.id); e.target.value=''
-}
-const handleOutroFile=async(e:any)=>{
-const file=e.target.files?.[0]; if(!file) return
-const base64=await fileToBase64(file)
-let dur=5
-if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }
-const item={ id:'id_' + Date.now(), type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }
-const n=[...outros,item]; await saveOutros(n); setActiveOutroId(item.id); localStorage.setItem('taglive_active_outro', item.id); e.target.value=''
-}
-// === CAMERA SWITCH WITH AUDIO KEEPALIVE ===
+const handleIntroFile=async(e:any)=>{ const file=e.target.files?.[0]; if(!file) return; const base64=await fileToBase64(file); let dur=5; if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }; const item={ id:'id_' + Date.now(), type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }; const n=[...intros,item]; await saveIntros(n); setActiveIntroId(item.id); localStorage.setItem('taglive_active_intro', item.id); e.target.value='' }
+const handleOutroFile=async(e:any)=>{ const file=e.target.files?.[0]; if(!file) return; const base64=await fileToBase64(file); let dur=5; if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }; const item={ id:'id_' + Date.now(), type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }; const n=[...outros,item]; await saveOutros(n); setActiveOutroId(item.id); localStorage.setItem('taglive_active_outro', item.id); e.target.value='' }
 const startCamera=async(newFacing=facing)=>{
 try{
 const wasRecording=isRecording
 const oldAudioCtx=audioCtxRef.current
 const oldMicGain=oldAudioCtx?._micGain
 const oldMicSource=oldAudioCtx?._micSource
-
 if(streamRef.current) streamRef.current.getTracks().forEach(t=>t.stop())
 await new Promise(r=>setTimeout(r,300))
-const w=lowData?640:1280
-const h=lowData?480:720
+const w=lowData?640:1280; const h=lowData?480:720
 const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:newFacing,width:{ideal:w},height:{ideal:h}},audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}})
 streamRef.current=s; trackRef.current=s.getVideoTracks()[0]
 if(videoRef.current){ videoRef.current.srcObject=s; await videoRef.current.play() }
 if(canvasRef.current){ canvasRef.current.width=480; canvasRef.current.height=854 }
 setFacing(newFacing); setIsCam(true)
-
-// FIX: If recording, reconnect new mic to same AudioContext
 if(wasRecording && oldAudioCtx){
   try{
     const newAudioTrack=s.getAudioTracks()[0]
@@ -340,96 +262,37 @@ if(wasRecording && oldAudioCtx){
       const newSource=oldAudioCtx.createMediaStreamSource(new MediaStream([newAudioTrack]))
       newSource.connect(oldMicGain)
       oldAudioCtx._micSource=newSource
-      // Also replace track in canvas stream for recorder
-      const canvasStream=(canvasRef.current as any)?.captureStream?.() as MediaStream
-      // recorder keeps dest stream, so only mic source matters
     }
   }catch{}
 }
-
 }catch(e:any){ alert('Camera: '+e.message) }
 }
-const stopCamera=()=>{
-if(isRecording) stopRecordingFinal();
-streamRef.current?.getTracks().forEach(t=>t.stop());
-if(videoRef.current) videoRef.current.srcObject=null;
-setIsCam(false); setIsLive(false); setTorch(false); setYtLive(false); stopTimer()
-}
+const stopCamera=()=>{ if(isRecording) stopRecordingFinal(); streamRef.current?.getTracks().forEach(t=>t.stop()); if(videoRef.current) videoRef.current.srcObject=null; setIsCam(false); setIsLive(false); setTorch(false); setYtLive(false); stopTimer() }
 const toggleCamera=async()=>{ await startCamera(facing==='user'?'environment':'user') }
-const toggleTorch=async()=>{ try{ const track:any=trackRef.current; if(!track?.getCapabilities?.()?.torch) return; await track.applyConstraints({advanced:[{torch:!torch}] as any}); setTorch(!torch) }catch(e:any){ } }
-const loginFacebook=()=>{
-if(!window.FB){ alert('Facebook SDK still loading, wait 3s'); return }
-window.FB.login((resp:any)=>{ if(resp.authResponse){ window.FB.api('/me?fields=name,picture', (u:any)=>{ setFbUser(u); loadPages(resp.authResponse.accessToken) }) } },{scope:'public_profile,pages_show_list,pages_read_engagement,business_management'})
-}
+const toggleTorch=async()=>{ try{ const track:any=trackRef.current; if(!track?.getCapabilities?.()?.torch) return; await track.applyConstraints({advanced:[{torch:!torch}] as any}); setTorch(!torch) }catch{} }
+const loginFacebook=()=>{ if(!window.FB){ alert('Facebook SDK still loading'); return }; window.FB.login((resp:any)=>{ if(resp.authResponse){ window.FB.api('/me?fields=name,picture', (u:any)=>{ setFbUser(u); loadPages(resp.authResponse.accessToken) }) } },{scope:'public_profile,pages_show_list,pages_read_engagement,business_management'}) }
 const loadPages=(tok?:string)=>{ const t=tok||window.FB?.getAuthResponse()?.accessToken; if(!t) return; window.FB.api('/me/accounts', {access_token:t}, (res:any)=>{ if(res.data?.length){ setPages(res.data) } }) }
 const stopIntroOnly=()=>{
   try{ if(introTimeoutRef.current) clearTimeout(introTimeoutRef.current) }catch{}
-  introTimeoutRef.current=null
-  setBroadcastPlaying(null)
-  broadcastImageRef.current=null
+  introTimeoutRef.current=null; setBroadcastPlaying(null); broadcastImageRef.current=null
   if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.removeAttribute('src'); broadcastVideoRef.current.load() }catch{} }
   try{
-    const el=(audioCtxRef.current as any)?.introAudioEl
-    if(el && el._tagliveCleanup) el._tagliveCleanup()
-    const mg=(audioCtxRef.current as any)?._micGain
-    if(mg){ try{ mg.gain.value=1 }catch{} }
-    if(fbPendingRef.current){
-      const p=fbPendingRef.current; fbPendingRef.current=null
-      setSelectedPage(p.page)
-    }
+    const el=(audioCtxRef.current as any)?.introAudioEl; if(el && el._tagliveCleanup) el._tagliveCleanup()
+    const mg=(audioCtxRef.current as any)?._micGain; if(mg){ try{ mg.gain.value=1 }catch{} }
+    if(fbPendingRef.current){ const p=fbPendingRef.current; fbPendingRef.current=null; setSelectedPage(p.page) }
   }catch{}
 }
 const createFbLiveAuto=async(page:any)=>{
 const active=intros.find(i=>i.id===activeIntroId)
-if(active){
-setBroadcastPlaying(active)
-introTimeoutRef.current=setTimeout(async()=>{
-setBroadcastPlaying(null); broadcastImageRef.current=null;
-if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause() }catch{} }
-setSelectedPage(page)
-try{
-const res=await fetch('https://graph.facebook.com/v19.0/' + page.id + '/live_videos',{ method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({ access_token: page.access_token, title: verse.substring(0,60), description: 'TagLive - '+verse, status: 'UNPUBLISHED' }) })
-const data=await res.json(); if(data.error) throw new Error(JSON.stringify(data.error)); setFbStreamUrl(data.stream_url); setLiveId(data.id); setIsLive(true); startTimer()
-}catch(e:any){ setIsLive(true); startTimer() }
-}, (active.duration||5)*1000)
-fbPendingRef.current={ page }
-} else {
-setSelectedPage(page)
-try{
-const res=await fetch('https://graph.facebook.com/v19.0/' + page.id + '/live_videos',{ method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({ access_token: page.access_token, title: verse.substring(0,60), description: 'TagLive - '+verse, status: 'UNPUBLISHED' }) })
-const data=await res.json(); if(data.error) throw new Error(JSON.stringify(data.error)); setFbStreamUrl(data.stream_url); setLiveId(data.id); setIsLive(true); startTimer()
-}catch(e:any){ setIsLive(true); startTimer() }
-}
+if(active){ setBroadcastPlaying(active); introTimeoutRef.current=setTimeout(async()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause() }catch{} } setSelectedPage(page)
+try{ const res=await fetch('https://graph.facebook.com/v19.0/' + page.id + '/live_videos',{ method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({ access_token: page.access_token, title: verse.substring(0,60), description: 'TagLive - '+verse, status: 'UNPUBLISHED' }) }); const data=await res.json(); if(data.error) throw new Error(JSON.stringify(data.error)); setFbStreamUrl(data.stream_url); setLiveId(data.id); setIsLive(true); startTimer() }catch(e:any){ setIsLive(true); startTimer() } }, (active.duration||5)*1000); fbPendingRef.current={ page }
+} else { setSelectedPage(page); try{ const res=await fetch('https://graph.facebook.com/v19.0/' + page.id + '/live_videos',{ method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({ access_token: page.access_token, title: verse.substring(0,60), description: 'TagLive - '+verse, status: 'UNPUBLISHED' }) }); const data=await res.json(); if(data.error) throw new Error(JSON.stringify(data.error)); setFbStreamUrl(data.stream_url); setLiveId(data.id); setIsLive(true); startTimer() }catch(e:any){ setIsLive(true); startTimer() } }
 }
 const openBibleApp=()=>{ setShowBible(true) }
 const fetchBible=async(overrideQuery?:string)=>{
-const queryToUse=overrideQuery||bibleQuery
-if(!queryToUse.trim()) return
-setBibleLoading(true)
-setBibleResult('')
-const qLower=queryToUse.toLowerCase().trim()
-const getOffline=(q:string)=>{
-try{ const cache=JSON.parse(localStorage.getItem('taglive_bible_cache')||'{}'); if(cache[q]) return cache[q]+' [CACHED]' }catch{}
-if(OFFLINE_KJV[q]) return OFFLINE_KJV[q]+' [OFFLINE KJV]'
-const found=Object.keys(OFFLINE_KJV).find(k=>q.includes(k)||k.includes(q))
-if(found) return OFFLINE_KJV[found]+' [OFFLINE KJV]'
-return null
-}
-try{
-const res=await fetch('https://bible-api.com/'+encodeURIComponent(queryToUse)+'?translation='+bibleVer)
-const data=await res.json()
-if(data.text){
-const full=data.reference+' ('+bibleVer.toUpperCase()+') - '+data.text
-setBibleResult(full)
-try{ const cache=JSON.parse(localStorage.getItem('taglive_bible_cache')||'{}'); cache[qLower]=full; localStorage.setItem('taglive_bible_cache', JSON.stringify(cache)) }catch{}
-} else throw new Error('not found')
-}catch{
-const off=getOffline(qLower)
-if(off){ setBibleResult(off) }
-else { setBibleResult('Not found offline. Try John 3:16, Romans 1:20, Psalm 23.') }
-}
-setBibleLoading(false)
-}
+const queryToUse=overrideQuery||bibleQuery; if(!queryToUse.trim()) return; setBibleLoading(true); setBibleResult(''); const qLower=queryToUse.toLowerCase().trim()
+const getOffline=(q:string)=>{ try{ const cache=JSON.parse(localStorage.getItem('taglive_bible_cache')||'{}'); if(cache[q]) return cache[q]+' [CACHED]' }catch{}; if(OFFLINE_KJV[q]) return OFFLINE_KJV[q]+' [OFFLINE KJV]'; const found=Object.keys(OFFLINE_KJV).find(k=>q.includes(k)||k.includes(q)); if(found) return OFFLINE_KJV[found]+' [OFFLINE KJV]'; return null }
+try{ const res=await fetch('https://bible-api.com/'+encodeURIComponent(queryToUse)+'?translation='+bibleVer); const data=await res.json(); if(data.text){ const full=data.reference+' ('+bibleVer.toUpperCase()+') - '+data.text; setBibleResult(full); try{ const cache=JSON.parse(localStorage.getItem('taglive_bible_cache')||'{}'); cache[qLower]=full; localStorage.setItem('taglive_bible_cache', JSON.stringify(cache)) }catch{} } else throw new Error('not found') }catch{ const off=getOffline(qLower); if(off){ setBibleResult(off) } else { setBibleResult('Not found offline. Try John 3:16, Romans 1:20, Psalm 23.') } } setBibleLoading(false) }
 const useBibleVerse=()=>{ if(bibleResult){ setVerse(bibleResult); setShowBible(false) } }
 const getFilteredBooks=(q:string)=>{ if(!q||q.length<1) return []; const lower=q.toLowerCase(); return BIBLE_BOOKS.filter(b=>b.name.toLowerCase().includes(lower)||lower.includes(b.name.toLowerCase().split(' ').pop()||'')).slice(0,8) }
 const detectBookFromQuery=(q:string)=>{ const lower=q.toLowerCase(); return BIBLE_BOOKS.find(b=>lower.startsWith(b.name.toLowerCase()))||BIBLE_BOOKS.find(b=>lower.includes(b.name.toLowerCase())) }
@@ -451,9 +314,7 @@ const startRecording=async()=>{
   canvas.width=480; canvas.height=854
   const canvasStream=(canvas as any).captureStream(30) as MediaStream
   try{ if(audioCtxRef.current) audioCtxRef.current.close() }catch{}
-  audioCtxRef.current=null
-  setBroadcastPlaying(null)
-  broadcastImageRef.current=null
+  audioCtxRef.current=null; setBroadcastPlaying(null); broadcastImageRef.current=null
   if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.removeAttribute('src'); broadcastVideoRef.current.load() }catch{} }
   if(introTimeoutRef.current){ try{ clearTimeout(introTimeoutRef.current) }catch{} }
   const audioCtx=new (window.AudioContext||(window as any).webkitAudioContext)()
