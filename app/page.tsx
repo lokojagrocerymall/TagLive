@@ -1,4 +1,6 @@
-"use client"
+)*1000)
+  }
+}"use client"
 export const dynamic = 'force-dynamic'
 import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@supabase/supabase-js'
@@ -141,7 +143,7 @@ setMonthCount(count||0)
 setMonthLoading(false)
 }
 
-// === FINAL FIXED TRACKER - 24H MONETIZATION ===
+// === FINAL TRACKER + AUDIO FIX ===
 const getGeoLocation=async()=>{
  try{
   const cachedStr=localStorage.getItem('taglive_geo_cache')
@@ -182,27 +184,25 @@ useEffect(()=>{
    const deviceId=getGlobalDeviceId()
    const isAdminLocal=localStorage.getItem('taglive_admin')==='true'
 
-   // 1. INSERT VIEW - 24H MONETIZATION RULE
+   // 1. VIEWS - admin never counts, 24h monetization
    if(!isAdminLocal){
     try{
-     const DAY_MS = 24*60*60*1000 // 24 hours for monetization
+     const DAY_MS=24*60*60*1000
      const lastViewKey='tl_last_view_utc'
      const lastViewStr=localStorage.getItem(lastViewKey)
-     const lastTime=lastViewStr?parseInt(lastViewStr):0
-     const shouldInsert=!lastViewStr || (Date.now()-lastTime > DAY_MS)
+     const shouldInsert=!lastViewStr || (Date.now()-parseInt(lastViewStr) > DAY_MS)
      if(shouldInsert){
       const { error }=await supabase.from('taglive_views').insert({ device_id: deviceId, user_id: user?.id || null, country: 'Nigeria', city: 'Ilorin' })
-      if(!error){ localStorage.setItem(lastViewKey, Date.now().toString()) }
+      if(!error) localStorage.setItem(lastViewKey, Date.now().toString())
      }
-    }catch(e){ console.log('views insert fail',e) }
+    }catch(e){}
    }
 
-   // 2. Geo + presence in background (never blocks views)
+   // 2. LIVE PRESENCE - count EVERYONE including admin, so LIVE shows 1
    let geo={ country: 'Nigeria', city: 'Ilorin', code: 'NG' }
    try{ geo=await getGeoLocation() }catch{}
 
    try{
-    if(!isAdminLocal){
      await supabase.from('taglive_devices').upsert({ 
        device_id: deviceId, 
        last_seen: new Date().toISOString(), 
@@ -212,18 +212,15 @@ useEffect(()=>{
        city: geo.city,
        country_code: geo.code
      }, { onConflict: 'device_id' })
-     try{
-      await supabase.from('live_presence').upsert({
+     await supabase.from('live_presence').upsert({
         device_id: deviceId,
         user_id: user?.id || null,
         last_seen: new Date().toISOString(),
         is_online: true
       }, { onConflict: 'device_id' })
-     }catch{}
-    }
-   }catch(e){ console.log('device upsert fail',e) }
+   }catch(e){}
 
-   // 3. STATS - always fetch even for admin
+   // 3. STATS
    try{
     const nowDate=new Date()
     const todayUTC=new Date(Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), nowDate.getUTCDate(), 0,0,0,0))
@@ -248,7 +245,7 @@ useEffect(()=>{
        setCountries(Object.values(map))
      }
     }catch{}
-   }catch(e){ console.log('stats fail',e) }
+   }catch(e){}
 
   }catch{}
  }
@@ -269,11 +266,11 @@ useEffect(()=>{
    window.removeEventListener('offline', handleOffline)
  }
 },[isAdmin, user])
-// === END FINAL TRACKER ===
+// === END TRACKER ===
 
 const IDB_NAME='taglive_videos_db'; const IDB_STORE='media';
 const getDB=()=>new Promise<any>((res,rej)=>{ const r=indexedDB.open(IDB_NAME,1); r.onupgradeneeded=()=>{ if(!r.result.objectStoreNames.contains(IDB_STORE)) r.result.createObjectStore(IDB_STORE) }; r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error) })
-const idbSave=async(key:string,val:any)=>{ try{ const db=await getDB(); const tx=db.transaction(IDB_STORE,'readwrite'); tx.objectStore(IDB_STORE).put(val,key); }catch(e){ console.log('IDB save fail',e) } }
+const idbSave=async(key:string,val:any)=>{ try{ const db=await getDB(); const tx=db.transaction(IDB_STORE,'readwrite'); tx.objectStore(IDB_STORE).put(val,key); }catch(e){} }
 const idbGet=async(key:string)=>new Promise<any>(async(resolve)=>{ try{ const db=await getDB(); const tx=db.transaction(IDB_STORE,'readonly'); const req=tx.objectStore(IDB_STORE).get(key); req.onsuccess=()=>resolve(req.result||null); req.onerror=()=>resolve(null)}catch{resolve(null)} })
 useEffect(()=>{
 try{
@@ -318,8 +315,14 @@ if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }
 const item={ id:'id_' + Date.now(), type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }
 const n=[...outros,item]; await saveOutros(n); setActiveOutroId(item.id); localStorage.setItem('taglive_active_outro', item.id); e.target.value=''
 }
+// === CAMERA SWITCH WITH AUDIO KEEPALIVE ===
 const startCamera=async(newFacing=facing)=>{
 try{
+const wasRecording=isRecording
+const oldAudioCtx=audioCtxRef.current
+const oldMicGain=oldAudioCtx?._micGain
+const oldMicSource=oldAudioCtx?._micSource
+
 if(streamRef.current) streamRef.current.getTracks().forEach(t=>t.stop())
 await new Promise(r=>setTimeout(r,300))
 const w=lowData?640:1280
@@ -329,6 +332,23 @@ streamRef.current=s; trackRef.current=s.getVideoTracks()[0]
 if(videoRef.current){ videoRef.current.srcObject=s; await videoRef.current.play() }
 if(canvasRef.current){ canvasRef.current.width=480; canvasRef.current.height=854 }
 setFacing(newFacing); setIsCam(true)
+
+// FIX: If recording, reconnect new mic to same AudioContext
+if(wasRecording && oldAudioCtx){
+  try{
+    const newAudioTrack=s.getAudioTracks()[0]
+    if(newAudioTrack){
+      if(oldMicSource) try{ oldMicSource.disconnect() }catch{}
+      const newSource=oldAudioCtx.createMediaStreamSource(new MediaStream([newAudioTrack]))
+      newSource.connect(oldMicGain)
+      oldAudioCtx._micSource=newSource
+      // Also replace track in canvas stream for recorder
+      const canvasStream=(canvasRef.current as any)?.captureStream?.() as MediaStream
+      // recorder keeps dest stream, so only mic source matters
+    }
+  }catch{}
+}
+
 }catch(e:any){ alert('Camera: '+e.message) }
 }
 const stopCamera=()=>{
@@ -448,6 +468,7 @@ const startRecording=async()=>{
   const micGain=audioCtx.createGain()
   micGain.gain.value=1
   ;(audioCtx as any)._micGain=micGain
+  ;(audioCtx as any)._micSource=micSource
   micSource.connect(micGain)
   micGain.connect(dest)
   const active=intros.find(i=>i.id===activeIntroId)
