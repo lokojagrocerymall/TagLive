@@ -259,68 +259,54 @@ if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }
 const item={ id:'id_' + Date.now(), type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }
 const n=[...outros,item]; await saveOutros(n); setActiveOutroId(item.id); localStorage.setItem('taglive_active_outro', item.id); e.target.value=''
 }
-// === FIXED CAMERA SWITCH - NO MORE "Could not start video source" ===
+// === FINAL WORKING CAMERA SWITCH - NO STOCK, NO SLOW-MO ===
 const startCamera=async(newFacing=facing)=>{
 try{
 const wasRecording=isRecording
-const oldAudioCtx=audioCtxRef.current
 const oldStream=streamRef.current
 const w=lowData?640:1280
 const h=lowData?480:720
 
-if(wasRecording){
-  // DURING RECORDING: switch VIDEO ONLY to avoid audio lock
-  let newVideoStream: MediaStream | null = null
+if(wasRecording && oldStream){
+  // LIVE RECORDING: VIDEO ONLY, keep old audio alive
+  const oldAudioTracks=oldStream.getAudioTracks()
+  const oldVideoTracks=oldStream.getVideoTracks()
+  oldVideoTracks.forEach(t=>{ try{ t.stop() }catch{} })
+  // Small delay to let device release video only
+  await new Promise(r=>setTimeout(r,120))
+  let newVideoStream: MediaStream
   try{
-    newVideoStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:newFacing,width:{ideal:w},height:{ideal:h}}, audio:false})
+    newVideoStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:newFacing,width:{ideal:w},height:{ideal:h}}, audio:false})
   }catch{
-    try{
-      newVideoStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:newFacing}, width:{ideal:w}, height:{ideal:h}}, audio:false})
-    }catch(e:any){ throw e }
+    newVideoStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:newFacing},width:{ideal:w},height:{ideal:h}}, audio:false})
   }
   const newVideoTrack=newVideoStream.getVideoTracks()[0]
-  // Keep old audio tracks alive for recording
-  const oldAudioTracks=oldStream?.getAudioTracks() || []
   const combined=new MediaStream([newVideoTrack, ...oldAudioTracks])
-  // Stop ONLY old video, keep audio
-  oldStream?.getVideoTracks().forEach(t=>t.stop())
   streamRef.current=combined
   trackRef.current=newVideoTrack
   if(videoRef.current){ videoRef.current.srcObject=combined; await videoRef.current.play().catch(()=>{}) }
-  if(canvasRef.current){ canvasRef.current.width=480; canvasRef.current.height=854 }
   setFacing(newFacing); setIsCam(true)
-  // AudioContext stays, audio keeps flowing
   return
 }else{
-  // NOT RECORDING: normal full switch, but get new stream FIRST then stop old
-  if(oldStream) oldStream.getTracks().forEach(t=>t.stop())
-  await new Promise(r=>setTimeout(r,80))
+  // NOT RECORDING: normal switch
+  if(oldStream) oldStream.getTracks().forEach(t=>{ try{ t.stop() }catch{} })
+  await new Promise(r=>setTimeout(r,150))
   let s: MediaStream
   try{
-    s=await navigator.mediaDevices.getUserMedia({video:{facingMode:newFacing,width:{ideal:w},height:{ideal:h}},audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}})
+    s=await navigator.mediaDevices.getUserMedia({video:{facingMode:newFacing,width:{ideal:w},height:{ideal:h}},audio:true})
   }catch{
-    // Fallback without strict facingMode
-    s=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:newFacing}, width:{ideal:w}, height:{ideal:h}}, audio:true})
+    s=await navigator.mediaDevices.getUserMedia({video:true, audio:true})
   }
   streamRef.current=s; trackRef.current=s.getVideoTracks()[0]
   if(videoRef.current){ videoRef.current.srcObject=s; await videoRef.current.play() }
   if(canvasRef.current){ canvasRef.current.width=480; canvasRef.current.height=854 }
   setFacing(newFacing); setIsCam(true)
 }
-}catch(e:any){ 
-  console.log('camera switch error', e)
-  try{
-    // Last resort fallback: try any camera
-    const s=await navigator.mediaDevices.getUserMedia({video:true, audio: !isRecording})
-    streamRef.current=s; trackRef.current=s.getVideoTracks()[0]
-    if(videoRef.current){ videoRef.current.srcObject=s; await videoRef.current.play().catch(()=>{}) }
-    setIsCam(true)
-  }catch(e2:any){ alert('Camera: '+e.message) }
-}
+}catch(e:any){ alert('Camera: '+e.message) }
 }
 const stopCamera=()=>{
 if(isRecording) stopRecordingFinal();
-try{ if(audioCtxRef.current){ audioCtxRef.current.close(); } }catch{}
+try{ if(audioCtxRef.current){ audioCtxRef.current.close() } }catch{}
 audioCtxRef.current=null
 streamRef.current?.getTracks().forEach(t=>t.stop());
 if(videoRef.current) videoRef.current.srcObject=null;
@@ -420,7 +406,7 @@ const removeChurchLogo=()=>{ localStorage.removeItem('taglive_church_logo'); set
 const startRecording=async()=>{
   const canvas=canvasRef.current; if(!canvas) return
   canvas.width=480; canvas.height=854
-  const canvasStream=(canvas as any).captureStream(30) as MediaStream
+  const canvasStream=(canvas as any).captureStream(24) as MediaStream
   try{ if(audioCtxRef.current) audioCtxRef.current.close() }catch{}
   audioCtxRef.current=null
   setBroadcastPlaying(null)
@@ -472,7 +458,7 @@ const startRecording=async()=>{
   let mime='video/webm;codecs=vp9,opus'
   if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm;codecs=vp8,opus'
   if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm'
-  const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 1200000 })
+  const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 1500000 })
   rec.ondataavailable=(e)=>{ if(e.data.size>0) chunksRef.current.push(e.data) }
   rec.onstop=()=>{
     const blob=new Blob(chunksRef.current, { type: 'video/webm' })
