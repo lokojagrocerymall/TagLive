@@ -259,36 +259,69 @@ if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }
 const item={ id:'id_' + Date.now(), type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }
 const n=[...outros,item]; await saveOutros(n); setActiveOutroId(item.id); localStorage.setItem('taglive_active_outro', item.id); e.target.value=''
 }
+// === FIXED CAMERA SWITCH - NO MORE "Could not start video source" ===
 const startCamera=async(newFacing=facing)=>{
 try{
 const wasRecording=isRecording
 const oldAudioCtx=audioCtxRef.current
-const oldMicGain=oldAudioCtx?._micGain
-const oldMicSource=oldAudioCtx?._micSource
 const oldStream=streamRef.current
 const w=lowData?640:1280
 const h=lowData?480:720
-const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:newFacing,width:{ideal:w},height:{ideal:h}},audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}})
-if(oldStream) oldStream.getTracks().forEach(t=>t.stop())
-streamRef.current=s; trackRef.current=s.getVideoTracks()[0]
-if(videoRef.current){ videoRef.current.srcObject=s; await videoRef.current.play() }
-if(canvasRef.current){ canvasRef.current.width=480; canvasRef.current.height=854 }
-setFacing(newFacing); setIsCam(true)
-if(wasRecording && oldAudioCtx){
+
+if(wasRecording){
+  // DURING RECORDING: switch VIDEO ONLY to avoid audio lock
+  let newVideoStream: MediaStream | null = null
   try{
-    const newAudioTrack=s.getAudioTracks()[0]
-    if(newAudioTrack){
-      if(oldMicSource) try{ oldMicSource.disconnect() }catch{}
-      const newSource=oldAudioCtx.createMediaStreamSource(new MediaStream([newAudioTrack]))
-      newSource.connect(oldMicGain)
-      oldAudioCtx._micSource=newSource
-    }
-  }catch{}
+    newVideoStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:newFacing,width:{ideal:w},height:{ideal:h}}, audio:false})
+  }catch{
+    try{
+      newVideoStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:newFacing}, width:{ideal:w}, height:{ideal:h}}, audio:false})
+    }catch(e:any){ throw e }
+  }
+  const newVideoTrack=newVideoStream.getVideoTracks()[0]
+  // Keep old audio tracks alive for recording
+  const oldAudioTracks=oldStream?.getAudioTracks() || []
+  const combined=new MediaStream([newVideoTrack, ...oldAudioTracks])
+  // Stop ONLY old video, keep audio
+  oldStream?.getVideoTracks().forEach(t=>t.stop())
+  streamRef.current=combined
+  trackRef.current=newVideoTrack
+  if(videoRef.current){ videoRef.current.srcObject=combined; await videoRef.current.play().catch(()=>{}) }
+  if(canvasRef.current){ canvasRef.current.width=480; canvasRef.current.height=854 }
+  setFacing(newFacing); setIsCam(true)
+  // AudioContext stays, audio keeps flowing
+  return
+}else{
+  // NOT RECORDING: normal full switch, but get new stream FIRST then stop old
+  if(oldStream) oldStream.getTracks().forEach(t=>t.stop())
+  await new Promise(r=>setTimeout(r,80))
+  let s: MediaStream
+  try{
+    s=await navigator.mediaDevices.getUserMedia({video:{facingMode:newFacing,width:{ideal:w},height:{ideal:h}},audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}})
+  }catch{
+    // Fallback without strict facingMode
+    s=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:newFacing}, width:{ideal:w}, height:{ideal:h}}, audio:true})
+  }
+  streamRef.current=s; trackRef.current=s.getVideoTracks()[0]
+  if(videoRef.current){ videoRef.current.srcObject=s; await videoRef.current.play() }
+  if(canvasRef.current){ canvasRef.current.width=480; canvasRef.current.height=854 }
+  setFacing(newFacing); setIsCam(true)
 }
-}catch(e:any){ alert('Camera: '+e.message) }
+}catch(e:any){ 
+  console.log('camera switch error', e)
+  try{
+    // Last resort fallback: try any camera
+    const s=await navigator.mediaDevices.getUserMedia({video:true, audio: !isRecording})
+    streamRef.current=s; trackRef.current=s.getVideoTracks()[0]
+    if(videoRef.current){ videoRef.current.srcObject=s; await videoRef.current.play().catch(()=>{}) }
+    setIsCam(true)
+  }catch(e2:any){ alert('Camera: '+e.message) }
+}
 }
 const stopCamera=()=>{
 if(isRecording) stopRecordingFinal();
+try{ if(audioCtxRef.current){ audioCtxRef.current.close(); } }catch{}
+audioCtxRef.current=null
 streamRef.current?.getTracks().forEach(t=>t.stop());
 if(videoRef.current) videoRef.current.srcObject=null;
 setIsCam(false); setIsLive(false); setTorch(false); setYtLive(false); stopTimer()
