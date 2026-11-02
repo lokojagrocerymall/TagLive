@@ -159,10 +159,10 @@ useEffect(()=>{
  const trackDevice=async()=>{
   try{
    const deviceId=getGlobalDeviceId()
-   const isAdminLocal=localStorage.getItem('taglive_admin')==='true'
-   if(!isAdminLocal){
+   const adminFlag = localStorage.getItem('taglive_admin')==='true' || isAdmin
+   if(!adminFlag){
      const DAY_MS=24*60*60*1000
-     const lastKey='tl_v2_last'
+     const lastKey='tl_v3_last'
      const lastStr=localStorage.getItem(lastKey)
      const shouldInsert=!lastStr || (Date.now()-parseInt(lastStr) > DAY_MS)
      if(shouldInsert){
@@ -265,11 +265,11 @@ const wasRecording=isRecording
 const oldAudioCtx=audioCtxRef.current
 const oldMicGain=oldAudioCtx?._micGain
 const oldMicSource=oldAudioCtx?._micSource
-if(streamRef.current) streamRef.current.getTracks().forEach(t=>t.stop())
-await new Promise(r=>setTimeout(r,300))
+const oldStream=streamRef.current
 const w=lowData?640:1280
 const h=lowData?480:720
 const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:newFacing,width:{ideal:w},height:{ideal:h}},audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}})
+if(oldStream) oldStream.getTracks().forEach(t=>t.stop())
 streamRef.current=s; trackRef.current=s.getVideoTracks()[0]
 if(videoRef.current){ videoRef.current.srcObject=s; await videoRef.current.play() }
 if(canvasRef.current){ canvasRef.current.width=480; canvasRef.current.height=854 }
