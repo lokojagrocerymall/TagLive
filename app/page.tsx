@@ -141,7 +141,6 @@ setMonthCount(count||0)
 setMonthLoading(false)
 }
 
-// === FIXED COUNTER v2 - ONLY CHANGE ===
 const getGlobalDeviceId=()=>{
  try{
   let gid=localStorage.getItem('taglive_global_device')
@@ -161,7 +160,6 @@ useEffect(()=>{
   try{
    const deviceId=getGlobalDeviceId()
    const isAdminLocal=localStorage.getItem('taglive_admin')==='true'
-   
    if(!isAdminLocal){
      const DAY_MS=24*60*60*1000
      const lastKey='tl_v2_last'
@@ -172,7 +170,6 @@ useEffect(()=>{
        if(!error) localStorage.setItem(lastKey, Date.now().toString())
      }
    }
-   
    try{
      await supabase.from('taglive_devices').upsert({ 
        device_id: deviceId, 
@@ -183,7 +180,6 @@ useEffect(()=>{
        user_agent: navigator.userAgent.substring(0,80)
      }, { onConflict: 'device_id' })
    }catch{}
-   
    try{
     const nowDate=new Date()
     const todayUTC=new Date(Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), nowDate.getUTCDate(), 0,0,0,0))
@@ -215,7 +211,6 @@ useEffect(()=>{
  heartbeatRef.current=setInterval(trackDevice, 10*1000)
  return()=>{ mounted=false; clearInterval(heartbeatRef.current) }
 },[isAdmin])
-// === END FIXED COUNTER v2 ===
 
 const IDB_NAME='taglive_videos_db'; const IDB_STORE='media';
 const getDB=()=>new Promise<any>((res,rej)=>{ const r=indexedDB.open(IDB_NAME,1); r.onupgradeneeded=()=>{ if(!r.result.objectStoreNames.contains(IDB_STORE)) r.result.createObjectStore(IDB_STORE) }; r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error) })
@@ -266,6 +261,10 @@ const n=[...outros,item]; await saveOutros(n); setActiveOutroId(item.id); localS
 }
 const startCamera=async(newFacing=facing)=>{
 try{
+const wasRecording=isRecording
+const oldAudioCtx=audioCtxRef.current
+const oldMicGain=oldAudioCtx?._micGain
+const oldMicSource=oldAudioCtx?._micSource
 if(streamRef.current) streamRef.current.getTracks().forEach(t=>t.stop())
 await new Promise(r=>setTimeout(r,300))
 const w=lowData?640:1280
@@ -275,6 +274,17 @@ streamRef.current=s; trackRef.current=s.getVideoTracks()[0]
 if(videoRef.current){ videoRef.current.srcObject=s; await videoRef.current.play() }
 if(canvasRef.current){ canvasRef.current.width=480; canvasRef.current.height=854 }
 setFacing(newFacing); setIsCam(true)
+if(wasRecording && oldAudioCtx){
+  try{
+    const newAudioTrack=s.getAudioTracks()[0]
+    if(newAudioTrack){
+      if(oldMicSource) try{ oldMicSource.disconnect() }catch{}
+      const newSource=oldAudioCtx.createMediaStreamSource(new MediaStream([newAudioTrack]))
+      newSource.connect(oldMicGain)
+      oldAudioCtx._micSource=newSource
+    }
+  }catch{}
+}
 }catch(e:any){ alert('Camera: '+e.message) }
 }
 const stopCamera=()=>{
@@ -394,6 +404,7 @@ const startRecording=async()=>{
   const micGain=audioCtx.createGain()
   micGain.gain.value=1
   ;(audioCtx as any)._micGain=micGain
+  ;(audioCtx as any)._micSource=micSource
   micSource.connect(micGain)
   micGain.connect(dest)
   const active=intros.find(i=>i.id===activeIntroId)
