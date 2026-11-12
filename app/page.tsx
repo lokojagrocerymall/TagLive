@@ -1,4 +1,3 @@
-
 "use client"
 export const dynamic = 'force-dynamic'
 import { useEffect, useRef, useState } from 'react'
@@ -317,7 +316,7 @@ const toggleCamera=async()=>{ await startCamera(facing==='user'?'environment':'u
 const toggleTorch=async()=>{ try{ const track:any=trackRef.current; if(!track?.getCapabilities?.()?.torch) return; await track.applyConstraints({advanced:[{torch:!torch}] as any}); setTorch(!torch) }catch(e:any){ } }
 const loginFacebook=()=>{
 if(!window.FB){ alert('Facebook SDK still loading, wait 3s'); return }
-window.FB.login((resp:any)=>{ if(resp.authResponse){ window.FB.api('/me?fields=name,picture', (u:any)=>{ setFbUser(u); loadPages(resp.authResponse.accessToken) }) } },{scope:'public_profile,pages_show_list,pages_read_engagement,business_management'})
+window.FB.login((resp:any)=>{ if(resp.authResponse){ window.FB.api('/me?fields=name,picture', (u:any)=>{ setFbUser(u); loadPages(resp.authResponse.accessToken) }) } },{scope:'public_profile,pages_show_list,pages_read_engagement,pages_manage_posts,business_management'})
 }
 const loadPages=(tok?:string)=>{ const t=tok||window.FB?.getAuthResponse()?.accessToken; if(!t) return; window.FB.api('/me/accounts', {access_token:t}, (res:any)=>{ if(res.data?.length){ setPages(res.data) } }) }
 const stopIntroOnly=()=>{
