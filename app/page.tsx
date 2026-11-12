@@ -1,3 +1,4 @@
+
 "use client"
 export const dynamic = 'force-dynamic'
 import { useEffect, useRef, useState } from 'react'
@@ -336,27 +337,52 @@ const stopIntroOnly=()=>{
     }
   }catch{}
 }
-const createFbLiveAuto=async(page:any)=>{
-const active=intros.find(i=>i.id===activeIntroId)
-if(active){
-setBroadcastPlaying(active)
-introTimeoutRef.current=setTimeout(async()=>{
-setBroadcastPlaying(null); broadcastImageRef.current=null;
-if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause() }catch{} }
-setSelectedPage(page)
-try{
-const res=await fetch('https://graph.facebook.com/v19.0/' + page.id + '/live_videos',{ method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({ access_token: page.access_token, title: verse.substring(0,60), description: 'TagLive - '+verse, status: 'UNPUBLISHED' }) })
-const data=await res.json(); if(data.error) throw new Error(JSON.stringify(data.error)); setFbStreamUrl(data.stream_url); setLiveId(data.id); setIsLive(true); startTimer()
-}catch(e:any){ setIsLive(true); startTimer() }
-}, (active.duration||5)*1000)
-fbPendingRef.current={ page }
-} else {
-setSelectedPage(page)
-try{
-const res=await fetch('https://graph.facebook.com/v19.0/' + page.id + '/live_videos',{ method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({ access_token: page.access_token, title: verse.substring(0,60), description: 'TagLive - '+verse, status: 'UNPUBLISHED' }) })
-const data=await res.json(); if(data.error) throw new Error(JSON.stringify(data.error)); setFbStreamUrl(data.stream_url); setLiveId(data.id); setIsLive(true); startTimer()
-}catch(e:any){ setIsLive(true); startTimer() }
+// FACEBOOK LIVE UPDATE ONLY
+const createFbLiveForPage=async(page:any)=>{
+  setSelectedPage(page)
+  try{
+    const res=await fetch('https://graph.facebook.com/v19.0/' + page.id + '/live_videos',{
+      method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body: new URLSearchParams({ access_token: page.access_token, title: verse.substring(0,60), description: 'TagLive - '+verse, status: 'LIVE_NOW' })
+    })
+    const data=await res.json()
+    if(data.error) throw new Error(data.error?.message || JSON.stringify(data.error))
+    if(!data.stream_url) throw new Error('Facebook did not return a stream_url.')
+    setFbStreamUrl(data.stream_url)
+    setLiveId(data.id)
+    setIsLive(true)
+    startTimer()
+    return data
+  }catch(e:any){
+    setFbStreamUrl('')
+    setLiveId('')
+    setIsLive(false)
+    setSelectedPage(null)
+    alert('Facebook Live failed for this Page: ' + (e.message || e))
+    throw e
+  }
 }
+const createFbLiveAuto=async(page:any)=>{
+  const active=intros.find(i=>i.id===activeIntroId)
+  if(active){
+    setBroadcastPlaying(active)
+    if(active.type==='image'){
+      const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }
+      broadcastImageRef.current=img
+    } else if(active.type==='video' && broadcastVideoRef.current){
+      try{ broadcastVideoRef.current.src=active.data; broadcastVideoRef.current.muted=true; await broadcastVideoRef.current.play() }catch{}
+    }
+    fbPendingRef.current={ page }
+    introTimeoutRef.current=setTimeout(async()=>{
+      setBroadcastPlaying(null); broadcastImageRef.current=null
+      if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause() }catch{} }
+      fbPendingRef.current=null
+      await createFbLiveForPage(page)
+    }, (active.duration||5)*1000)
+  } else {
+    await createFbLiveForPage(page)
+  }
 }
 const openBibleApp=()=>{ setShowBible(true) }
 const fetchBible=async(overrideQuery?:string)=>{
