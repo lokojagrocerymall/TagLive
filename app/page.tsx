@@ -67,6 +67,85 @@ const [bibleLoading,setBibleLoading]=useState(false)
 const [lowData,setLowData]=useState(false)
 const [showTelegramPopup,setShowTelegramPopup]=useState(false)
 const TELEGRAM_LINK="https://t.me/+fjt4YW3hTr9jYWM8"
+// === UPDATE ONLY: TikTok Bridge (Cloady Live) ===
+const WS_URL = "wss://taglive-bridge-j8ppazqg-quiet-comet-8.cloady.io"
+const [tiktokUsername,setTiktokUsername]=useState('')
+const [tiktokStatus,setTiktokStatus]=useState<'Disconnected'|'Connecting'|'Connected'|'Failed'>('Disconnected')
+const [tiktokViewerCount,setTiktokViewerCount]=useState(0)
+const [tiktokLikes,setTiktokLikes]=useState(0)
+const [tiktokLastComment,setTiktokLastComment]=useState('')
+const tiktokWsRef=useRef<WebSocket|null>(null)
+const connectTikTok=()=>{
+  const username=tiktokUsername.trim().replace(/^@/,'')
+  if(!username){ alert('Put your TikTok @username first'); return }
+  if(tiktokWsRef.current){ try{ tiktokWsRef.current.close() }catch{} }
+  setTiktokStatus('Connecting')
+  const ws=new WebSocket(WS_URL)
+  tiktokWsRef.current=ws
+  ws.onopen=()=>{ setTiktokStatus('Connected'); try{ ws.send(JSON.stringify({ type:'join', username })) }catch{} }
+  ws.onmessage=(e)=>{
+    try{
+      const d=JSON.parse(e.data)
+      if(d.type==='chat' || d.type==='comment'){ setTiktokLastComment((d.nickname||d.username||'')+': '+(d.comment||d.text||'')) }
+      if(d.type==='viewerCount' || d.type==='viewers'){ setTiktokViewerCount(Number(d.count||d.viewers||0)) }
+      if(d.type==='like' || d.type==='likes'){ setTiktokLikes((p)=>p+Number(d.count||1)) }
+      if(d.type==='connected' || d.type==='roomInfo'){ setTiktokStatus('Connected') }
+      if(d.type==='error' || d.type==='disconnected'){ setTiktokStatus('Failed') }
+    }catch{}
+  }
+  ws.onerror=()=>{ setTiktokStatus('Failed') }
+  ws.onclose=()=>{ setTiktokStatus((s)=> s==='Connected' ? 'Disconnected' : s) }
+}
+const disconnectTikTok=()=>{ try{ tiktokWsRef.current?.close() }catch{}; tiktokWsRef.current=null; setTiktokStatus('Disconnected') }
+useEffect(()=>{ return ()=>{ try{ tiktokWsRef.current?.close() }catch{} } },[])
+// === UPDATE ONLY: TikTok RTMP Push - Send TagLive Canvas to TikTok ===
+const [tiktokRtmpUrl,setTiktokRtmpUrl]=useState('')
+const [tiktokStreamKey,setTiktokStreamKey]=useState('')
+const [tiktokPushing,setTiktokPushing]=useState(false)
+const tiktokPushWsRef=useRef<WebSocket|null>(null)
+const tiktokPushRecorderRef=useRef<MediaRecorder|null>(null)
+const startTikTokPush=async()=>{
+  const rtmpUrl=tiktokRtmpUrl.trim()
+  const streamKey=tiktokStreamKey.trim()
+  if(!rtmpUrl || !streamKey){ alert('Paste TikTok Server URL + Stream Key first'); return }
+  if(!canvasRef.current){ alert('Start Camera first'); return }
+  if(tiktokPushWsRef.current){ try{ tiktokPushWsRef.current.close() }catch{} }
+  const ws=new WebSocket(WS_URL)
+  tiktokPushWsRef.current=ws
+  ws.onopen=()=>{
+    ws.send(JSON.stringify({ type:'start_push', rtmpUrl, streamKey }))
+    const canvasStream=(canvasRef.current as any).captureStream(30) as MediaStream
+    const micTrack=streamRef.current?.getAudioTracks()[0]
+    if(micTrack) canvasStream.addTrack(micTrack)
+    let mime='video/webm;codecs=vp8,opus'
+    if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm'
+    const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 2500000 })
+    tiktokPushRecorderRef.current=rec
+    rec.ondataavailable=(e)=>{ if(e.data.size>0 && ws.readyState===WebSocket.OPEN){ try{ ws.send(e.data) }catch{} } }
+    rec.start(500)
+    setTiktokPushing(true)
+    setTiktokStatus('Connected')
+  }
+  ws.onmessage=(e)=>{
+    try{
+      const d=JSON.parse(e.data)
+      if(d.type==='push_started') setTiktokPushing(true)
+      if(d.type==='push_stopped'){ setTiktokPushing(false) }
+      if(d.type==='error'){ setTiktokPushing(false); if(d.message) alert(d.message) }
+    }catch{}
+  }
+  ws.onerror=()=>{ setTiktokPushing(false); alert('Push failed - check Server URL + Key') }
+  ws.onclose=()=>{ setTiktokPushing(false) }
+}
+const stopTikTokPush=()=>{
+  try{ tiktokPushRecorderRef.current?.stop() }catch{}
+  tiktokPushRecorderRef.current=null
+  try{ tiktokPushWsRef.current?.send(JSON.stringify({ type:'stop_push' })) }catch{}
+  try{ tiktokPushWsRef.current?.close() }catch{}
+  tiktokPushWsRef.current=null
+  setTiktokPushing(false)
+}
+useEffect(()=>{ return ()=>{ try{ tiktokPushRecorderRef.current?.stop() }catch{}; try{ tiktokPushWsRef.current?.close() }catch{} } },[])
 const tickerOffsetRef=useRef(720)
 const introFileRef=useRef<HTMLInputElement>(null)
 const outroFileRef=useRef<HTMLInputElement>(null)
@@ -499,451 +578,4 @@ const startRecording=async()=>{
       try{ micGain.gain.value=1 }catch{}
     }, (active.duration||5)*1000)
   }
-}
-  const stopRecordingFinal=()=>{
-  try{ if(introTimeoutRef.current) clearTimeout(introTimeoutRef.current) }catch{}
-  introTimeoutRef.current=null
-  try{ recorderRef.current?.stop() }catch{}
-  try{
-    const el=(audioCtxRef.current as any)?.introAudioEl
-    if(el && el._tagliveCleanup) el._tagliveCleanup()
-    const el2=(audioCtxRef.current as any)?.outroAudioEl
-    if(el2 && el2._tagliveCleanup) el2._tagliveCleanup()
-  }catch{}
-  try{ if(audioCtxRef.current) audioCtxRef.current.close() }catch{}
-  audioCtxRef.current=null
-  setIsRecording(false); setBroadcastPlaying(null); broadcastImageRef.current=null
-  if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.removeAttribute('src'); broadcastVideoRef.current.load() }catch{} }
-  if(!isLive&&!ytLive) stopTimer()
-}
-const stopRecording=async()=>{
-  const active=outros.find(o=>o.id===activeOutroId)
-  if(active && isRecording){
-    setBroadcastPlaying(active)
-    const micGain=(audioCtxRef.current as any)?._micGain
-    if(micGain){ try{ micGain.gain.value=0 }catch{} }
-    if(active.type==='image'){
-      const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }
-      broadcastImageRef.current=img
-      setTimeout(()=>{ if(micGain){ try{ micGain.gain.value=1 }catch{} } stopRecordingFinal() }, (active.duration||5)*1000)
-    } else if(active.type==='video'){
-      if(broadcastVideoRef.current){
-        const v=broadcastVideoRef.current
-        v.crossOrigin="anonymous"; v.playsInline=true; v.muted=true; v.volume=0
-        v.src=active.data; v.currentTime=0
-        try{ await v.play() }catch{}
-      }
-      try{
-        const audioEl=document.createElement('video')
-        audioEl.crossOrigin="anonymous"; audioEl.playsInline=true; audioEl.muted=false; audioEl.volume=1
-        audioEl.src=active.data
-        await audioEl.play().catch(()=>{})
-        if(audioCtxRef.current && (audioCtxRef.current as any)._dest){
-          const dest=(audioCtxRef.current as any)._dest
-          const vSource=audioCtxRef.current.createMediaElementSource(audioEl)
-          vSource.connect(dest)
-          vSource.connect(audioCtxRef.current.destination)
-          ;(audioEl as any)._tagliveCleanup=()=>{ try{ vSource.disconnect() }catch{}; try{ audioEl.pause(); audioEl.removeAttribute('src'); audioEl.load() }catch{} }
-          ;(audioCtxRef.current as any).outroAudioEl=audioEl
-        }
-      }catch{}
-      setTimeout(()=>{ if(micGain){ try{ micGain.gain.value=1 }catch{} } stopRecordingFinal() }, (active.duration||5)*1000)
-    }
-  } else { stopRecordingFinal() }
-}
-  const editStateRef=useRef({ locked:false, target:null as any, lastTap:0, lastX:0, lastY:0 })
-  const telegramBtnRef=useRef<HTMLDivElement>(null)
-const onTouchStart=(e:any)=>{
-const canvas=canvasRef.current; if(!canvas) return
-const rect=canvas.getBoundingClientRect(); 
-const cw=canvas.width||480; const ch=canvas.height||854
-const tx=(e.touches[0].clientX-rect.left)*(cw/rect.width)
-const ty=(e.touches[0].clientY-rect.top)*(ch/rect.height)
-const distText=Math.hypot(tx-pos.x,ty-pos.y)
-const distLogo=Math.hypot(tx-logoPos.x,ty-logoPos.y)
-const nearText=distText<350
-const nearLogo=logoImage&&showLogo&&distLogo<300
-const now=Date.now()
-const timeDiff=now-editStateRef.current.lastTap
-const moved=Math.hypot(tx-editStateRef.current.lastX, ty-editStateRef.current.lastY)
-if(nearText||nearLogo){
-  const tappedTarget=nearLogo&&(!nearText||distLogo<distText)?'logo':'text'
-  if(timeDiff<350 && moved<80 && editStateRef.current.target===tappedTarget){
-    if(editStateRef.current.locked && editStateRef.current.target===tappedTarget){
-      editStateRef.current.locked=false; editStateRef.current.target=null
-      setDragging(false); setSelected(null as any)
-    } else {
-      editStateRef.current.locked=true; editStateRef.current.target=tappedTarget
-      setSelected(tappedTarget as any)
-      lastTouch.current.selScale=tappedTarget==='logo'?logoPos.scale:pos.scale
-      lastTouch.current.dist=0
-    }
-    editStateRef.current.lastTap=0
-    return
-  }
-  editStateRef.current.lastTap=now
-  editStateRef.current.lastX=tx
-  editStateRef.current.lastY=ty
-  if(!editStateRef.current.locked) editStateRef.current.target=tappedTarget
-  setDragging(false)
-  return
-} else {
-  if(editStateRef.current.locked){
-    editStateRef.current.locked=false
-    editStateRef.current.target=null
-    setDragging(false)
-    setSelected(null as any)
-  }
-  editStateRef.current.lastTap=now
-  editStateRef.current.lastX=tx
-  editStateRef.current.lastY=ty
-  return
-}
-}
-const onTouchMove=(e:any)=>{
-if(!editStateRef.current.locked) return
-const canvas=canvasRef.current; if(!canvas) return
-const rect=canvas.getBoundingClientRect(); if(!rect) return
-e.preventDefault()
-if(e.touches.length===1){
-  const cw=canvas.width||480; const ch=canvas.height||854
-  const tx=(e.touches[0].clientX-rect.left)*(cw/rect.width); 
-  const ty=(e.touches[0].clientY-rect.top)*(ch/rect.height); 
-  if(editStateRef.current.target==='logo') setLogoPos(p=>({...p,x:tx,y:ty})); else setPos(p=>({...p,x:tx,y:ty})) 
-  if(!dragging) setDragging(true)
-}
-if(e.touches.length===2){
-  const dx=e.touches[1].clientX-e.touches[0].clientX; const dy=e.touches[1].clientY-e.touches[0].clientY; const dist=Math.hypot(dx,dy);
-  if(lastTouch.current.dist===0){ lastTouch.current.dist=dist; lastTouch.current.selScale=editStateRef.current.target==='logo'?logoPos.scale:pos.scale; }
-  if(lastTouch.current.dist>0){ const f=dist/lastTouch.current.dist; if(editStateRef.current.target==='logo'){ setLogoPos(p=>({ ...p, scale:Math.min(2,Math.max(0.2,lastTouch.current.selScale*f)) })) } else { setPos(p=>({ ...p, scale:Math.min(1.3,Math.max(0.6,lastTouch.current.selScale*f)) })) } }
-}
-}
-const onTouchEnd=(e:any)=>{
-  setDragging(false)
-  if(e && e.touches && e.touches.length===0){
-    lastTouch.current.dist=0
-  }
-}
-useEffect(()=>{
-let a:any
-const wrapText=(ctx:any,text:string,maxWidth:number)=>{
-const words=text.split(' '); let lines:string[]=[]; let cur='';
-for(let w of words){ 
-  const test=cur+w+' '; 
-  if(ctx.measureText(test).width>maxWidth&&cur!==''){ 
-    lines.push(cur.trim()); 
-    cur=w+' ' 
-  } else cur=test 
-}
-if(cur) lines.push(cur.trim()); 
-return lines
-}
-const draw=()=>{
-const c=canvasRef.current, v=videoRef.current
-if(c&&v&&isCam&&v.readyState>=2){
-const ctx=c.getContext('2d')
-if(ctx){
-if(broadcastPlaying){
-ctx.fillStyle='#000'; ctx.fillRect(0,0,c.width,c.height)
-if(broadcastPlaying.type==='image'&&broadcastImageRef.current){
-const iw=broadcastImageRef.current.width, ih=broadcastImageRef.current.height
-const ratio=Math.min(c.width/iw, c.height/ih)
-const nw=iw*ratio, nh=ih*ratio
-const x=(c.width-nw)/2, y=(c.height-nh)/2
-ctx.drawImage(broadcastImageRef.current,x,y,nw,nh)
-} else if(broadcastPlaying.type==='video'&&broadcastVideoRef.current&&broadcastVideoRef.current.readyState>=2){
-const vw=broadcastVideoRef.current.videoWidth, vh=broadcastVideoRef.current.videoHeight
-if(vw&&vh){ const ratio=Math.min(c.width/vw, c.height/vh); const nw=vw*ratio, nh=vh*ratio; const x=(c.width-nw)/2, y=(c.height-nh)/2; ctx.drawImage(broadcastVideoRef.current,x,y,nw,nh) }
-}
-} else {
-const hexToRgba=(hex:string,op:number)=>{ const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16); return 'rgba('+r+','+g+','+b+','+op+')' }
-if(bgMode==='split'){
-ctx.fillStyle='#000'; ctx.fillRect(0,0,c.width,c.height)
-const vw=v.videoWidth||1280; const vh=v.videoHeight||720
-const targetW=c.width; const targetH=c.height*0.52
-const scale=Math.max(targetW/vw,targetH/vh)
-const sW=targetW/scale; const sH=targetH/scale
-const sX=(vw-sW)/2; const sY=(vh-sH)/2
-ctx.drawImage(v,sX,sY,sW,sH,0,c.height*0.48,targetW,targetH)
-} else if(bgMode==='black'){ ctx.fillStyle='#000'; ctx.fillRect(0,0,c.width,c.height) }
-else if(bgMode==='image'){ 
-  if(bgImageRef.current){
-    const iw=bgImageRef.current.width, ih=bgImageRef.current.height
-    const rCanvas=c.width/c.height, rImg=iw/ih
-    let sx,sy,sw,sh
-    if(rImg>rCanvas){ sh=ih; sw=ih*rCanvas; sx=(iw-sw)/2; sy=0 }
-    else { sw=iw; sh=iw/rCanvas; sx=0; sy=(ih-sh)/2 }
-    ctx.drawImage(bgImageRef.current,sx,sy,sw,sh,0,0,c.width,c.height)
-  } else { const g=ctx.createLinearGradient(0,0,c.width,c.height); g.addColorStop(0,'#1e3a8a'); g.addColorStop(1,'#581c87'); ctx.fillStyle=g; ctx.fillRect(0,0,c.width,c.height) }
-}
-else {
-  const vw=v.videoWidth||1280, vh=v.videoHeight||720
-  const rCanvas=c.width/c.height, rVideo=vw/vh
-  let sx,sy,sw,sh
-  if(rVideo>rCanvas){ sh=vh; sw=vh*rCanvas; sx=(vw-sw)/2; sy=0 }
-  else { sw=vw; sh=vw/rCanvas; sx=0; sy=(vh-sh)/2 }
-  ctx.drawImage(v,sx,sy,sw,sh,0,0,c.width,c.height)
-}
-if(logoImageRef.current && showLogo){ ctx.save(); ctx.translate(logoPos.x,logoPos.y); ctx.scale(logoPos.scale,logoPos.scale); const iw=logoImageRef.current.width, ih=logoImageRef.current.height; const maxLogoW=180; const sc=Math.min(1,maxLogoW/iw); ctx.drawImage(logoImageRef.current,-iw*sc/2,-ih*sc/2,iw*sc,ih*sc); if(editStateRef.current.locked && editStateRef.current.target==='logo'){ ctx.strokeStyle='#00ff00'; ctx.lineWidth=2; ctx.setLineDash([8,6]); ctx.strokeRect(-iw*sc/2-6,-ih*sc/2-6,iw*sc+12,ih*sc+12); ctx.setLineDash([]) } ctx.restore() }
-if(showText){
-ctx.save();
-const isSplit=bgMode==='split'
-const drawX=isSplit?c.width*0.5:pos.x
-const drawY=isSplit?c.height*0.24:pos.y
-const maxW=isSplit?360:380
-ctx.translate(drawX,drawY); ctx.scale(pos.scale,pos.scale); ctx.font='bold '+fontSize+'px sans-serif'; const pad=18; const boxW=maxW+pad*2; const paragraphs=verse.split('\n'); let allLines:{text:string,isLastInPara:boolean,paraIdx:number}[]=[]; paragraphs.forEach((para,pIdx)=>{ if(!para.trim()){ allLines.push({text:'',isLastInPara:true,paraIdx:pIdx}); return } const wrapped=wrapText(ctx,para.trim(),maxW); wrapped.forEach((l,i)=>allLines.push({text:l,isLastInPara:i===wrapped.length-1,paraIdx:pIdx})) }); const realCount=allLines.filter(l=>l.text!=='').length; const lineH=fontSize*1.32; const boxH=realCount*lineH+(paragraphs.length-1)*8+pad*2; ctx.fillStyle=hexToRgba(boxColor,boxOpacity); ctx.fillRect(-boxW/2,-boxH/2,boxW,boxH); ctx.fillStyle=textColor; let y=-boxH/2+pad+lineH/2; 
-allLines.forEach((ln)=>{
-  if(!ln.text){ y+=8; return }
-  if(align==='justify' && !ln.isLastInPara && ln.text.split(' ').length>1){
-    const words=ln.text.split(' ')
-    const totalWordsWidth=words.reduce((acc,w,idx)=>acc+ctx.measureText(w).width+(idx>0?ctx.measureText(' ').width:0),0)
-    const extraSpace=(maxW-totalWordsWidth)/ (words.length-1)
-    let curX=-maxW/2
-    ctx.textAlign='left'; ctx.textBaseline='middle'
-    words.forEach((w,idx)=>{
-      ctx.fillText(w,curX,y)
-      curX+=ctx.measureText(w).width+ctx.measureText(' ').width+extraSpace
-    })
-  } else {
-    ctx.textAlign='center'; ctx.textBaseline='middle'
-    ctx.fillText(ln.text,0,y)
-  }
-  y+=lineH
-});
-if(isSplit&&showChurchName&&churchName){
-ctx.fillStyle='#FFD700'; ctx.font='900 '+Math.max(14,Math.floor(fontSize*0.52))+'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'
-const churchY=y+22; const tW=ctx.measureText(churchName.toUpperCase()).width+28
-ctx.fillStyle='rgba(124,58,237,0.95)'; const pillH=28; ctx.fillRect(-tW/2,churchY-pillH/2,tW,pillH)
-ctx.fillStyle='#FFD700'; ctx.fillText(churchName.toUpperCase(),0,churchY)
-}
-if(editStateRef.current.locked && editStateRef.current.target==='text' && !isSplit){ ctx.strokeStyle='#7c3aed'; ctx.lineWidth=2; ctx.setLineDash([10,6]); ctx.strokeRect(-boxW/2-4,-boxH/2-4,boxW+8,boxH+8); ctx.setLineDash([]) } ctx.restore() }
-if(isLive||ytLive||isRecording){
-const timeStr=formatTime(liveSeconds)
-ctx.save(); ctx.fillStyle='#FF0000'; ctx.font='900 28px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top'; ctx.shadowColor='rgba(0,0,0,0.9)'; ctx.shadowBlur=6; ctx.fillText('● LIVE '+timeStr+(lowData?' [480p]':''),24,22); ctx.restore()
-}
-if(tickerOn&&tickerText){
-const tickerH=tickerSize+24
-ctx.fillStyle='#000000'
-ctx.fillRect(0,c.height-tickerH,c.width,tickerH)
-ctx.fillStyle='#FFFF00'
-ctx.font='bold '+tickerSize+'px sans-serif'
-ctx.textAlign='left'
-ctx.textBaseline='middle'
-const txt=tickerText+'   •   '+tickerText
-const w=ctx.measureText(txt).width
-tickerOffsetRef.current-=tickerSpeed
-if(tickerOffsetRef.current<0-w){ tickerOffsetRef.current=c.width }
-ctx.fillText(txt,tickerOffsetRef.current,c.height-tickerH/2)
-}
-}
-}
-}
-a=requestAnimationFrame(draw)
-}
-draw()
-return()=>cancelAnimationFrame(a)
-},[isCam,verse,isLive,pos,bgMode,fontSize,align,bgImage,ytLive,textColor,boxColor,boxOpacity,logoImage,logoPos,isRecording,selected,showText,showLogo,tickerOn,tickerText,tickerSize,tickerSpeed,churchName,showChurchName,liveSeconds,lowData,broadcastPlaying]);
-return (
-<div style={{minHeight:'100vh',background:'#f5f5f7'}}>
-{showBible&&(
-<div style={{position:'fixed',inset:0,zIndex:9998,background:'rgba(0,0,0,0.92)',padding:12,display:'flex'}}>
-<div style={{background:'#fff',borderRadius:16,padding:12,flex:1,display:'flex',flexDirection:'column',maxWidth:480,margin:'0 auto',width:'100%',overflow:'hidden'}}>
-<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:13}}>📖 Bible {isCam&&<span style={{color:'#FF0000'}}>● LIVE {formatTime(liveSeconds)}</span>}</b><button onClick={()=>setShowBible(false)} style={{background:'#111',color:'#fff',border:'none',borderRadius:20,padding:'8px 12px',fontWeight:800}}>✕ Close</button></div>
-<div style={{display:'flex',gap:6,marginTop:10,flexWrap:'wrap'}}>{BIBLE_VERSIONS.map(v=>(<button key={v.id} onClick={()=>setBibleVer(v.id)} style={{padding:'6px 10px',borderRadius:20,border:'none',background:bibleVer===v.id?'#111':'#eee',color:bibleVer===v.id?'#fff':'#000',fontWeight:800,fontSize:10}}>{v.label}</button>))}</div>
-<div style={{display:'flex',gap:6,marginTop:10}}><input value={bibleQuery} onChange={e=>setBibleQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')fetchBible()}} placeholder="Type 1 Thes, John, Romans..." style={{flex:1,padding:12,borderRadius:10,border:'2px solid #7c3aed',fontSize:13,fontWeight:700}}/><button onClick={()=>fetchBible()} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:10,padding:'0 16px',fontWeight:800}}>{bibleLoading?'...':'Search'}</button></div>
-<div style={{maxHeight:200,overflowY:'auto',marginTop:8,display:'flex',flexDirection:'column',gap:6}}>
-{!detectedBook&&filteredBooks.length>0&&(<div style={{background:'#f9f5ff',borderRadius:10,padding:8,border:'1px solid #ddd'}}><div style={{fontSize:11,fontWeight:900}}>Books matching "{bibleQuery}":</div>{filteredBooks.map(b=>(<div key={b.name} onClick={()=>setBibleQuery(b.name+' ')} style={{padding:'8px 10px',borderRadius:8,background:'#fff',border:'1px solid #eee',marginTop:4,fontSize:13,fontWeight:700,cursor:'pointer'}}>{b.name} ({b.chapters} ch)</div>))}</div>)}
-{detectedBook&&!parsed.ch&&(<div style={{background:'#f9f5ff',borderRadius:10,padding:8,border:'1px solid #ddd'}}><div style={{fontSize:11,fontWeight:900}}>{detectedBook.name} — Select Chapter:</div><div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:6}}>{Array.from({length:detectedBook.chapters},(_,i)=>i+1).map(ch=>(<button key={ch} onClick={()=>setBibleQuery(detectedBook.name+' '+ch)} style={{padding:'8px 12px',borderRadius:8,border:'1px solid #ddd',background:'#fff',fontWeight:800,fontSize:12}}>{ch}</button>))}</div></div>)}
-{detectedBook&&parsed.ch&&!parsed.vs&&(<div style={{background:'#f0fdf4',borderRadius:10,padding:8,border:'1px solid #bbf7d0'}}><div style={{fontSize:11,fontWeight:900}}>{detectedBook.name} {parsed.ch} — Select Verse:</div><div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:6}}><button onClick={()=>fetchBible(detectedBook.name+' '+parsed.ch)} style={{padding:'8px 12px',borderRadius:8,border:'none',background:'#16a34a',color:'#fff',fontWeight:800,fontSize:12}}>All Chapter</button>{Array.from({length:30},(_,i)=>i+1).map(v=>(<button key={v} onClick={()=>{const q=detectedBook.name+' '+parsed.ch+':'+v;setBibleQuery(q);fetchBible(q)}} style={{padding:'8px 12px',borderRadius:8,border:'1px solid #ddd',background:'#fff',fontWeight:800,fontSize:12}}>{v}</button>))}</div></div>)}
-</div>
-<div style={{marginTop:8,background:'#f9f5ff',borderRadius:12,padding:12,flex:1,overflowY:'auto',border:'1px solid #ddd'}}>{bibleLoading?<div style={{opacity:.6,fontSize:12}}>Searching...</div>:bibleResult?<div style={{fontSize:14,lineHeight:1.5,fontWeight:600,whiteSpace:'pre-wrap'}}>{bibleResult}</div>:<div style={{opacity:.6,fontSize:12}}>Type 1 Thes → pick book → chapter → verse.</div>}</div>
-<button onClick={useBibleVerse} disabled={!bibleResult} style={{marginTop:10,background:bibleResult?'#16a34a':'#ccc',color:'#fff',padding:14,borderRadius:12,fontWeight:900,border:'none'}}>Use This Verse On Screen</button>
-</div>
-</div>
-)}
-<div style={{background:'#fff',borderBottom:'2px solid #111',padding:'10px 14px',display:'flex',alignItems:'center',gap:10,position:'sticky',top:0,zIndex:100}}>
-<img src="/logo.png" alt="TagLive" style={{width:44,height:44,objectFit:'contain',borderRadius:8,flexShrink:0,display:'block'}} />
-<div style={{display:'flex',flexDirection:'column',lineHeight:1.1}}>
-<div style={{fontWeight:900,fontSize:20,letterSpacing:-0.3}}>Tag<span style={{color:'#7c3aed'}}>Live</span></div>
-<div style={{fontWeight:700,fontSize:11,letterSpacing:1.2,color:'#666',marginTop:1}}>TAG YOUR LIVE</div>
-</div>
-{(isLive||ytLive||isRecording)&&<div style={{marginLeft:'auto',color:'#FF0000',fontWeight:900,border:'2px solid red',borderRadius:20,padding:'6px 12px',fontSize:11}}>● LIVE {formatTime(liveSeconds)}</div>}
-</div>
-{isAdmin&&(<div style={{margin:12,background:'#000',border:'2px solid #00ff00',borderRadius:16,padding:12}}>
-<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:12,color:'#00ff00'}}>ADMIN DASHBOARD</b><button onClick={()=>setShowAdmin(!showAdmin)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:showAdmin?'#00ff00':'#111',color:showAdmin?'#000':'#00ff00',fontWeight:800,fontSize:11}}>Open</button></div>
-{showAdmin&&(<div style={{marginTop:10}}>
-<div style={{display:'grid',gridTemplateColumns:'repeat(5, 1fr)',gap:6,textAlign:'center'}}>
-<div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>LIVE</div><div style={{fontSize:18,fontWeight:900,color:'#00ff00'}}>{stats.live}</div></div>
-<div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>DAILY</div><div style={{fontSize:18,fontWeight:900,color:'#ffeb00'}}>{stats.daily}</div></div>
-<div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>WEEKLY</div><div style={{fontSize:18,fontWeight:900,color:'#00d4ff'}}>{stats.weekly}</div></div>
-<div onClick={()=>setShowMonthPicker(true)} style={{background:'#111',borderRadius:10,padding:8,border:'2px solid #ff00ff',cursor:'pointer'}}><div style={{fontSize:10,color:'#fff'}}>MONTHLY ↕</div><div style={{fontSize:18,fontWeight:900,color:'#ff00ff'}}>{stats.monthly}</div></div>
-<div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>TOTAL</div><div style={{fontSize:18,fontWeight:900,color:'#fff'}}>{stats.total}</div></div>
-</div>
-<div style={{marginTop:10,background:'#111',borderRadius:12,padding:10,border:'1px solid #333'}}>
-<b style={{color:'#00ff00',fontSize:11}}>🌍 LIVE BY COUNTRY</b>
-{countries.length===0?<div style={{color:'#aaa',fontSize:11,marginTop:6}}>No live viewers yet</div>:countries.map((c:any)=><div key={c.code+'_'+c.name} style={{display:'flex',justifyContent:'space-between',padding:'7px 0',borderBottom:'1px solid #222',color:'#fff',fontSize:12}}><span>{c.code?c.code+' ':''}{c.name}</span><span style={{fontWeight:900,background:'#00ff00',color:'#000',padding:'2px 8px',borderRadius:10}}>{c.count}</span></div>)}
-</div>
-{showMonthPicker&&(
-<div style={{marginTop:12,background:'#111',border:'2px solid #ff00ff',borderRadius:16,padding:12}}>
-<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-<b style={{fontSize:12,color:'#ff00ff'}}>📅 Year & Month Only</b>
-<div style={{display:'flex',gap:6,alignItems:'center'}}>
-<button onClick={()=>setCalYear(y=>y-1)} style={{padding:'6px 10px',borderRadius:20,border:'none',background:'#fff',fontWeight:900}}>◀</button>
-<span style={{color:'#fff',fontWeight:900,background:'#333',padding:'6px 12px',borderRadius:20}}>{calYear}</span>
-<button onClick={()=>setCalYear(y=>y+1)} style={{padding:'6px 10px',borderRadius:20,border:'none',background:'#fff',fontWeight:900}}>▶</button>
-<button onClick={()=>setShowMonthPicker(false)} style={{marginLeft:6,padding:'6px 10px',borderRadius:20,border:'none',background:'#ff0000',color:'#fff',fontWeight:900}}>✕</button>
-</div>
-</div>
-<div style={{display:'grid',gridTemplateColumns:'repeat(3, 1fr)',gap:8,marginTop:12}}>
-{['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((mName,idx)=>(
-<button key={mName} onClick={()=>fetchMonthCount(calYear,idx)} style={{padding:12,borderRadius:12,border:'none',background:calMonth===idx?'#ff00ff':'#222',color:'#fff',fontWeight:900,fontSize:13}}>{mName}</button>
-))}
-</div>
-<div style={{marginTop:12,background:'#000',borderRadius:12,padding:12,textAlign:'center',border:'1px solid #333'}}>
-{monthLoading?<div style={{color:'#fff',fontSize:12}}>Loading...</div>:
-monthCount!==null?
-<div><div style={{color:'#aaa',fontSize:11}}>{new Date(calYear,calMonth).toLocaleString('default',{month:'long'})} {calYear}</div><div style={{color:'#ff00ff',fontSize:28,fontWeight:900}}>{monthCount}</div><div style={{color:'#fff',fontSize:11}}>VIEWS</div></div>
-:<div style={{color:'#aaa',fontSize:11}}>Tap a month to see count</div>
-}
-</div>
-</div>
-)}
-</div>)}
-</div>)}
-<style>{'.studio{display:grid;gap:16;padding:16;max-width:1600px;margin:0 auto}@media(max-width:1023px){.studio{grid-template-columns:1fr}}@media(min-width:1024px){.studio{grid-template-columns:380px 460px 380px}}'}</style>
-<div className="studio">
-<div style={{display:'flex',flexDirection:'column',gap:12}}>
-<div style={{border:'2px solid #111',borderRadius:16,padding:12,background:'#ffffff'}}>
-<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:14}}>⚙️ Settings & Studio</b><button onClick={()=>setShowSettings(!showSettings)} style={{padding:'8px 14px',borderRadius:20,border:'none',background:showSettings?'#111':'#eee',color:showSettings?'#fff':'#000',fontWeight:900,fontSize:11}}>{showSettings?'Hide':'Open'}</button></div>
-{showSettings&&(
-<div style={{marginTop:12,display:'flex',flexDirection:'column',gap:12}}>
-<div style={{border:'2px solid #FF0000',borderRadius:12,padding:10,background:lowData?'#fef2f2':'#fff',display:'flex',justifyContent:'space-between',alignItems:'center'}}><div><b style={{fontSize:12}}>Data Saver Mode</b><div style={{fontSize:10,opacity:.7}}>{lowData?'480p - Uses less data':'720p - High Quality'}</div></div><button onClick={()=>{const v=!lowData;setLowData(v);localStorage.setItem('taglive_lowdata',v.toString());if(isCam)setTimeout(()=>startCamera(),300)}} style={{padding:'8px 14px',borderRadius:20,border:'none',background:lowData?'#16a34a':'#111',color:'#fff',fontWeight:900,fontSize:11}}>{lowData?'480p ON':'720p'}</button></div>
-<div style={{border:'2px solid #7c3aed',borderRadius:16,padding:12,background:'#f9f5ff'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:14}}>Intro / Outro Studio</b><button onClick={()=>setShowStudio(!showStudio)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:'#111',color:'#fff',fontWeight:800,fontSize:11}}>{showStudio?'Hide':'Open'}</button></div>
-{showStudio&&(<div style={{marginTop:10}}>
-<div style={{display:'flex',gap:6,marginTop:8}}><label style={{flex:1,background:'#7c3aed',color:'#fff',padding:12,borderRadius:10,fontWeight:800,fontSize:12,textAlign:'center',cursor:'pointer'}}>Upload Intro<input ref={introFileRef} type="file" accept="video/*,image/*" onChange={handleIntroFile} style={{display:'none'}}/></label><label style={{flex:1,background:'#111',color:'#fff',padding:12,borderRadius:10,fontWeight:800,fontSize:12,textAlign:'center',cursor:'pointer'}}>Upload Outro<input ref={outroFileRef} type="file" accept="video/*,image/*" onChange={handleOutroFile} style={{display:'none'}}/></label></div>
-<div style={{marginTop:12}}>
-{intros.length>0&&<div style={{marginBottom:10}}><b style={{fontSize:12}}>Active Intro:</b><div style={{display:'flex',flexDirection:'column',gap:4,marginTop:6}}>{intros.map((it:any)=><div key={it.id} style={{display:'flex',gap:4}}><button onClick={()=>{setActiveIntroId(it.id);localStorage.setItem('taglive_active_intro',it.id)}} style={{flex:1,padding:8,borderRadius:8,border:'none',background:activeIntroId===it.id?'#16a34a':'#eee',color:activeIntroId===it.id?'#fff':'#000',fontWeight:700,fontSize:11,textAlign:'left'}}>{activeIntroId===it.id?'✓ ':''}{it.title} ({Math.round(it.duration)}s)</button><button onClick={async()=>{const n=intros.filter((x:any)=>x.id!==it.id); await saveIntros(n); if(activeIntroId===it.id){setActiveIntroId(null);localStorage.removeItem('taglive_active_intro')}}} style={{padding:8,borderRadius:8,border:'none',background:'#ff0000',color:'#fff',fontSize:11}}>X</button></div>)}</div></div>}
-{outros.length>0&&<div><b style={{fontSize:12}}>Active Outro:</b><div style={{display:'flex',flexDirection:'column',gap:4,marginTop:6}}>{outros.map((ot:any)=><div key={ot.id} style={{display:'flex',gap:4}}><button onClick={()=>{setActiveOutroId(ot.id);localStorage.setItem('taglive_active_outro',ot.id)}} style={{flex:1,padding:8,borderRadius:8,border:'none',background:activeOutroId===ot.id?'#16a34a':'#eee',color:activeOutroId===ot.id?'#fff':'#000',fontWeight:700,fontSize:11,textAlign:'left'}}>{activeOutroId===ot.id?'✓ ':''}{ot.title} ({Math.round(ot.duration)}s)</button><button onClick={async()=>{const n=outros.filter((x:any)=>x.id!==ot.id); await saveOutros(n); if(activeOutroId===ot.id){setActiveOutroId(null);localStorage.removeItem('taglive_outro')}}} style={{padding:8,borderRadius:8,border:'none',background:'#ff0000',color:'#fff',fontSize:11}}>X</button></div>)}</div></div>}
-</div>
-</div>)}
-</div>
-<div style={{border:'2px solid #111',borderRadius:16,padding:12,background:'#ffffff',overflow:'hidden'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><b style={{fontSize:13,color:'#111',flex:1}}>Scrolling Ticker</b><div style={{display:'flex',gap:6,flexShrink:0}}><button onClick={()=>{ const v=!tickerOn; setTickerOn(v); localStorage.setItem('taglive_ticker_on', v.toString()) }} style={{padding:'8px 14px',borderRadius:20,border:'none',background:tickerOn?'#16a34a':'#111',color:'#fff',fontWeight:900,fontSize:11}}>{tickerOn?'ON':'OFF'}</button><button onClick={()=>setShowTickerStudio(!showTickerStudio)} style={{padding:'8px 12px',borderRadius:20,border:'none',background:showTickerStudio?'#111':'#eee',color:showTickerStudio?'#fff':'#000',fontWeight:800,fontSize:11}}>{showTickerStudio?'Hide':'Open'}</button></div></div>
-{showTickerStudio&&(<div style={{marginTop:10,display:'flex',flexDirection:'column',gap:8,overflow:'hidden'}}>
-<input value={tickerText} onChange={e=>{setTickerText(e.target.value);localStorage.setItem('taglive_ticker_text',e.target.value);tickerOffsetRef.current=720}} placeholder="Type announcement..." style={{width:'100%',padding:10,borderRadius:10,border:'2px solid #111',fontSize:12,fontWeight:700,background:'#000',color:'#FFFF00',boxSizing:'border-box'}}/>
-<div style={{display:'flex',gap:6,flexWrap:'wrap',minWidth:0}}>
-<div style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:6,background:'#f3f0ff',padding:'6px 10px',borderRadius:10}}><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>A-</span><input type="range" min={16} max={60} value={tickerSize} onChange={e=>{ const v=parseInt(e.target.value); setTickerSize(v); localStorage.setItem('taglive_ticker_size', v.toString()) }} style={{flex:1,minWidth:0,width:0}}/><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>A+</span><span style={{fontSize:10,fontWeight:800,background:'#111',color:'#fff',padding:'3px 6px',borderRadius:20,flexShrink:0}}>{tickerSize}</span></div>
-<div style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:6,background:'#fef3c7',padding:'6px 10px',borderRadius:10}}><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>Speed</span><input type="range" min={1} max={10} value={tickerSpeed} onChange={e=>{ const v=parseInt(e.target.value); setTickerSpeed(v); localStorage.setItem('taglive_ticker_speed', v.toString()) }} style={{flex:1,minWidth:0,width:0}}/><span style={{fontSize:10,fontWeight:800,background:'#111',color:'#fff',padding:'3px 6px',borderRadius:20,flexShrink:0}}>{tickerSpeed}</span></div>
-</div>
-</div>)}</div>
-<div style={{border:'2px solid #7c3aed',borderRadius:16,padding:12,background:'#fff'}}>
-<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:13}}>Church Name + Logo</b><button onClick={()=>setShowChurchName(!showChurchName)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:showChurchName?'#7c3aed':'#111',color:'#fff',fontWeight:800,fontSize:11}}>{showChurchName?'ON':'OFF'}</button></div>
-<input value={churchName} onChange={e=>{setChurchName(e.target.value);localStorage.setItem('taglive_church_name',e.target.value)}} placeholder="SALEM GANA JA CITY" style={{width:'100%',marginTop:8,padding:10,borderRadius:10,border:'2px solid #7c3aed',fontSize:12,fontWeight:800,boxSizing:'border-box'}}/>
-<div style={{marginTop:10,border:'1px dashed #7c3aed',borderRadius:10,padding:10,background:'#f9f5ff'}}>
-<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:11}}>LOGO</b>{logoImage&&<button onClick={removeChurchLogo} style={{padding:'4px 8px',borderRadius:6,border:'none',background:'red',color:'#fff',fontWeight:800,fontSize:10}}>Remove</button>}</div>
-<div style={{display:'flex',gap:8,alignItems:'center',marginTop:8}}>
-{logoImage&&<img src={logoImage} style={{width:50,height:50,objectFit:'contain',borderRadius:8,border:'1px solid #ddd',background:'#fff'}}/>}
-<div style={{flex:1}}>
-<input ref={churchLogoInputRef} type="file" accept="image/*" onChange={handleChurchLogoPick} style={{width:'100%',fontSize:11}}/>
-<div style={{fontSize:9,opacity:0.7,marginTop:2}}>{logoImage?'Logo saved - stays after refresh':'No logo saved'}</div>
-</div>
-</div>
-</div>
-</div>
-</div>
-)}
-</div>
-<div style={{display:'flex',gap:6,marginTop:12}}><button onClick={()=>setBgMode('face')} style={{flex:1,padding:8,borderRadius:20,border:'none',background:bgMode==='face'?'#111':'#eee',color:bgMode==='face'?'#fff':'#000',fontWeight:800,fontSize:12}}>Face</button><button onClick={()=>setBgMode('black')} style={{flex:1,padding:8,borderRadius:20,border:'none',background:bgMode==='black'?'#111':'#eee',color:bgMode==='black'?'#fff':'#000',fontWeight:800,fontSize:12}}>Black</button><button onClick={()=>setBgMode('image')} style={{flex:1,padding:8,borderRadius:20,border:'none',background:bgMode==='image'?'#111':'#eee',color:bgMode==='image'?'#fff':'#000',fontWeight:800,fontSize:12}}>Image</button><button onClick={()=>setBgMode('split')} style={{flex:1,padding:8,borderRadius:20,border:'none',background:bgMode==='split'?'#7c3aed':'#eee',color:bgMode==='split'?'#fff':'#000',fontWeight:800,fontSize:12}}>Top/Bottom</button></div>
-<div style={{display:'flex',alignItems:'center',gap:6,marginTop:10,flexWrap:'wrap',minWidth:0}}><div style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:6,background:'#f3f0ff',padding:'6px 10px',borderRadius:10}}><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>A-</span><input type="range" min={18} max={48} value={fontSize} onChange={e=>setFontSize(parseInt(e.target.value))} style={{flex:1,minWidth:0,width:0}}/><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>A+</span><span style={{fontSize:10,fontWeight:800,background:'#111',color:'#fff',padding:'3px 6px',borderRadius:20,flexShrink:0}}>{fontSize}</span></div><button onClick={()=>setAlign(a=>a==='justify'?'center':'justify')} style={{padding:'8px 14px',borderRadius:10,border:'none',background:align==='justify'?'#111':'#7c3aed',color:'#fff',fontWeight:900,fontSize:11,flexShrink:0}}>{align==='justify'?'Justify ✓':'Center'}</button><button onClick={pickMedia} style={{padding:'8px 10px',borderRadius:10,border:'none',background:'#7c3aed',color:'#fff',fontWeight:800,fontSize:10,flexShrink:0}}>Media</button><input ref={fileInputRef} type="file" accept="image/*" onChange={onFilePick} style={{display:'none'}}/></div>
-<div style={{display:'flex',gap:6,marginTop:8,alignItems:'center',background:'#fff',border:'1px solid #eee',padding:8,borderRadius:10,flexWrap:'wrap',minWidth:0}}><div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}><span style={{fontSize:10,fontWeight:800}}>Text</span><input type="color" value={textColor} onChange={e=>setTextColor(e.target.value)} style={{width:28,height:28,border:'none',borderRadius:6}}/></div><div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}><span style={{fontSize:10,fontWeight:800}}>Box</span><input type="color" value={boxColor} onChange={e=>setBoxColor(e.target.value)} style={{width:28,height:28,border:'none',borderRadius:6}}/></div><div style={{display:'flex',alignItems:'center',gap:4,flex:1,minWidth:0}}><span style={{fontSize:10,fontWeight:800,flexShrink:0}}>Opac</span><input type="range" min={0} max={1} step={0.05} value={boxOpacity} onChange={e=>setBoxOpacity(parseFloat(e.target.value))} style={{flex:1,minWidth:0,width:0}}/></div>
-<button onClick={()=>{ const v=!showLogo; setShowLogo(v); localStorage.setItem('taglive_show_logo', v.toString()); if(v){ setLogoPos((p:any)=>({...p, x:80, y:80})) } }} style={{padding:'6px 10px',borderRadius:8,border:'none',background:showLogo?'#16a34a':'#111',color:'#fff',fontWeight:800,fontSize:10,flexShrink:0}}>{showLogo?'Logo':'No Logo'}</button>
-<input ref={logoInputRef} type="file" accept="image/*" onChange={onLogoPick} style={{display:'none'}}/>
-<button onClick={()=>{ const v=!showText; setShowText(v); if(v){ setPos((p:any)=>({...p, x:240, y:680})) } }} style={{padding:'6px 10px',borderRadius:8,border:'none',background:showText?'#111':'#ddd',color:showText?'#fff':'#000',fontWeight:800,fontSize:10,flexShrink:0}}>{showText?'Text':'No Text'}</button>
-</div>
-</div>
-<div>
-<div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{background:'#000',borderRadius:18,overflow:'hidden',position:'relative',aspectRatio:'9/16',touchAction: editStateRef.current.locked ? 'none' : 'pan-y'}}><video ref={videoRef} muted playsInline autoPlay style={{width:'100%',height:'100%',objectFit:'cover',display:isCam&&bgMode==='face'?'block':'none'}}/>{!isCam&&<div style={{color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',height:420}}>Camera off - {lowData?'480p ON':'720p'}</div>}<canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%'}}/>
-<video ref={broadcastVideoRef} muted playsInline crossOrigin="anonymous" style={{position:'absolute',left:'-9999px',top:'-9999px',width:'10px',height:'10px',opacity:0.01}}/>
-{broadcastPlaying&&(
-  <div style={{position:'absolute',top:12,left:12,right:12,display:'flex',justifyContent:'flex-end',zIndex:100}}>
-    <button onClick={stopIntroOnly} style={{background:'#ff0000',color:'#fff',border:'2px solid #fff',padding:'10px 16px',borderRadius:20,fontWeight:900,fontSize:12}}>✕</button>
-  </div>
-)}
-{isCam&&!broadcastPlaying&&(<div style={{position:'absolute',top: bgMode==='split'?'auto':'12px',bottom: bgMode==='split'?'50px':'auto',right:12,display:'flex',gap:8,zIndex:50}}><button onClick={toggleCamera} style={{background:'rgba(0,0,0,0.85)',color:'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>Flip</button><button onClick={toggleTorch} style={{background:torch?'#fbbf24':'rgba(0,0,0,0.85)',color:torch?'#000':'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>{torch?'Flash On':'Flash'}</button></div>)}
-</div>
-<div style={{display:'flex',gap:8,marginTop:12}}>{!isCam?<button onClick={()=>startCamera()} style={{flex:1,background:'#111',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Start Camera {lowData?'(480p)':''}</button>:<><button onClick={toggleCamera} style={{flex:1,background:'#7c3aed',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Switch Camera</button><button onClick={stopCamera} style={{flex:1,background:'#444',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Stop</button></>}</div>
-<div style={{display:'flex',gap:6,marginTop:10}}>
-{!isRecording?<button onClick={startRecording} disabled={!isCam} style={{flex:1,background:isCam?'#a21caf':'#ccc',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Record</button>
-:<><button onClick={stopRecording} style={{flex:1,background:'#111',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Stop + Outro ({formatTime(liveSeconds)})</button>{broadcastPlaying&&<button onClick={stopIntroOnly} style={{background:'#ff0000',color:'#fff',padding:12,borderRadius:10,fontWeight:900,border:'none',fontSize:11}}>STOP INTRO</button>}</>}
-{recordedUrl&&<a href={recordedUrl} download={'TagLive-'+Date.now()+'.mp4'} style={{flex:1,background:'#16a34a',color:'#fff',padding:12,borderRadius:10,fontWeight:800,textAlign:'center',textDecoration:'none',fontSize:12}}>Download</a>}
-</div>
-{recordedUrl&&<video src={recordedUrl} controls playsInline style={{width:'100%',marginTop:8,borderRadius:12}}/>}
-<div style={{display:'flex',gap:6,marginTop:10}}><button onClick={openBibleApp} style={{flex:1,background:'#2563eb',color:'#fff',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Open Bible</button><button onClick={pasteClipboard} style={{flex:1,background:'#059669',color:'#fff',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Paste</button><button onClick={saveVerse} style={{flex:1,background:'#f59e0b',color:'#000',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Save</button></div>
-<textarea value={verse} onChange={e=>setVerse(e.target.value)} style={{width:'100%',height:90,marginTop:10,padding:12,borderRadius:12,border:'1px solid #ddd'}} placeholder={"Ministering:\nNAME OF PRESENTER"}/>
-{saved.length>0&&<div style={{marginTop:8,border:'1px solid #eee',borderRadius:12,padding:8,background:'#fff'}}>
-<details open>
-<summary style={{fontSize:12,fontWeight:900,cursor:'pointer',padding:4}}>📁 Saved Folder ({saved.length})</summary>
-<div style={{marginTop:8,display:'flex',flexDirection:'column',gap:6}}>
-{saved.map((s,i)=><div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'#f3f0ff',border:'1px solid #e5e7eb',padding:'8px 10px',borderRadius:20}}><span onClick={()=>setVerse(s)} style={{fontSize:11,flex:1,cursor:'pointer',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',fontWeight:600}}>{s.substring(0,40)}...</span><button onClick={()=>deleteSaved(i)} style={{marginLeft:8,background:'#ff0000',color:'#fff',border:'none',borderRadius:50,width:22,height:22,fontWeight:900,fontSize:12,lineHeight:'22px'}}>×</button></div>)}
-</div>
-</details>
-</div>}
-</div>
-<div style={{display:'flex',flexDirection:'column',gap:12}}>
-<div style={{border:'2px solid #111',borderRadius:14,padding:12}}><b>Connect Facebook</b><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={loginFacebook} style={{flex:1,background:fbUser?'#16a34a':'#1877F2',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{fbUser?'✓ '+fbUser.name:'Login Facebook'}</button><button onClick={()=>loadPages()} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Load My Pages</button></div>{pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6,padding:10,background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff',color:selectedPage?.id===p.id?'#fff':'#000',borderRadius:8,fontSize:13,fontWeight:700,cursor:'pointer'}}>{p.name} {selectedPage?.id===p.id?'LIVE '+formatTime(liveSeconds):'(Go Live)'}</div>)} {fbStreamUrl&&<div style={{marginTop:10,padding:10,background:'#dcfce7',borderRadius:8,fontSize:11,wordBreak:'break-all'}}>FB: {fbStreamUrl.substring(0,70)}...</div>}</div>
-<div style={{marginTop:14,border:'2px solid #ff0000',borderRadius:14,padding:12}}><b>Connect YouTube Live</b><input value={ytKey} onChange={e=>{setYtKey(e.target.value);localStorage.setItem('taglive_ytkey',e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={()=>{if(!ytKey)return alert('Paste YouTube key first'); const active=intros.find(i=>i.id===activeIntroId); if(active){setBroadcastPlaying(active); if(active.type==='image'){const img=new Image();img.src=active.data;img.onload=()=>{broadcastImageRef.current=img}} if(active.type==='video'&&broadcastVideoRef.current){broadcastVideoRef.current.src=active.data;broadcastVideoRef.current.muted=false;broadcastVideoRef.current.volume=1;broadcastVideoRef.current.play().catch(()=>{})} introTimeoutRef.current=setTimeout(()=>{setBroadcastPlaying(null);broadcastImageRef.current=null;setYtLive(true);setIsLive(true);startTimer()},(active.duration||5)*1000)} else {setYtLive(true);setIsLive(true);startTimer()}}} style={{flex:1,background:ytLive?'#16a34a':'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{ytLive?'YouTube LIVE '+formatTime(liveSeconds):'Go Live YouTube + Intro FULL'}</button><button onClick={()=>{const active=outros.find(o=>o.id===activeOutroId); if(active){setBroadcastPlaying(active); if(active.type==='video'&&broadcastVideoRef.current){broadcastVideoRef.current.src=active.data;broadcastVideoRef.current.muted=false;broadcastVideoRef.current.play()} setTimeout(()=>{setBroadcastPlaying(null);setYtLive(false);if(!fbStreamUrl)setIsLive(false);stopTimer()},(active.duration||5)*1000)} else {setYtLive(false);if(!fbStreamUrl)setIsLive(false);stopTimer()}}} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Stop YT + Outro</button></div></div>
-</div>
-</div>
-{showTelegramPopup&&(
-<div style={{position:'fixed',inset:0,zIndex:9999,background:'rgba(0,0,0,0.65)',display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
-<div style={{background:'#1e1e1e',borderRadius:28,padding:22,maxWidth:360,width:'100%',boxShadow:'0 20px 60px rgba(0,0,0,0.6)',border:'1px solid #333',animation:'popIn 0.3s ease'}}>
-<div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}>
-<div style={{width:38,height:38,borderRadius:20,background:'#2AABEE',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20}}>✈️</div>
-<b style={{color:'#fff',fontSize:18,fontWeight:800,letterSpacing:0.2}}>Join Our Group</b>
-</div>
-<div style={{color:'#ccc',fontSize:14,lineHeight:1.5,fontWeight:500,marginBottom:20}}>
-For more upcoming updates or you have any suggestion kindly join on our Telegram channel.
-</div>
-<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-<button onClick={()=>{localStorage.setItem('taglive_telegram_dismissed_time', Date.now().toString()); setShowTelegramPopup(false)}} style={{background:'transparent',color:'#aaa',border:'none',fontWeight:700,fontSize:15,padding:'10px 16px',cursor:'pointer'}}>Later</button>
-<a href={TELEGRAM_LINK} target="_blank" rel="noopener noreferrer" onClick={()=>{localStorage.setItem('taglive_telegram_joined','true'); setShowTelegramPopup(false)}} style={{background:'#9d1c6a',color:'#fff',border:'none',borderRadius:12,padding:'12px 28px',fontWeight:900,fontSize:15,textDecoration:'none',display:'inline-block'}}>Join</a>
-</div>
-</div>
-</div>
-)}
-{!showTelegramPopup&&(
-<div ref={telegramBtnRef} 
-onMouseDown={(e)=>{
-  const el=telegramBtnRef.current; if(!el) return
-  const startX=e.clientX; const startY=e.clientY
-  const rect=el.getBoundingClientRect()
-  const shiftX=startX-rect.left; const shiftY=startY-rect.top
-  const onMove=(ev:any)=>{
-    el.style.left=(ev.clientX-shiftX)+'px'
-    el.style.top=(ev.clientY-shiftY)+'px'
-    el.style.right='auto'; el.style.bottom='auto'
-  }
-  const onUp=()=>{document.removeEventListener('mousemove',onMove); document.removeEventListener('mouseup',onUp)}
-  document.addEventListener('mousemove',onMove); document.addEventListener('mouseup',onUp)
-}}
-onTouchStart={(e)=>{
-  const el=telegramBtnRef.current; if(!el) return
-  const t=e.touches[0]
-  const rect=el.getBoundingClientRect()
-  const shiftX=t.clientX-rect.left; const shiftY=t.clientY-rect.top
-  const onMove=(ev:any)=>{
-    const tt=ev.touches[0]
-    el.style.left=(tt.clientX-shiftX)+'px'
-    el.style.top=(tt.clientY-shiftY)+'px'
-    el.style.right='auto'; el.style.bottom='auto'
-  }
-  const onUp=()=>{document.removeEventListener('touchmove',onMove); document.removeEventListener('touchend',onUp)}
-  document.addEventListener('touchmove',onMove,{passive:false}); document.addEventListener('touchend',onUp)
-}}
-style={{position:'fixed',bottom:90,right:20,zIndex:9998,width:56,height:56,borderRadius:28,background:'#2AABEE',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 8px 24px rgba(42,171,238,0.5)',cursor:'grab',touchAction:'none',userSelect:'none'}}>
-<a href={TELEGRAM_LINK} target="_blank" rel="noopener noreferrer" style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',textDecoration:'none',fontSize:28,pointerEvents:'auto'}}>✈️</a>
-</div>
-)}
-<style>{`@keyframes popIn{from{transform:scale(0.8);opacity:0}to{transform:scale(1);opacity:1}}`}</style>
-</div>
-)
 }
