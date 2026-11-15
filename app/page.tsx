@@ -288,9 +288,22 @@ const fbPushWsRef=useRef<WebSocket|null>(null)
 const fbPushRecorderRef=useRef<MediaRecorder|null>(null)
 const fbPushingRef=useRef(false)
 const lastFbPushRef=useRef<string|null>(null)
+const stoppingFbRef=useRef(false)
+const fbLiveIdRef=useRef<string>('')
+const fbPageRef=useRef<any>(null)
+// FIX: Tell Facebook live don end, so e finalize VOD immediately with full Outro, no wait RTMP timeout
+const endFbLiveVideo=async()=>{
+  const id=fbLiveIdRef.current
+  const page=fbPageRef.current
+  if(!id || !page) return
+  try{
+    await fetch('https://graph.facebook.com/v19.0/'+id,{ method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({ access_token: page.access_token, end_live_video: 'true' }) })
+  }catch{}
+}
 const startFbPush=async(fbRtmpUrl:string)=>{
   if(!fbRtmpUrl) return
   if(!canvasRef.current){ alert('Start Camera first'); return }
+  stoppingFbRef.current=false
   lastFbPushRef.current=fbRtmpUrl
   if(fbPushWsRef.current){ try{ fbPushWsRef.current.close() }catch{} }
   try{ fbPushRecorderRef.current?.stop() }catch{}
@@ -317,14 +330,23 @@ const startFbPush=async(fbRtmpUrl:string)=>{
   ws.onerror=()=>{ fbPushingRef.current=false }
   ws.onclose=()=>{ fbPushingRef.current=false }
 }
-const stopFbPush=()=>{
-  try{ fbPushRecorderRef.current?.stop() }catch{}
-  fbPushRecorderRef.current=null
-  try{ fbPushWsRef.current?.send(JSON.stringify({ type:'stop_push' })) }catch{}
-  try{ fbPushWsRef.current?.close() }catch{}
-  fbPushWsRef.current=null
-  fbPushingRef.current=false
-  lastFbPushRef.current=null
+const stopFbPush=async()=>{
+  // FIX: Graceful stop - Outro dey for TagLive + Recorded but NO for FB VOD because WS close immediately killed ffmpeg mid-stream.
+  // Now: stop recorder -> wait 1.5s flush so last Outro frames enter FB -> send stop_push -> wait 0.8s -> close -> end_live_video.
+  if(stoppingFbRef.current) return
+  stoppingFbRef.current=true
+  try{
+    try{ fbPushRecorderRef.current?.stop() }catch{}
+    fbPushRecorderRef.current=null
+    await new Promise(r=>setTimeout(r,1500))
+    try{ fbPushWsRef.current?.send(JSON.stringify({ type:'stop_push' })) }catch{}
+    await new Promise(r=>setTimeout(r,800))
+    try{ fbPushWsRef.current?.close() }catch{}
+    fbPushWsRef.current=null
+    fbPushingRef.current=false
+    lastFbPushRef.current=null
+    await endFbLiveVideo()
+  } finally { stoppingFbRef.current=false }
 }
 useEffect(()=>{ return ()=>{ try{ fbPushRecorderRef.current?.stop() }catch{}; try{ fbPushWsRef.current?.close() }catch{} } },[])
 // === UPDATE ONLY: YouTube RTMP Push - FIX 3+5+7: YouTube was only timer before, now real push ===
@@ -617,6 +639,8 @@ const createFbLiveForPage=async(page:any)=>{
     if(data.error) throw new Error(data.error?.message || JSON.stringify(data.error))
     if(!data.stream_url) throw new Error('Facebook did not return a stream_url.')
     setFbStreamUrl(data.stream_url); setLiveId(data.id); setIsLive(true); startTimer()
+    // FIX: Save for end_live_video - state fit stale inside async stop, refs no stale
+    fbLiveIdRef.current=data.id; fbPageRef.current=page
     // FIX 1: Ensure mixer is running before push, so audio no be silent
     ensureLiveAudio()
     await startFbPush(data.stream_url)
@@ -790,12 +814,14 @@ const stopRecording=async()=>{
     if(active.type==='image'){
       const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }
       broadcastImageRef.current=img
-      setTimeout(()=>{
+      setTimeout(async()=>{
         if(micGain){ try{ micGain.gain.value=1 }catch{} }
         outroPlayingRef.current=false
+        // FIX: Graceful FB stop - hold 1s extra so last Outro frame enter push before recording stop
+        await new Promise(r=>setTimeout(r,1000))
         stopRecordingFinal()
         // FIX: Outro don finish inside live - NOW stop pushes, so Facebook VOD gets full outro, not 9s cut
-        if(wasFbLive) stopFbLive()
+        if(wasFbLive) await stopFbLive()
         if(wasYtLive) stopYtLive()
         if(wasTikTokLive) stopTikTokLive()
       }, (active.duration||5)*1000)
@@ -811,12 +837,14 @@ const stopRecording=async()=>{
         v.src=active.data; v.currentTime=0
         try{ await v.play() }catch{}
       }
-      setTimeout(()=>{
+      setTimeout(async()=>{
         if(micGain){ try{ micGain.gain.value=1 }catch{} }
         outroPlayingRef.current=false
+        // FIX: Graceful FB stop - hold 1s extra so last Outro frame enter push before recording stop
+        await new Promise(r=>setTimeout(r,1000))
         stopRecordingFinal()
         // FIX: Outro don finish inside live - NOW stop pushes, so Facebook VOD gets full outro, not 9s cut
-        if(wasFbLive) stopFbLive()
+        if(wasFbLive) await stopFbLive()
         if(wasYtLive) stopYtLive()
         if(wasTikTokLive) stopTikTokLive()
       }, (active.duration||5)*1000)
@@ -827,7 +855,7 @@ const stopRecording=async()=>{
 }
 // FIX 2: Stop Live = Stop Push + Stop Recording + Download. Before, Stop Live left Recording running separately.
 // FIX 2+3: Real Stop for FB + YT - stops push, not just timer
-const stopFbLive=()=>{ stopFbPush(); if(isRecording) stopRecordingFinal(); setFbStreamUrl(''); setLiveId(''); setIsLive(false); setSelectedPage(null); stopTimer() }
+const stopFbLive=async()=>{ await stopFbPush(); if(isRecording) stopRecordingFinal(); setFbStreamUrl(''); setLiveId(''); setIsLive(false); setSelectedPage(null); stopTimer() }
 const stopYtLive=()=>{ stopYtPush(); if(isRecording) stopRecordingFinal(); setYtLive(false); if(!fbStreamUrl){ setIsLive(false); stopTimer() } }
 // === UPDATE ONLY: RESTORED TikTok Stop - same merged logic: Stop TikTok = Stop Push + Stop Recording ===
 const stopTikTokLive=()=>{ stopTikTokPush(); if(isRecording) stopRecordingFinal(); if(!fbStreamUrl && !ytLive) stopTimer() }
@@ -1218,7 +1246,7 @@ monthCount!==null?
 <textarea value={liveDescription} onChange={e=>setLiveDescription(e.target.value)} placeholder="Live Description - this shows on Facebook, NOT your verse" style={{width:'100%',padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12,boxSizing:'border-box',height:60}} />
 </div>
 {pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6,padding:10,background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff',color:selectedPage?.id===p.id?'#fff':'#000',borderRadius:8,fontSize:13,fontWeight:700,cursor:'pointer'}}>{p.name} {selectedPage?.id===p.id?'LIVE '+formatTime(liveSeconds):'(Go Live)'}</div>)} {fbStreamUrl&&<div style={{marginTop:10,padding:10,background:'#dcfce7',borderRadius:8,fontSize:11,wordBreak:'break-all'}}>FB: {fbStreamUrl.substring(0,70)}...</div>}{isLive&&<button onClick={stopFbLive} style={{marginTop:10,width:'100%',background:'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>■ Stop Facebook Live</button>}</div>
-<div style={{marginTop:14,border:'2px solid #ff0000',borderRadius:14,padding:12}}><b>Connect YouTube Live</b><input value={ytKey} onChange={e=>{setYtKey(e.target.value);localStorage.setItem('taglive_ytkey',e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={startYtLiveWithIntro} style={{flex:1,background:ytLive?'#16a34a':'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{ytLive?'YouTube LIVE '+formatTime(liveSeconds):'Go Live YouTube + Intro FULL'}</button><button onClick={()=>{if(broadcastPlaying) return; const active=outros.find(o=>o.id===activeOutroId); if(active){setBroadcastPlaying(active); if(active.type==='video'&&broadcastVideoRef.current){ const v=broadcastVideoRef.current as any; v.muted=false; v.volume=1; v.src=active.data; ensureLiveAudio(); try{ if(liveAudioCtxRef.current) liveAudioCtxRef.current.resume() }catch{}; connectBroadcastVideoToMixer(); v.play() } setTimeout(()=>{setBroadcastPlaying(null);stopYtLive()},(active.duration||5)*1000)} else {stopYtLive()}}} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Stop YT + Outro</button></div></div>
+<div style={{marginTop:14,border:'2px solid #ff0000',borderRadius:14,padding:12}}><b>Connect YouTube Live</b><input value={ytKey} onChange={e=>{setYtKey(e.target.value);localStorage.setItem('taglive_ytkey',e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={startYtLiveWithIntro} style={{flex:1,background:ytLive?'#16a34a':'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{ytLive?'YouTube LIVE '+formatTime(liveSeconds):'Go Live YouTube + Intro FULL'}</button><button onClick={()=>{if(broadcastPlaying) return; const active=outros.find(o=>o.id===activeOutroId); if(active){setBroadcastPlaying(active); if(active.type==='video'&&broadcastVideoRef.current){ const v=broadcastVideoRef.current as any; v.muted=false; v.volume=1; v.src=active.data; ensureLiveAudio(); try{ if(liveAudioCtxRef.current) liveAudioCtxRef.current.resume() }catch{}; connectBroadcastVideoToMixer(); v.play() } setTimeout(async()=>{setBroadcastPlaying(null); await new Promise(r=>setTimeout(r,1000)); stopYtLive()},(active.duration||5)*1000)} else {stopYtLive()}}} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Stop YT + Outro</button></div></div>
 {/* === UPDATE ONLY: RESTORED TikTok Box - was missing in Part 2 UI, logic still in Part 1 === */}
 <div style={{marginTop:14,border:'2px solid #000',borderRadius:14,padding:12}}><b>Connect TikTok Live</b>
 <input value={tiktokUsername} onChange={e=>setTiktokUsername(e.target.value)} placeholder="@your TikTok username" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/>
