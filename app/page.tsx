@@ -106,6 +106,7 @@ const liveAudioCtxRef=useRef<any>(null)
 const liveAudioDestRef=useRef<any>(null)
 const liveMicGainRef=useRef<any>(null)
 const liveIntroElRef=useRef<any>(null)
+const broadcastConnectedRef=useRef(false)
 const ensureLiveAudio=()=>{
   try{
     if(liveAudioCtxRef.current && liveAudioDestRef.current){
@@ -136,6 +137,7 @@ const rebuildLiveAudio=()=>{
   liveIntroElRef.current=null
   try{ if(liveAudioCtxRef.current) liveAudioCtxRef.current.close() }catch{}
   liveAudioCtxRef.current=null; liveAudioDestRef.current=null; liveMicGainRef.current=null
+  broadcastConnectedRef.current=false
   ensureLiveAudio()
 }
 const getPushAudioTrack=()=>{
@@ -152,22 +154,57 @@ const getPushStream=()=>{
   if(audioTrack) canvasStream.addTrack(audioTrack)
   return canvasStream
 }
-const playIntroAudioForLive=(active:any)=>{
+// === FIX: INTRO/OUTRO - ONE VIDEO ONLY. broadcastVideoRef carries picture + sound. No separate audioEl again. ===
+const connectBroadcastVideoToMixer=()=>{
   try{
-    if(!active || active.type!=='video') { if(liveMicGainRef.current) liveMicGainRef.current.gain.value=0; setTimeout(()=>{ try{ if(liveMicGainRef.current) liveMicGainRef.current.gain.value=1 }catch{} }, (active?.duration||5)*1000); return }
     const ctx=ensureLiveAudio()
     if(!ctx || !liveAudioDestRef.current) return
-    if(liveMicGainRef.current) liveMicGainRef.current.gain.value=0
-    try{ if(liveIntroElRef.current && liveIntroElRef.current._tagliveCleanup) liveIntroElRef.current._tagliveCleanup() }catch{}
-    const audioEl=document.createElement('video')
-    audioEl.crossOrigin="anonymous"; audioEl.playsInline=true; audioEl.muted=false; audioEl.volume=1; audioEl.src=active.data
-    audioEl.play().catch(()=>{})
-    const vSource=ctx.createMediaElementSource(audioEl)
-    vSource.connect(liveAudioDestRef.current)
-    ;(audioEl as any)._tagliveCleanup=()=>{ try{ vSource.disconnect() }catch{}; try{ audioEl.pause(); audioEl.removeAttribute('src'); audioEl.load() }catch{} }
-    liveIntroElRef.current=audioEl
-    setTimeout(()=>{ try{ if(liveMicGainRef.current) liveMicGainRef.current.gain.value=1 }catch{}; try{ if(audioEl._tagliveCleanup) audioEl._tagliveCleanup() }catch{} }, (active.duration||5)*1000)
+    const v=broadcastVideoRef.current as any
+    if(!v) return
+    if(broadcastConnectedRef.current) return
+    // A video element can only have ONE MediaElementSource in its lifetime. Connect once, reuse forever.
+    const src=ctx.createMediaElementSource(v)
+    src.connect(liveAudioDestRef.current)
+    broadcastConnectedRef.current=true
   }catch{}
+}
+const playIntroAudioForLive=(active:any)=>{
+  try{
+    // Image intro: no video audio, just mute mic for duration
+    if(!active || active.type!=='video'){
+      if(liveMicGainRef.current) liveMicGainRef.current.gain.value=0
+      setTimeout(()=>{ try{ if(liveMicGainRef.current) liveMicGainRef.current.gain.value=1 }catch{} }, (active?.duration||5)*1000)
+      return
+    }
+    // Video intro: broadcastVideoRef itself IS the audio. Do NOT create a second audioEl.
+    // Mute mic so only intro sound enters, unmute after duration.
+    ensureLiveAudio()
+    try{ if(liveAudioCtxRef.current && liveAudioCtxRef.current.state==='suspended') liveAudioCtxRef.current.resume() }catch{}
+    connectBroadcastVideoToMixer()
+    if(liveMicGainRef.current) liveMicGainRef.current.gain.value=0
+    setTimeout(()=>{ try{ if(liveMicGainRef.current) liveMicGainRef.current.gain.value=1 }catch{} }, (active.duration||5)*1000)
+  }catch{}
+}
+// === FIX: WAIT FOR BRIDGE push_started BEFORE starting MediaRecorder, else Facebook rejects corrupt stream ===
+const startPushRecorderOnReady=(ws:any, recorderRef:any, onStarted?:()=>void)=>{
+  let started=false
+  const doStart=()=>{
+    if(started) return
+    started=true
+    try{
+      const canvasStream=getPushStream()
+      let mime='video/webm;codecs=vp8,opus'
+      if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm'
+      const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 2500000 })
+      recorderRef.current=rec
+      rec.ondataavailable=(e)=>{ if(e.data.size>0 && ws.readyState===WebSocket.OPEN){ try{ ws.send(e.data) }catch{} } }
+      rec.start(500)
+      if(onStarted) onStarted()
+    }catch{}
+  }
+  // Fallback: if bridge never sends push_started (old bridge), start after 2.5s so live no hang forever
+  const fallback=setTimeout(()=>{ doStart() }, 2500)
+  return { doStart, clearFallback:()=>{ try{ clearTimeout(fallback) }catch{} } }
 }
 // === FIX 2: Go Live = Push + Auto Local Record. Records SAME canvas + SAME mixed audio, without replaying Intro or killing mixer ===
 const startLocalRecording=async()=>{
@@ -204,25 +241,15 @@ const startTikTokPush=async(rtmpUrlOverride?:string,streamKeyOverride?:string)=>
   try{ tiktokPushRecorderRef.current?.stop() }catch{}
   const ws=new WebSocket(WS_URL)
   tiktokPushWsRef.current=ws
+  const starter=startPushRecorderOnReady(ws, tiktokPushRecorderRef, ()=>{ setTiktokPushing(true); setTiktokStatus('Connected'); startLocalRecording() })
   ws.onopen=()=>{
     ws.send(JSON.stringify({ type:'start_push', rtmpUrl, streamKey }))
-    // FIX 1: Use mixed audio (Mic + Intro), not raw mic
-    const canvasStream=getPushStream()
-    let mime='video/webm;codecs=vp8,opus'
-    if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm'
-    const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 2500000 })
-    tiktokPushRecorderRef.current=rec
-    rec.ondataavailable=(e)=>{ if(e.data.size>0 && ws.readyState===WebSocket.OPEN){ try{ ws.send(e.data) }catch{} } }
-    rec.start(500)
-    setTiktokPushing(true)
-    setTiktokStatus('Connected')
-    // FIX 2: TikTok Go Live also auto-records locally
-    startLocalRecording()
+    // FIX: Do NOT start MediaRecorder here. Wait for push_started.
   }
   ws.onmessage=(e)=>{
     try{
       const d=JSON.parse(e.data)
-      if(d.type==='push_started') setTiktokPushing(true)
+      if(d.type==='push_started'){ starter.clearFallback(); starter.doStart() }
       if(d.type==='push_stopped'){ setTiktokPushing(false) }
       if(d.type==='error'){ setTiktokPushing(false); if(d.message) alert(d.message) }
     }catch{}
@@ -254,28 +281,19 @@ const startFbPush=async(fbRtmpUrl:string)=>{
   fbPushRecorderRef.current=null
   const ws=new WebSocket(WS_URL)
   fbPushWsRef.current=ws
+  const starter=startPushRecorderOnReady(ws, fbPushRecorderRef, ()=>{ fbPushingRef.current=true; startLocalRecording() })
   ws.onopen=()=>{
     let rtmpUrl=fbRtmpUrl
     let streamKey=''
     const parts=fbRtmpUrl.split('/')
     if(parts.length>1){ streamKey=parts.pop() as string; rtmpUrl=parts.join('/') }
     ws.send(JSON.stringify({ type:'start_push', rtmpUrl, streamKey }))
-    // FIX 1: Use mixed audio (Mic + Intro), not raw mic
-    const canvasStream=getPushStream()
-    let mime='video/webm;codecs=vp8,opus'
-    if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm'
-    const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 2500000 })
-    fbPushRecorderRef.current=rec
-    rec.ondataavailable=(e)=>{ if(e.data.size>0 && ws.readyState===WebSocket.OPEN){ try{ ws.send(e.data) }catch{} } }
-    rec.start(500)
-    fbPushingRef.current=true
-    // FIX 2: Facebook Go Live also auto-records locally
-    startLocalRecording()
+    // FIX: Do NOT start MediaRecorder here. Wait for push_started, else FB rejects.
   }
   ws.onmessage=(e)=>{
     try{
       const d=JSON.parse(e.data)
-      if(d.type==='push_started') fbPushingRef.current=true
+      if(d.type==='push_started'){ starter.clearFallback(); starter.doStart() }
       if(d.type==='push_stopped'){ fbPushingRef.current=false }
       if(d.type==='error'){ fbPushingRef.current=false; if(d.message) alert('Facebook Push: '+d.message) }
     }catch{}
@@ -307,22 +325,12 @@ const startYtPush=async(ytKeyOverride?:string)=>{
   try{ ytPushRecorderRef.current?.stop() }catch{}
   const ws=new WebSocket(WS_URL)
   ytPushWsRef.current=ws
+  const starter=startPushRecorderOnReady(ws, ytPushRecorderRef, ()=>{ ytPushingRef.current=true; setYtLive(true); setIsLive(true); startTimer(); startLocalRecording() })
   ws.onopen=()=>{
     ws.send(JSON.stringify({ type:'start_push', rtmpUrl:'rtmp://a.rtmp.youtube.com/live2', streamKey:key }))
-    // FIX 1: Use mixed audio (Mic + Intro), not raw mic
-    const canvasStream=getPushStream()
-    let mime='video/webm;codecs=vp8,opus'
-    if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm'
-    const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 2500000 })
-    ytPushRecorderRef.current=rec
-    rec.ondataavailable=(e)=>{ if(e.data.size>0 && ws.readyState===WebSocket.OPEN){ try{ ws.send(e.data) }catch{} } }
-    rec.start(500)
-    ytPushingRef.current=true
-    setYtLive(true); setIsLive(true); startTimer()
-    // FIX 2: YouTube Go Live also auto-records locally
-    startLocalRecording()
+    // FIX: Do NOT start MediaRecorder here. Wait for push_started.
   }
-  ws.onmessage=(e)=>{ try{ const d=JSON.parse(e.data); if(d.type==='error'){ ytPushingRef.current=false; alert('YouTube Push: '+(d.message||'Failed')) } }catch{} }
+  ws.onmessage=(e)=>{ try{ const d=JSON.parse(e.data); if(d.type==='push_started'){ starter.clearFallback(); starter.doStart() } if(d.type==='error'){ ytPushingRef.current=false; alert('YouTube Push: '+(d.message||'Failed')) } }catch{} }
   ws.onerror=()=>{ ytPushingRef.current=false }
   ws.onclose=()=>{ ytPushingRef.current=false }
 }
@@ -547,6 +555,7 @@ try{ if(liveIntroElRef.current && liveIntroElRef.current._tagliveCleanup) liveIn
 liveIntroElRef.current=null
 try{ if(liveAudioCtxRef.current){ liveAudioCtxRef.current.close() } }catch{}
 liveAudioCtxRef.current=null; liveAudioDestRef.current=null; liveMicGainRef.current=null
+broadcastConnectedRef.current=false
 streamRef.current?.getTracks().forEach(t=>t.stop());
 if(videoRef.current) videoRef.current.srcObject=null;
 setIsCam(false); setIsLive(false); setTorch(false); setYtLive(false); stopTimer()
@@ -590,12 +599,20 @@ const createFbLiveForPage=async(page:any)=>{
 const createFbLiveAuto=async(page:any)=>{
   const active=intros.find(i=>i.id===activeIntroId)
   if(active){
-    // FIX 1: Start mixer + Intro audio NOW, so Intro sound enters Live. Before, Intro was video-only for Live.
+    // FIX: ONE VIDEO ONLY - broadcastVideoRef carries picture + sound. No second audioEl.
     ensureLiveAudio()
+    try{ if(liveAudioCtxRef.current && liveAudioCtxRef.current.state==='suspended') await liveAudioCtxRef.current.resume() }catch{}
     playIntroAudioForLive(active)
     setBroadcastPlaying(active)
     if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
-    else if(active.type==='video' && broadcastVideoRef.current){ try{ broadcastVideoRef.current.src=active.data; broadcastVideoRef.current.muted=true; await broadcastVideoRef.current.play() }catch{} }
+    else if(active.type==='video' && broadcastVideoRef.current){
+      try{
+        const v=broadcastVideoRef.current as any
+        v.crossOrigin="anonymous"; v.playsInline=true; v.muted=false; v.volume=1; v.src=active.data; v.currentTime=0
+        connectBroadcastVideoToMixer()
+        await v.play()
+      }catch{}
+    }
     fbPendingRef.current={ page }
     introTimeoutRef.current=setTimeout(async()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause() }catch{} }; fbPendingRef.current=null; await createFbLiveForPage(page) }, (active.duration||5)*1000)
   } else { await createFbLiveForPage(page) }
@@ -663,12 +680,17 @@ const startRecording=async()=>{
     try{ micGain.gain.value=0 }catch{}
     if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
     else if(active.type==='video'){
-      if(broadcastVideoRef.current){ const v=broadcastVideoRef.current; v.crossOrigin="anonymous"; v.playsInline=true; v.muted=true; v.volume=0; v.src=active.data; v.currentTime=0; try{ await v.play() }catch{} }
+      // FIX: ONE VIDEO ONLY for Record too - broadcastVideoRef carries picture. Sound goes via live mixer if already connected, else via this recording ctx (only if broadcast not yet connected to live mixer).
+      if(broadcastVideoRef.current){ const v=broadcastVideoRef.current as any; v.crossOrigin="anonymous"; v.playsInline=true; v.muted=true; v.volume=0; v.src=active.data; v.currentTime=0; try{ await v.play() }catch{} }
+      // Do NOT create a second audioEl playing same file. If live mixer already connected broadcast video, its sound already enters live mixer. For Record-only, connect broadcast video to THIS recording ctx only if it was never connected before.
       try{
-        const audioEl=document.createElement('video'); audioEl.crossOrigin="anonymous"; audioEl.playsInline=true; audioEl.muted=false; audioEl.volume=1; audioEl.src=active.data; await audioEl.play().catch(()=>{})
-        const vSource=audioCtx.createMediaElementSource(audioEl); vSource.connect(dest); vSource.connect(audioCtx.destination)
-        ;(audioEl as any)._tagliveCleanup=()=>{ try{ vSource.disconnect() }catch{}; try{ audioEl.pause(); audioEl.removeAttribute('src'); audioEl.load() }catch{} }
-        ;(audioCtxRef.current as any).introAudioEl=audioEl
+        if(!broadcastConnectedRef.current && broadcastVideoRef.current){
+          const v2=broadcastVideoRef.current as any
+          // Note: if live mixer already connected it, this will throw and we skip - sound already routed.
+          const vSource=audioCtx.createMediaElementSource(v2); vSource.connect(dest)
+          broadcastConnectedRef.current=true
+          ;(audioCtxRef.current as any).introAudioEl=v2
+        }
       }catch{}
     }
   }
@@ -708,7 +730,7 @@ const stopRecording=async()=>{
   const active=outros.find(o=>o.id===activeOutroId)
   if(active && isRecording){
     setBroadcastPlaying(active)
-    // FIX 1: When Go Live started the recording, audioCtxRef is null - use live mixer mic gain instead, else Outro mutes nothing and audio dies
+    // FIX: When Go Live started the recording, audioCtxRef is null - use live mixer mic gain instead
     const micGain=((audioCtxRef.current as any)?._micGain) || liveMicGainRef.current
     if(micGain){ try{ micGain.gain.value=0 }catch{} }
     if(active.type==='image'){
@@ -716,32 +738,17 @@ const stopRecording=async()=>{
       broadcastImageRef.current=img
       setTimeout(()=>{ if(micGain){ try{ micGain.gain.value=1 }catch{} } stopRecordingFinal() }, (active.duration||5)*1000)
     } else if(active.type==='video'){
+      // FIX: ONE VIDEO ONLY - broadcastVideoRef carries picture + sound. No separate audioEl again.
+      ensureLiveAudio()
+      try{ if(liveAudioCtxRef.current && liveAudioCtxRef.current.state==='suspended') await liveAudioCtxRef.current.resume() }catch{}
+      try{ if(liveAudioCtxRef.current) liveAudioCtxRef.current.resume() }catch{}
+      connectBroadcastVideoToMixer()
       if(broadcastVideoRef.current){
-        const v=broadcastVideoRef.current
-        v.crossOrigin="anonymous"; v.playsInline=true; v.muted=true; v.volume=0
+        const v=broadcastVideoRef.current as any
+        v.crossOrigin="anonymous"; v.playsInline=true; v.muted=false; v.volume=1
         v.src=active.data; v.currentTime=0
         try{ await v.play() }catch{}
       }
-      try{
-        const audioEl=document.createElement('video')
-        audioEl.crossOrigin="anonymous"; audioEl.playsInline=true; audioEl.muted=false; audioEl.volume=1
-        audioEl.src=active.data
-        await audioEl.play().catch(()=>{})
-        // FIX 1: Outro audio -> recording dest if exists, else live mixer dest, else no audio
-        if(audioCtxRef.current && (audioCtxRef.current as any)._dest){
-          const dest=(audioCtxRef.current as any)._dest
-          const vSource=audioCtxRef.current.createMediaElementSource(audioEl)
-          vSource.connect(dest)
-          vSource.connect(audioCtxRef.current.destination)
-          ;(audioEl as any)._tagliveCleanup=()=>{ try{ vSource.disconnect() }catch{}; try{ audioEl.pause(); audioEl.removeAttribute('src'); audioEl.load() }catch{} }
-          ;(audioCtxRef.current as any).outroAudioEl=audioEl
-        } else if(liveAudioCtxRef.current && liveAudioDestRef.current){
-          const vSource=liveAudioCtxRef.current.createMediaElementSource(audioEl)
-          vSource.connect(liveAudioDestRef.current)
-          ;(audioEl as any)._tagliveCleanup=()=>{ try{ vSource.disconnect() }catch{}; try{ audioEl.pause(); audioEl.removeAttribute('src'); audioEl.load() }catch{} }
-          liveIntroElRef.current=audioEl
-        }
-      }catch{}
       setTimeout(()=>{ if(micGain){ try{ micGain.gain.value=1 }catch{} } stopRecordingFinal() }, (active.duration||5)*1000)
     }
   } else { stopRecordingFinal() }
@@ -758,12 +765,18 @@ const startYtLiveWithIntro=async()=>{
   if(!isCam) return alert('Start Camera first')
   const active=intros.find(i=>i.id===activeIntroId)
   if(active){
-    // FIX 1: Mixer + Intro audio for YT Live, same as Facebook
+    // FIX: ONE VIDEO ONLY for YT Intro too - broadcastVideoRef picture + sound, no second audioEl
     ensureLiveAudio()
+    try{ if(liveAudioCtxRef.current && liveAudioCtxRef.current.state==='suspended') await liveAudioCtxRef.current.resume() }catch{}
     playIntroAudioForLive(active)
     setBroadcastPlaying(active)
     if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
-    if(active.type==='video'&&broadcastVideoRef.current){ broadcastVideoRef.current.src=active.data; broadcastVideoRef.current.muted=true; broadcastVideoRef.current.volume=0; broadcastVideoRef.current.play().catch(()=>{}) }
+    if(active.type==='video'&&broadcastVideoRef.current){
+      const v=broadcastVideoRef.current as any
+      v.crossOrigin="anonymous"; v.playsInline=true; v.muted=false; v.volume=1; v.src=active.data; v.currentTime=0
+      connectBroadcastVideoToMixer()
+      try{ await v.play() }catch{}
+    }
     await startYtPush(ytKey)
     introTimeoutRef.current=setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null }, (active.duration||5)*1000)
   } else { ensureLiveAudio(); await startYtPush(ytKey) }
@@ -857,7 +870,8 @@ return lines
 }
 const draw=()=>{
 const c=canvasRef.current, v=videoRef.current
-if(c&&v&&isCam&&v.readyState>=2){
+// FIX: Draw Intro/Outro even if camera not ready yet, else Intro shows black / never plays
+if(c && (broadcastPlaying || (isCam && v && v.readyState>=2))){
 const ctx=c.getContext('2d')
 if(ctx){
 if(broadcastPlaying){
@@ -1114,7 +1128,7 @@ monthCount!==null?
 <textarea value={liveDescription} onChange={e=>setLiveDescription(e.target.value)} placeholder="Live Description - this shows on Facebook, NOT your verse" style={{width:'100%',padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12,boxSizing:'border-box',height:60}} />
 </div>
 {pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6,padding:10,background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff',color:selectedPage?.id===p.id?'#fff':'#000',borderRadius:8,fontSize:13,fontWeight:700,cursor:'pointer'}}>{p.name} {selectedPage?.id===p.id?'LIVE '+formatTime(liveSeconds):'(Go Live)'}</div>)} {fbStreamUrl&&<div style={{marginTop:10,padding:10,background:'#dcfce7',borderRadius:8,fontSize:11,wordBreak:'break-all'}}>FB: {fbStreamUrl.substring(0,70)}...</div>}{isLive&&<button onClick={stopFbLive} style={{marginTop:10,width:'100%',background:'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>■ Stop Facebook Live</button>}</div>
-<div style={{marginTop:14,border:'2px solid #ff0000',borderRadius:14,padding:12}}><b>Connect YouTube Live</b><input value={ytKey} onChange={e=>{setYtKey(e.target.value);localStorage.setItem('taglive_ytkey',e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={startYtLiveWithIntro} style={{flex:1,background:ytLive?'#16a34a':'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{ytLive?'YouTube LIVE '+formatTime(liveSeconds):'Go Live YouTube + Intro FULL'}</button><button onClick={()=>{const active=outros.find(o=>o.id===activeOutroId); if(active){setBroadcastPlaying(active); if(active.type==='video'&&broadcastVideoRef.current){broadcastVideoRef.current.src=active.data;broadcastVideoRef.current.muted=false;broadcastVideoRef.current.play()} setTimeout(()=>{setBroadcastPlaying(null);stopYtLive()},(active.duration||5)*1000)} else {stopYtLive()}}} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Stop YT + Outro</button></div></div>
+<div style={{marginTop:14,border:'2px solid #ff0000',borderRadius:14,padding:12}}><b>Connect YouTube Live</b><input value={ytKey} onChange={e=>{setYtKey(e.target.value);localStorage.setItem('taglive_ytkey',e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={startYtLiveWithIntro} style={{flex:1,background:ytLive?'#16a34a':'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{ytLive?'YouTube LIVE '+formatTime(liveSeconds):'Go Live YouTube + Intro FULL'}</button><button onClick={()=>{const active=outros.find(o=>o.id===activeOutroId); if(active){setBroadcastPlaying(active); if(active.type==='video'&&broadcastVideoRef.current){ const v=broadcastVideoRef.current as any; v.muted=false; v.volume=1; v.src=active.data; ensureLiveAudio(); try{ if(liveAudioCtxRef.current) liveAudioCtxRef.current.resume() }catch{}; connectBroadcastVideoToMixer(); v.play() } setTimeout(()=>{setBroadcastPlaying(null);stopYtLive()},(active.duration||5)*1000)} else {stopYtLive()}}} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Stop YT + Outro</button></div></div>
 {/* === UPDATE ONLY: RESTORED TikTok Box - was missing in Part 2 UI, logic still in Part 1 === */}
 <div style={{marginTop:14,border:'2px solid #000',borderRadius:14,padding:12}}><b>Connect TikTok Live</b>
 <input value={tiktokUsername} onChange={e=>setTiktokUsername(e.target.value)} placeholder="@your TikTok username" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/>
