@@ -750,6 +750,8 @@ const stopRecording=async()=>{
 // FIX 2+3: Real Stop for FB + YT - stops push, not just timer
 const stopFbLive=()=>{ stopFbPush(); if(isRecording) stopRecordingFinal(); setFbStreamUrl(''); setLiveId(''); setIsLive(false); setSelectedPage(null); stopTimer() }
 const stopYtLive=()=>{ stopYtPush(); if(isRecording) stopRecordingFinal(); setYtLive(false); if(!fbStreamUrl){ setIsLive(false); stopTimer() } }
+// === UPDATE ONLY: RESTORED TikTok Stop - same merged logic: Stop TikTok = Stop Push + Stop Recording ===
+const stopTikTokLive=()=>{ stopTikTokPush(); if(isRecording) stopRecordingFinal(); if(!fbStreamUrl && !ytLive) stopTimer() }
 // FIX 1+3+5: YouTube Go Live with Intro - starts YT push NOW so Intro shows on YouTube too + Intro AUDIO enters Live
 const startYtLiveWithIntro=async()=>{
   if(!ytKey.trim()) return alert('Paste YouTube Stream Key first')
@@ -1113,6 +1115,22 @@ monthCount!==null?
 </div>
 {pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6,padding:10,background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff',color:selectedPage?.id===p.id?'#fff':'#000',borderRadius:8,fontSize:13,fontWeight:700,cursor:'pointer'}}>{p.name} {selectedPage?.id===p.id?'LIVE '+formatTime(liveSeconds):'(Go Live)'}</div>)} {fbStreamUrl&&<div style={{marginTop:10,padding:10,background:'#dcfce7',borderRadius:8,fontSize:11,wordBreak:'break-all'}}>FB: {fbStreamUrl.substring(0,70)}...</div>}{isLive&&<button onClick={stopFbLive} style={{marginTop:10,width:'100%',background:'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>■ Stop Facebook Live</button>}</div>
 <div style={{marginTop:14,border:'2px solid #ff0000',borderRadius:14,padding:12}}><b>Connect YouTube Live</b><input value={ytKey} onChange={e=>{setYtKey(e.target.value);localStorage.setItem('taglive_ytkey',e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={startYtLiveWithIntro} style={{flex:1,background:ytLive?'#16a34a':'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{ytLive?'YouTube LIVE '+formatTime(liveSeconds):'Go Live YouTube + Intro FULL'}</button><button onClick={()=>{const active=outros.find(o=>o.id===activeOutroId); if(active){setBroadcastPlaying(active); if(active.type==='video'&&broadcastVideoRef.current){broadcastVideoRef.current.src=active.data;broadcastVideoRef.current.muted=false;broadcastVideoRef.current.play()} setTimeout(()=>{setBroadcastPlaying(null);stopYtLive()},(active.duration||5)*1000)} else {stopYtLive()}}} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Stop YT + Outro</button></div></div>
+{/* === UPDATE ONLY: RESTORED TikTok Box - was missing in Part 2 UI, logic still in Part 1 === */}
+<div style={{marginTop:14,border:'2px solid #000',borderRadius:14,padding:12}}><b>Connect TikTok Live</b>
+<input value={tiktokUsername} onChange={e=>setTiktokUsername(e.target.value)} placeholder="@your TikTok username" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/>
+<div style={{display:'flex',gap:8,marginTop:8}}>
+<button onClick={connectTikTok} style={{flex:1,background:tiktokStatus==='Connected'?'#16a34a':'#000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none',fontSize:12}}>{tiktokStatus==='Connected'?'✓ TikTok Connected':'Connect TikTok'}</button>
+<button onClick={disconnectTikTok} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff',fontSize:12}}>Disconnect</button>
+</div>
+<div style={{marginTop:8,fontSize:11,fontWeight:700}}>Status: {tiktokStatus} | Viewers: {tiktokViewerCount} | Likes: {tiktokLikes}</div>
+{tiktokLastComment&&<div style={{marginTop:6,padding:8,background:'#f3f0ff',borderRadius:8,fontSize:11}}>💬 {tiktokLastComment}</div>}
+<input value={tiktokRtmpUrl} onChange={e=>setTiktokRtmpUrl(e.target.value)} placeholder="Paste TikTok Server URL (RTMP)" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/>
+<input value={tiktokStreamKey} onChange={e=>setTiktokStreamKey(e.target.value)} placeholder="Paste TikTok Stream Key" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/>
+<div style={{display:'flex',gap:8,marginTop:8}}>
+<button onClick={()=>{ ensureLiveAudio(); startTikTokPush() }} style={{flex:1,background:tiktokPushing?'#16a34a':'#000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none',fontSize:12}}>{tiktokPushing?'TikTok LIVE '+formatTime(liveSeconds):'Go Live TikTok'}</button>
+<button onClick={stopTikTokLive} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff',fontSize:12}}>Stop TikTok</button>
+</div>
+</div>
 </div>
 </div>
 {showTelegramPopup&&(
