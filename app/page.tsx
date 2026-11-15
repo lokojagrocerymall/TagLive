@@ -206,6 +206,15 @@ const startPushRecorderOnReady=(ws:any, recorderRef:any, onStarted?:()=>void)=>{
   const fallback=setTimeout(()=>{ doStart() }, 2500)
   return { doStart, clearFallback:()=>{ try{ clearTimeout(fallback) }catch{} } }
 }
+// === FIX: Wait for push to actually start before playing Intro, else Intro plays before ffmpeg ready and is lost ===
+const waitForFbPushReady=async()=>{
+  const start=Date.now()
+  while(Date.now()-start<3000){
+    if(fbPushingRef.current) return true
+    await new Promise(r=>setTimeout(r,100))
+  }
+  return fbPushingRef.current
+}
 // === FIX 2: Go Live = Push + Auto Local Record. Records SAME canvas + SAME mixed audio, without replaying Intro or killing mixer ===
 const startLocalRecording=async()=>{
   if(isRecording) return
@@ -597,25 +606,28 @@ const createFbLiveForPage=async(page:any)=>{
   }catch(e:any){ stopFbPush(); setFbStreamUrl(''); setLiveId(''); setIsLive(false); setSelectedPage(null); alert('Facebook Live failed for this Page: ' + (e.message || e)); throw e }
 }
 const createFbLiveAuto=async(page:any)=>{
+  // FIX: PUSH FIRST, INTRO SECOND - Intro must be INSIDE live + recording, not before live.
+  // Before: Intro (5s) -> create FB -> push -> recording. Intro never entered FB / file.
+  // Now: Create FB + Push + Recording FIRST, wait for bridge ready, THEN play Intro on live canvas.
+  await createFbLiveForPage(page)
   const active=intros.find(i=>i.id===activeIntroId)
-  if(active){
-    // FIX: ONE VIDEO ONLY - broadcastVideoRef carries picture + sound. No second audioEl.
-    ensureLiveAudio()
-    try{ if(liveAudioCtxRef.current && liveAudioCtxRef.current.state==='suspended') await liveAudioCtxRef.current.resume() }catch{}
-    playIntroAudioForLive(active)
-    setBroadcastPlaying(active)
-    if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
-    else if(active.type==='video' && broadcastVideoRef.current){
-      try{
-        const v=broadcastVideoRef.current as any
-        v.crossOrigin="anonymous"; v.playsInline=true; v.muted=false; v.volume=1; v.src=active.data; v.currentTime=0
-        connectBroadcastVideoToMixer()
-        await v.play()
-      }catch{}
-    }
-    fbPendingRef.current={ page }
-    introTimeoutRef.current=setTimeout(async()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause() }catch{} }; fbPendingRef.current=null; await createFbLiveForPage(page) }, (active.duration||5)*1000)
-  } else { await createFbLiveForPage(page) }
+  if(!active) return
+  await waitForFbPushReady()
+  ensureLiveAudio()
+  try{ if(liveAudioCtxRef.current && liveAudioCtxRef.current.state==='suspended') await liveAudioCtxRef.current.resume() }catch{}
+  playIntroAudioForLive(active)
+  setBroadcastPlaying(active)
+  if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
+  else if(active.type==='video' && broadcastVideoRef.current){
+    try{
+      const v=broadcastVideoRef.current as any
+      v.crossOrigin="anonymous"; v.playsInline=true; v.muted=false; v.volume=1; v.src=active.data; v.currentTime=0
+      connectBroadcastVideoToMixer()
+      await v.play()
+    }catch{}
+  }
+  fbPendingRef.current=null
+  introTimeoutRef.current=setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause() }catch{} } }, (active.duration||5)*1000)
 }
 const openBibleApp=()=>{ setShowBible(true) }
 const fetchBible=async(overrideQuery?:string)=>{
@@ -680,8 +692,8 @@ const startRecording=async()=>{
     try{ micGain.gain.value=0 }catch{}
     if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
     else if(active.type==='video'){
-      // FIX: ONE VIDEO ONLY for Record too - broadcastVideoRef carries picture. Sound goes via live mixer if already connected, else via this recording ctx (only if broadcast not yet connected to live mixer).
-      if(broadcastVideoRef.current){ const v=broadcastVideoRef.current as any; v.crossOrigin="anonymous"; v.playsInline=true; v.muted=true; v.volume=0; v.src=active.data; v.currentTime=0; try{ await v.play() }catch{} }
+      // FIX: Record-only Intro was muted=true, volume=0 - MediaElementSource outputs silence. Now unmuted.
+      if(broadcastVideoRef.current){ const v=broadcastVideoRef.current as any; v.crossOrigin="anonymous"; v.playsInline=true; v.muted=false; v.volume=1; v.src=active.data; v.currentTime=0; try{ await v.play() }catch{} }
       // Do NOT create a second audioEl playing same file. If live mixer already connected broadcast video, its sound already enters live mixer. For Record-only, connect broadcast video to THIS recording ctx only if it was never connected before.
       try{
         if(!broadcastConnectedRef.current && broadcastVideoRef.current){
@@ -729,6 +741,10 @@ const startRecording=async()=>{
 const stopRecording=async()=>{
   const active=outros.find(o=>o.id===activeOutroId)
   if(active && isRecording){
+    // FIX: Capture live state BEFORE outro, so we can auto-stop pushes AFTER outro fully plays in FB/YT/TikTok
+    const wasFbLive=isLive
+    const wasYtLive=ytLive
+    const wasTikTokLive=tiktokPushing
     setBroadcastPlaying(active)
     // FIX: When Go Live started the recording, audioCtxRef is null - use live mixer mic gain instead
     const micGain=((audioCtxRef.current as any)?._micGain) || liveMicGainRef.current
@@ -736,7 +752,14 @@ const stopRecording=async()=>{
     if(active.type==='image'){
       const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }
       broadcastImageRef.current=img
-      setTimeout(()=>{ if(micGain){ try{ micGain.gain.value=1 }catch{} } stopRecordingFinal() }, (active.duration||5)*1000)
+      setTimeout(()=>{
+        if(micGain){ try{ micGain.gain.value=1 }catch{} }
+        stopRecordingFinal()
+        // FIX: Outro don finish inside live - NOW stop pushes, so Facebook VOD gets full outro, not 9s cut
+        if(wasFbLive) stopFbLive()
+        if(wasYtLive) stopYtLive()
+        if(wasTikTokLive) stopTikTokLive()
+      }, (active.duration||5)*1000)
     } else if(active.type==='video'){
       // FIX: ONE VIDEO ONLY - broadcastVideoRef carries picture + sound. No separate audioEl again.
       ensureLiveAudio()
@@ -749,7 +772,14 @@ const stopRecording=async()=>{
         v.src=active.data; v.currentTime=0
         try{ await v.play() }catch{}
       }
-      setTimeout(()=>{ if(micGain){ try{ micGain.gain.value=1 }catch{} } stopRecordingFinal() }, (active.duration||5)*1000)
+      setTimeout(()=>{
+        if(micGain){ try{ micGain.gain.value=1 }catch{} }
+        stopRecordingFinal()
+        // FIX: Outro don finish inside live - NOW stop pushes, so Facebook VOD gets full outro, not 9s cut
+        if(wasFbLive) stopFbLive()
+        if(wasYtLive) stopYtLive()
+        if(wasTikTokLive) stopTikTokLive()
+      }, (active.duration||5)*1000)
     }
   } else { stopRecordingFinal() }
 }
@@ -759,27 +789,37 @@ const stopFbLive=()=>{ stopFbPush(); if(isRecording) stopRecordingFinal(); setFb
 const stopYtLive=()=>{ stopYtPush(); if(isRecording) stopRecordingFinal(); setYtLive(false); if(!fbStreamUrl){ setIsLive(false); stopTimer() } }
 // === UPDATE ONLY: RESTORED TikTok Stop - same merged logic: Stop TikTok = Stop Push + Stop Recording ===
 const stopTikTokLive=()=>{ stopTikTokPush(); if(isRecording) stopRecordingFinal(); if(!fbStreamUrl && !ytLive) stopTimer() }
-// FIX 1+3+5: YouTube Go Live with Intro - starts YT push NOW so Intro shows on YouTube too + Intro AUDIO enters Live
+// FIX: Wait for YT push to actually start before playing Intro, else Intro plays before ffmpeg ready and is lost (same as FB in Part 1)
+const waitForYtPushReady=async()=>{
+  const start=Date.now()
+  while(Date.now()-start<3000){
+    if(ytPushingRef.current) return true
+    await new Promise(r=>setTimeout(r,100))
+  }
+  return ytPushingRef.current
+}
+// FIX 1+3+5: YouTube Go Live with Intro - PUSH FIRST, Intro SECOND, so Intro shows on YouTube too + Intro AUDIO + recording
 const startYtLiveWithIntro=async()=>{
   if(!ytKey.trim()) return alert('Paste YouTube Stream Key first')
   if(!isCam) return alert('Start Camera first')
   const active=intros.find(i=>i.id===activeIntroId)
-  if(active){
-    // FIX: ONE VIDEO ONLY for YT Intro too - broadcastVideoRef picture + sound, no second audioEl
-    ensureLiveAudio()
-    try{ if(liveAudioCtxRef.current && liveAudioCtxRef.current.state==='suspended') await liveAudioCtxRef.current.resume() }catch{}
-    playIntroAudioForLive(active)
-    setBroadcastPlaying(active)
-    if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
-    if(active.type==='video'&&broadcastVideoRef.current){
-      const v=broadcastVideoRef.current as any
-      v.crossOrigin="anonymous"; v.playsInline=true; v.muted=false; v.volume=1; v.src=active.data; v.currentTime=0
-      connectBroadcastVideoToMixer()
-      try{ await v.play() }catch{}
-    }
-    await startYtPush(ytKey)
-    introTimeoutRef.current=setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null }, (active.duration||5)*1000)
-  } else { ensureLiveAudio(); await startYtPush(ytKey) }
+  // FIX: Push FIRST, even if no Intro, so live starts at second 0
+  await startYtPush(ytKey)
+  if(!active) return
+  await waitForYtPushReady()
+  // FIX: ONE VIDEO ONLY for YT Intro too - broadcastVideoRef picture + sound, no second audioEl
+  ensureLiveAudio()
+  try{ if(liveAudioCtxRef.current && liveAudioCtxRef.current.state==='suspended') await liveAudioCtxRef.current.resume() }catch{}
+  playIntroAudioForLive(active)
+  setBroadcastPlaying(active)
+  if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
+  if(active.type==='video'&&broadcastVideoRef.current){
+    const v=broadcastVideoRef.current as any
+    v.crossOrigin="anonymous"; v.playsInline=true; v.muted=false; v.volume=1; v.src=active.data; v.currentTime=0
+    connectBroadcastVideoToMixer()
+    try{ await v.play() }catch{}
+  }
+  introTimeoutRef.current=setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null }, (active.duration||5)*1000)
 }
   const editStateRef=useRef({ locked:false, target:null as any, lastTap:0, lastX:0, lastY:0 })
   const telegramBtnRef=useRef<HTMLDivElement>(null)
@@ -1093,7 +1133,7 @@ monthCount!==null?
 </div>
 <div>
 <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{background:'#000',borderRadius:18,overflow:'hidden',position:'relative',aspectRatio:'9/16',touchAction: editStateRef.current.locked ? 'none' : 'pan-y'}}><video ref={videoRef} muted playsInline autoPlay style={{width:'100%',height:'100%',objectFit:'cover',display:isCam&&bgMode==='face'?'block':'none'}}/>{!isCam&&<div style={{color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',height:420}}>Camera off - {lowData?'480p ON':'720p'}</div>}<canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%'}}/>
-<video ref={broadcastVideoRef} muted playsInline crossOrigin="anonymous" style={{position:'absolute',left:'-9999px',top:'-9999px',width:'10px',height:'10px',opacity:0.01}}/>
+<video ref={broadcastVideoRef} playsInline crossOrigin="anonymous" style={{position:'absolute',left:'-9999px',top:'-9999px',width:'10px',height:'10px',opacity:0.01}}/>
 {broadcastPlaying&&(
   <div style={{position:'absolute',top:12,left:12,right:12,display:'flex',justifyContent:'flex-end',zIndex:100}}>
     <button onClick={stopIntroOnly} style={{background:'#ff0000',color:'#fff',border:'2px solid #fff',padding:'10px 16px',borderRadius:20,fontWeight:900,fontSize:12}}>✕</button>
@@ -1190,7 +1230,7 @@ onTouchStart={(e)=>{
     el.style.top=(tt.clientY-shiftY)+'px'
     el.style.right='auto'; el.style.bottom='auto'
   }
-  const onUp=()=>{document.removeEventListener('touchmove',onMove); document.removeEventListener('touchend',onUp)}
+  const onUp=()=>{document.removeEventListener('touchmove',onMove,{passive:false}); document.addEventListener('touchend',onUp)}
   document.addEventListener('touchmove',onMove,{passive:false}); document.addEventListener('touchend',onUp)
 }}
 style={{position:'fixed',bottom:90,right:20,zIndex:9998,width:56,height:56,borderRadius:28,background:'#2AABEE',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 8px 24px rgba(42,171,238,0.5)',cursor:'grab',touchAction:'none',userSelect:'none'}}>
