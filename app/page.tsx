@@ -11,6 +11,9 @@ const BIBLE_BOOKS = [{ name: "Genesis", chapters: 50 },{ name: "Exodus", chapter
 export default function LiveStudio(){
 const { user } = useAuth()
 const [verse,setVerse]=useState("John 3:16 - For God so loved the world that He gave His only begotten Son...")
+// === FIX 3: Live Title + Description - SEPARATE from verse. Verse stays only ON SCREEN, never as FB description ===
+const [liveTitle,setLiveTitle]=useState("KPAKO NYANKPA INTL MINISTRY - Live Service")
+const [liveDescription,setLiveDescription]=useState("Join us live on TagLive - Worship, Word and Prayer. Invite someone!")
 const [isCam,setIsCam]=useState(false)
 const [isLive,setIsLive]=useState(false)
 const [facing,setFacing]=useState<'user'|'environment'>('user')
@@ -98,6 +101,92 @@ const connectTikTok=()=>{
 }
 const disconnectTikTok=()=>{ try{ tiktokWsRef.current?.close() }catch{}; tiktokWsRef.current=null; setTiktokStatus('Disconnected') }
 useEffect(()=>{ return ()=>{ try{ tiktokWsRef.current?.close() }catch{} } },[])
+// === FIX 1: ONE Live Audio Mixer - Mic + Intro audio -> one track for ALL pushes. Fixes No Audio from Intro + after Flip ===
+const liveAudioCtxRef=useRef<any>(null)
+const liveAudioDestRef=useRef<any>(null)
+const liveMicGainRef=useRef<any>(null)
+const liveIntroElRef=useRef<any>(null)
+const ensureLiveAudio=()=>{
+  try{
+    if(liveAudioCtxRef.current && liveAudioDestRef.current){
+      if(liveAudioCtxRef.current.state==='suspended') liveAudioCtxRef.current.resume().catch(()=>{})
+      return liveAudioCtxRef.current
+    }
+    const AC=window.AudioContext||(window as any).webkitAudioContext
+    const ctx=new AC()
+    try{ ctx.resume() }catch{}
+    const dest=ctx.createMediaStreamDestination()
+    liveAudioCtxRef.current=ctx
+    liveAudioDestRef.current=dest
+    const micTrack=streamRef.current?.getAudioTracks()[0]
+    if(micTrack){
+      try{
+        const src=ctx.createMediaStreamSource(new MediaStream([micTrack]))
+        const gain=ctx.createGain(); gain.gain.value=1
+        src.connect(gain); gain.connect(dest)
+        liveMicGainRef.current=gain
+        ;(ctx as any)._micSource=src
+      }catch{}
+    }
+    return ctx
+  }catch{ return null }
+}
+const rebuildLiveAudio=()=>{
+  try{ if(liveIntroElRef.current && liveIntroElRef.current._tagliveCleanup) liveIntroElRef.current._tagliveCleanup() }catch{}
+  liveIntroElRef.current=null
+  try{ if(liveAudioCtxRef.current) liveAudioCtxRef.current.close() }catch{}
+  liveAudioCtxRef.current=null; liveAudioDestRef.current=null; liveMicGainRef.current=null
+  ensureLiveAudio()
+}
+const getPushAudioTrack=()=>{
+  try{
+    ensureLiveAudio()
+    const t=liveAudioDestRef.current?.stream?.getAudioTracks()[0]
+    if(t && t.readyState==='live') return t
+  }catch{}
+  return streamRef.current?.getAudioTracks()[0]||null
+}
+const getPushStream=()=>{
+  const canvasStream=(canvasRef.current as any).captureStream(30) as MediaStream
+  const audioTrack=getPushAudioTrack()
+  if(audioTrack) canvasStream.addTrack(audioTrack)
+  return canvasStream
+}
+const playIntroAudioForLive=(active:any)=>{
+  try{
+    if(!active || active.type!=='video') { if(liveMicGainRef.current) liveMicGainRef.current.gain.value=0; setTimeout(()=>{ try{ if(liveMicGainRef.current) liveMicGainRef.current.gain.value=1 }catch{} }, (active?.duration||5)*1000); return }
+    const ctx=ensureLiveAudio()
+    if(!ctx || !liveAudioDestRef.current) return
+    if(liveMicGainRef.current) liveMicGainRef.current.gain.value=0
+    try{ if(liveIntroElRef.current && liveIntroElRef.current._tagliveCleanup) liveIntroElRef.current._tagliveCleanup() }catch{}
+    const audioEl=document.createElement('video')
+    audioEl.crossOrigin="anonymous"; audioEl.playsInline=true; audioEl.muted=false; audioEl.volume=1; audioEl.src=active.data
+    audioEl.play().catch(()=>{})
+    const vSource=ctx.createMediaElementSource(audioEl)
+    vSource.connect(liveAudioDestRef.current)
+    ;(audioEl as any)._tagliveCleanup=()=>{ try{ vSource.disconnect() }catch{}; try{ audioEl.pause(); audioEl.removeAttribute('src'); audioEl.load() }catch{} }
+    liveIntroElRef.current=audioEl
+    setTimeout(()=>{ try{ if(liveMicGainRef.current) liveMicGainRef.current.gain.value=1 }catch{}; try{ if(audioEl._tagliveCleanup) audioEl._tagliveCleanup() }catch{} }, (active.duration||5)*1000)
+  }catch{}
+}
+// === FIX 2: Go Live = Push + Auto Local Record. Records SAME canvas + SAME mixed audio, without replaying Intro or killing mixer ===
+const startLocalRecording=async()=>{
+  if(isRecording) return
+  const canvas=canvasRef.current; if(!canvas) return
+  try{
+    const canvasStream=(canvas as any).captureStream(24) as MediaStream
+    const audioTrack=getPushAudioTrack()
+    if(audioTrack) canvasStream.addTrack(audioTrack)
+    chunksRef.current=[]
+    let mime='video/webm;codecs=vp9,opus'
+    if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm;codecs=vp8,opus'
+    if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm'
+    const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 1500000 })
+    rec.ondataavailable=(e)=>{ if(e.data.size>0) chunksRef.current.push(e.data) }
+    rec.onstop=()=>{ const blob=new Blob(chunksRef.current, { type: 'video/webm' }); if(recordedUrl) try{ URL.revokeObjectURL(recordedUrl) }catch{}; setRecordedUrl(URL.createObjectURL(blob)) }
+    rec.start(100); recorderRef.current=rec; setIsRecording(true)
+  }catch{}
+}
 // === UPDATE ONLY: TikTok RTMP Push - FIX 4+5+7: fresh mic on every start, canvas = Intro/Outro included ===
 const [tiktokRtmpUrl,setTiktokRtmpUrl]=useState('')
 const [tiktokStreamKey,setTiktokStreamKey]=useState('')
@@ -117,11 +206,8 @@ const startTikTokPush=async(rtmpUrlOverride?:string,streamKeyOverride?:string)=>
   tiktokPushWsRef.current=ws
   ws.onopen=()=>{
     ws.send(JSON.stringify({ type:'start_push', rtmpUrl, streamKey }))
-    // FIX 5: canvas.captureStream() already contains Intro/Outro + verse + logo drawn in draw loop
-    const canvasStream=(canvasRef.current as any).captureStream(30) as MediaStream
-    // FIX 4+7: always take FRESH mic from current stream, not old dead track
-    const micTrack=streamRef.current?.getAudioTracks()[0]
-    if(micTrack) canvasStream.addTrack(micTrack)
+    // FIX 1: Use mixed audio (Mic + Intro), not raw mic
+    const canvasStream=getPushStream()
     let mime='video/webm;codecs=vp8,opus'
     if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm'
     const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 2500000 })
@@ -130,6 +216,8 @@ const startTikTokPush=async(rtmpUrlOverride?:string,streamKeyOverride?:string)=>
     rec.start(500)
     setTiktokPushing(true)
     setTiktokStatus('Connected')
+    // FIX 2: TikTok Go Live also auto-records locally
+    startLocalRecording()
   }
   ws.onmessage=(e)=>{
     try{
@@ -172,9 +260,8 @@ const startFbPush=async(fbRtmpUrl:string)=>{
     const parts=fbRtmpUrl.split('/')
     if(parts.length>1){ streamKey=parts.pop() as string; rtmpUrl=parts.join('/') }
     ws.send(JSON.stringify({ type:'start_push', rtmpUrl, streamKey }))
-    const canvasStream=(canvasRef.current as any).captureStream(30) as MediaStream
-    const micTrack=streamRef.current?.getAudioTracks()[0]
-    if(micTrack) canvasStream.addTrack(micTrack)
+    // FIX 1: Use mixed audio (Mic + Intro), not raw mic
+    const canvasStream=getPushStream()
     let mime='video/webm;codecs=vp8,opus'
     if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm'
     const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 2500000 })
@@ -182,6 +269,8 @@ const startFbPush=async(fbRtmpUrl:string)=>{
     rec.ondataavailable=(e)=>{ if(e.data.size>0 && ws.readyState===WebSocket.OPEN){ try{ ws.send(e.data) }catch{} } }
     rec.start(500)
     fbPushingRef.current=true
+    // FIX 2: Facebook Go Live also auto-records locally
+    startLocalRecording()
   }
   ws.onmessage=(e)=>{
     try{
@@ -220,9 +309,8 @@ const startYtPush=async(ytKeyOverride?:string)=>{
   ytPushWsRef.current=ws
   ws.onopen=()=>{
     ws.send(JSON.stringify({ type:'start_push', rtmpUrl:'rtmp://a.rtmp.youtube.com/live2', streamKey:key }))
-    const canvasStream=(canvasRef.current as any).captureStream(30) as MediaStream
-    const micTrack=streamRef.current?.getAudioTracks()[0]
-    if(micTrack) canvasStream.addTrack(micTrack)
+    // FIX 1: Use mixed audio (Mic + Intro), not raw mic
+    const canvasStream=getPushStream()
     let mime='video/webm;codecs=vp8,opus'
     if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm'
     const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 2500000 })
@@ -231,6 +319,8 @@ const startYtPush=async(ytKeyOverride?:string)=>{
     rec.start(500)
     ytPushingRef.current=true
     setYtLive(true); setIsLive(true); startTimer()
+    // FIX 2: YouTube Go Live also auto-records locally
+    startLocalRecording()
   }
   ws.onmessage=(e)=>{ try{ const d=JSON.parse(e.data); if(d.type==='error'){ ytPushingRef.current=false; alert('YouTube Push: '+(d.message||'Failed')) } }catch{} }
   ws.onerror=()=>{ ytPushingRef.current=false }
@@ -248,6 +338,8 @@ const stopYtPush=()=>{
 useEffect(()=>{ return ()=>{ try{ ytPushRecorderRef.current?.stop() }catch{}; try{ ytPushWsRef.current?.close() }catch{} } },[])
 // === FIX 4+7: After Flip, restart any active push with fresh mic so audio no die ===
 const restartActivePushes=async()=>{
+  // FIX 1: Rebuild mixer with NEW mic track after Flip, else pushes keep dead mic
+  rebuildLiveAudio()
   if(lastFbPushRef.current){ const u=lastFbPushRef.current; await new Promise(r=>setTimeout(r,150)); startFbPush(u) }
   if(lastYtPushRef.current){ const k=lastYtPushRef.current; await new Promise(r=>setTimeout(r,150)); startYtPush(k) }
   if(lastTikTokPushRef.current){ const t=lastTikTokPushRef.current; await new Promise(r=>setTimeout(r,150)); startTikTokPush(t.rtmpUrl,t.streamKey) }
@@ -439,6 +531,8 @@ if(wasRecording && oldStream){
   setFacing(newFacing); setIsCam(true)
 }
 }finally{ (startCamera as any)._switching=false }
+// FIX 1: Rebuild mixer with new mic, then restart pushes. Also resume mixer so browser no block audio.
+ensureLiveAudio()
 await restartActivePushes()
 }catch(e:any){ (startCamera as any)._switching=false; alert('Camera: '+e.message) }
 }
@@ -448,6 +542,11 @@ if(isRecording) stopRecordingFinal();
 stopFbPush(); stopYtPush(); stopTikTokPush(); disconnectTikTok();
 try{ if(audioCtxRef.current){ audioCtxRef.current.close() } }catch{}
 audioCtxRef.current=null
+// FIX 1: Close live mixer too
+try{ if(liveIntroElRef.current && liveIntroElRef.current._tagliveCleanup) liveIntroElRef.current._tagliveCleanup() }catch{}
+liveIntroElRef.current=null
+try{ if(liveAudioCtxRef.current){ liveAudioCtxRef.current.close() } }catch{}
+liveAudioCtxRef.current=null; liveAudioDestRef.current=null; liveMicGainRef.current=null
 streamRef.current?.getTracks().forEach(t=>t.stop());
 if(videoRef.current) videoRef.current.srcObject=null;
 setIsCam(false); setIsLive(false); setTorch(false); setYtLive(false); stopTimer()
@@ -463,20 +562,27 @@ const stopIntroOnly=()=>{
   try{
     const el=(audioCtxRef.current as any)?.introAudioEl
     if(el && el._tagliveCleanup) el._tagliveCleanup()
+    // FIX 1: Also stop live intro audio + unmute mic
+    try{ if(liveIntroElRef.current && liveIntroElRef.current._tagliveCleanup) liveIntroElRef.current._tagliveCleanup() }catch{}
+    liveIntroElRef.current=null
+    try{ if(liveMicGainRef.current) liveMicGainRef.current.gain.value=1 }catch{}
     const mg=(audioCtxRef.current as any)?._micGain
     if(mg){ try{ mg.gain.value=1 }catch{} }
     if(fbPendingRef.current){ const p=fbPendingRef.current; fbPendingRef.current=null; setSelectedPage(p.page) }
   }catch{}
 }
-// FACEBOOK LIVE UPDATE ONLY - FIX 2
+// FACEBOOK LIVE UPDATE ONLY - FIX 2 + FIX 3
 const createFbLiveForPage=async(page:any)=>{
   setSelectedPage(page)
   try{
-    const res=await fetch('https://graph.facebook.com/v19.0/' + page.id + '/live_videos',{ method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({ access_token: page.access_token, title: verse.substring(0,60), description: 'TagLive - '+verse, status: 'LIVE_NOW' }) })
+    // FIX 3: Use liveTitle + liveDescription, NEVER verse
+    const res=await fetch('https://graph.facebook.com/v19.0/' + page.id + '/live_videos',{ method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({ access_token: page.access_token, title: (liveTitle||churchName||'TagLive Live').substring(0,60), description: liveDescription||'TagLive Live Service', status: 'LIVE_NOW' }) })
     const data=await res.json()
     if(data.error) throw new Error(data.error?.message || JSON.stringify(data.error))
     if(!data.stream_url) throw new Error('Facebook did not return a stream_url.')
     setFbStreamUrl(data.stream_url); setLiveId(data.id); setIsLive(true); startTimer()
+    // FIX 1: Ensure mixer is running before push, so audio no be silent
+    ensureLiveAudio()
     await startFbPush(data.stream_url)
     return data
   }catch(e:any){ stopFbPush(); setFbStreamUrl(''); setLiveId(''); setIsLive(false); setSelectedPage(null); alert('Facebook Live failed for this Page: ' + (e.message || e)); throw e }
@@ -484,6 +590,9 @@ const createFbLiveForPage=async(page:any)=>{
 const createFbLiveAuto=async(page:any)=>{
   const active=intros.find(i=>i.id===activeIntroId)
   if(active){
+    // FIX 1: Start mixer + Intro audio NOW, so Intro sound enters Live. Before, Intro was video-only for Live.
+    ensureLiveAudio()
+    playIntroAudioForLive(active)
     setBroadcastPlaying(active)
     if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
     else if(active.type==='video' && broadcastVideoRef.current){ try{ broadcastVideoRef.current.src=active.data; broadcastVideoRef.current.muted=true; await broadcastVideoRef.current.play() }catch{} }
@@ -583,19 +692,24 @@ const startRecording=async()=>{
     if(el && el._tagliveCleanup) el._tagliveCleanup()
     const el2=(audioCtxRef.current as any)?.outroAudioEl
     if(el2 && el2._tagliveCleanup) el2._tagliveCleanup()
+    // FIX 1: Also cleanup live intro/outro audio, and unmute live mic
+    try{ if(liveIntroElRef.current && liveIntroElRef.current._tagliveCleanup) liveIntroElRef.current._tagliveCleanup() }catch{}
+    liveIntroElRef.current=null
+    try{ if(liveMicGainRef.current) liveMicGainRef.current.gain.value=1 }catch{}
   }catch{}
   try{ if(audioCtxRef.current) audioCtxRef.current.close() }catch{}
   audioCtxRef.current=null
   setIsRecording(false); setBroadcastPlaying(null); broadcastImageRef.current=null
   if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.removeAttribute('src'); broadcastVideoRef.current.load() }catch{} }
-  // FIX 6: Do NOT kill FB/YT push when recording stops. Recording != Live.
+  // FIX 6: Do NOT kill FB/YT push when recording stops alone. Recording != Live. (Stop Live in stopFbLive/stopYtLive stops both on purpose)
   if(!isLive&&!ytLive) stopTimer()
 }
 const stopRecording=async()=>{
   const active=outros.find(o=>o.id===activeOutroId)
   if(active && isRecording){
     setBroadcastPlaying(active)
-    const micGain=(audioCtxRef.current as any)?._micGain
+    // FIX 1: When Go Live started the recording, audioCtxRef is null - use live mixer mic gain instead, else Outro mutes nothing and audio dies
+    const micGain=((audioCtxRef.current as any)?._micGain) || liveMicGainRef.current
     if(micGain){ try{ micGain.gain.value=0 }catch{} }
     if(active.type==='image'){
       const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }
@@ -613,6 +727,7 @@ const stopRecording=async()=>{
         audioEl.crossOrigin="anonymous"; audioEl.playsInline=true; audioEl.muted=false; audioEl.volume=1
         audioEl.src=active.data
         await audioEl.play().catch(()=>{})
+        // FIX 1: Outro audio -> recording dest if exists, else live mixer dest, else no audio
         if(audioCtxRef.current && (audioCtxRef.current as any)._dest){
           const dest=(audioCtxRef.current as any)._dest
           const vSource=audioCtxRef.current.createMediaElementSource(audioEl)
@@ -620,27 +735,36 @@ const stopRecording=async()=>{
           vSource.connect(audioCtxRef.current.destination)
           ;(audioEl as any)._tagliveCleanup=()=>{ try{ vSource.disconnect() }catch{}; try{ audioEl.pause(); audioEl.removeAttribute('src'); audioEl.load() }catch{} }
           ;(audioCtxRef.current as any).outroAudioEl=audioEl
+        } else if(liveAudioCtxRef.current && liveAudioDestRef.current){
+          const vSource=liveAudioCtxRef.current.createMediaElementSource(audioEl)
+          vSource.connect(liveAudioDestRef.current)
+          ;(audioEl as any)._tagliveCleanup=()=>{ try{ vSource.disconnect() }catch{}; try{ audioEl.pause(); audioEl.removeAttribute('src'); audioEl.load() }catch{} }
+          liveIntroElRef.current=audioEl
         }
       }catch{}
       setTimeout(()=>{ if(micGain){ try{ micGain.gain.value=1 }catch{} } stopRecordingFinal() }, (active.duration||5)*1000)
     }
   } else { stopRecordingFinal() }
 }
+// FIX 2: Stop Live = Stop Push + Stop Recording + Download. Before, Stop Live left Recording running separately.
 // FIX 2+3: Real Stop for FB + YT - stops push, not just timer
-const stopFbLive=()=>{ stopFbPush(); setFbStreamUrl(''); setLiveId(''); setIsLive(false); setSelectedPage(null); if(!ytLive && !isRecording) stopTimer() }
-const stopYtLive=()=>{ stopYtPush(); setYtLive(false); if(!fbStreamUrl && !isRecording){ setIsLive(false); stopTimer() } }
-// FIX 3+5: YouTube Go Live with Intro - starts YT push NOW so Intro shows on YouTube too
+const stopFbLive=()=>{ stopFbPush(); if(isRecording) stopRecordingFinal(); setFbStreamUrl(''); setLiveId(''); setIsLive(false); setSelectedPage(null); stopTimer() }
+const stopYtLive=()=>{ stopYtPush(); if(isRecording) stopRecordingFinal(); setYtLive(false); if(!fbStreamUrl){ setIsLive(false); stopTimer() } }
+// FIX 1+3+5: YouTube Go Live with Intro - starts YT push NOW so Intro shows on YouTube too + Intro AUDIO enters Live
 const startYtLiveWithIntro=async()=>{
   if(!ytKey.trim()) return alert('Paste YouTube Stream Key first')
   if(!isCam) return alert('Start Camera first')
   const active=intros.find(i=>i.id===activeIntroId)
   if(active){
+    // FIX 1: Mixer + Intro audio for YT Live, same as Facebook
+    ensureLiveAudio()
+    playIntroAudioForLive(active)
     setBroadcastPlaying(active)
     if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
     if(active.type==='video'&&broadcastVideoRef.current){ broadcastVideoRef.current.src=active.data; broadcastVideoRef.current.muted=true; broadcastVideoRef.current.volume=0; broadcastVideoRef.current.play().catch(()=>{}) }
     await startYtPush(ytKey)
     introTimeoutRef.current=setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null }, (active.duration||5)*1000)
-  } else { await startYtPush(ytKey) }
+  } else { ensureLiveAudio(); await startYtPush(ytKey) }
 }
   const editStateRef=useRef({ locked:false, target:null as any, lastTap:0, lastX:0, lastY:0 })
   const telegramBtnRef=useRef<HTMLDivElement>(null)
@@ -963,7 +1087,8 @@ monthCount!==null?
 </div>
 <div style={{display:'flex',gap:8,marginTop:12}}>{!isCam?<button onClick={()=>startCamera()} style={{flex:1,background:'#111',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Start Camera {lowData?'(480p)':''}</button>:<><button onClick={toggleCamera} style={{flex:1,background:'#7c3aed',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Switch Camera</button><button onClick={stopCamera} style={{flex:1,background:'#444',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Stop</button></>}</div>
 <div style={{display:'flex',gap:6,marginTop:10}}>
-{!isRecording?<button onClick={startRecording} disabled={!isCam} style={{flex:1,background:isCam?'#a21caf':'#ccc',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Record</button>
+{/* FIX 2: Record button shows merged state - Go Live already records, this is Record Only when not live */}
+{!isRecording?<button onClick={startRecording} disabled={!isCam} style={{flex:1,background:isCam?'#a21caf':'#ccc',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>{(isLive||ytLive)?'● LIVE + Recording':'Record'}</button>
 :<><button onClick={stopRecording} style={{flex:1,background:'#111',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Stop + Outro ({formatTime(liveSeconds)})</button>{broadcastPlaying&&<button onClick={stopIntroOnly} style={{background:'#ff0000',color:'#fff',padding:12,borderRadius:10,fontWeight:900,border:'none',fontSize:11}}>STOP INTRO</button>}</>}
 {recordedUrl&&<a href={recordedUrl} download={'TagLive-'+Date.now()+'.mp4'} style={{flex:1,background:'#16a34a',color:'#fff',padding:12,borderRadius:10,fontWeight:800,textAlign:'center',textDecoration:'none',fontSize:12}}>Download</a>}
 </div>
@@ -980,7 +1105,13 @@ monthCount!==null?
 </div>}
 </div>
 <div style={{display:'flex',flexDirection:'column',gap:12}}>
-<div style={{border:'2px solid #111',borderRadius:14,padding:12}}><b>Connect Facebook</b><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={loginFacebook} style={{flex:1,background:fbUser?'#16a34a':'#1877F2',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{fbUser?'✓ '+fbUser.name:'Login Facebook'}</button><button onClick={()=>loadPages()} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Load My Pages</button></div>{pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6,padding:10,background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff',color:selectedPage?.id===p.id?'#fff':'#000',borderRadius:8,fontSize:13,fontWeight:700,cursor:'pointer'}}>{p.name} {selectedPage?.id===p.id?'LIVE '+formatTime(liveSeconds):'(Go Live)'}</div>)} {fbStreamUrl&&<div style={{marginTop:10,padding:10,background:'#dcfce7',borderRadius:8,fontSize:11,wordBreak:'break-all'}}>FB: {fbStreamUrl.substring(0,70)}...</div>}{isLive&&<button onClick={stopFbLive} style={{marginTop:10,width:'100%',background:'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>■ Stop Facebook Live</button>}</div>
+<div style={{border:'2px solid #111',borderRadius:14,padding:12}}><b>Connect Facebook</b><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={loginFacebook} style={{flex:1,background:fbUser?'#16a34a':'#1877F2',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{fbUser?'✓ '+fbUser.name:'Login Facebook'}</button><button onClick={()=>loadPages()} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Load My Pages</button></div>
+{/* FIX 3: Live Title + Description inputs - these go to Facebook, verse NEVER does again */}
+<div style={{marginTop:8,display:'flex',flexDirection:'column',gap:6}}>
+<input value={liveTitle} onChange={e=>setLiveTitle(e.target.value)} placeholder="Live Title - e.g. Sunday Service Live" style={{width:'100%',padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12,fontWeight:700,boxSizing:'border-box'}} />
+<textarea value={liveDescription} onChange={e=>setLiveDescription(e.target.value)} placeholder="Live Description - this shows on Facebook, NOT your verse" style={{width:'100%',padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12,boxSizing:'border-box',height:60}} />
+</div>
+{pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6,padding:10,background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff',color:selectedPage?.id===p.id?'#fff':'#000',borderRadius:8,fontSize:13,fontWeight:700,cursor:'pointer'}}>{p.name} {selectedPage?.id===p.id?'LIVE '+formatTime(liveSeconds):'(Go Live)'}</div>)} {fbStreamUrl&&<div style={{marginTop:10,padding:10,background:'#dcfce7',borderRadius:8,fontSize:11,wordBreak:'break-all'}}>FB: {fbStreamUrl.substring(0,70)}...</div>}{isLive&&<button onClick={stopFbLive} style={{marginTop:10,width:'100%',background:'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>■ Stop Facebook Live</button>}</div>
 <div style={{marginTop:14,border:'2px solid #ff0000',borderRadius:14,padding:12}}><b>Connect YouTube Live</b><input value={ytKey} onChange={e=>{setYtKey(e.target.value);localStorage.setItem('taglive_ytkey',e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={startYtLiveWithIntro} style={{flex:1,background:ytLive?'#16a34a':'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{ytLive?'YouTube LIVE '+formatTime(liveSeconds):'Go Live YouTube + Intro FULL'}</button><button onClick={()=>{const active=outros.find(o=>o.id===activeOutroId); if(active){setBroadcastPlaying(active); if(active.type==='video'&&broadcastVideoRef.current){broadcastVideoRef.current.src=active.data;broadcastVideoRef.current.muted=false;broadcastVideoRef.current.play()} setTimeout(()=>{setBroadcastPlaying(null);stopYtLive()},(active.duration||5)*1000)} else {stopYtLive()}}} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Stop YT + Outro</button></div></div>
 </div>
 </div>
