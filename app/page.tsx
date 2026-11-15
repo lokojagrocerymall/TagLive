@@ -98,23 +98,28 @@ const connectTikTok=()=>{
 }
 const disconnectTikTok=()=>{ try{ tiktokWsRef.current?.close() }catch{}; tiktokWsRef.current=null; setTiktokStatus('Disconnected') }
 useEffect(()=>{ return ()=>{ try{ tiktokWsRef.current?.close() }catch{} } },[])
-// === UPDATE ONLY: TikTok RTMP Push - Send TagLive Canvas to TikTok ===
+// === UPDATE ONLY: TikTok RTMP Push - FIX 4+5+7: fresh mic on every start, canvas = Intro/Outro included ===
 const [tiktokRtmpUrl,setTiktokRtmpUrl]=useState('')
 const [tiktokStreamKey,setTiktokStreamKey]=useState('')
 const [tiktokPushing,setTiktokPushing]=useState(false)
 const tiktokPushWsRef=useRef<WebSocket|null>(null)
 const tiktokPushRecorderRef=useRef<MediaRecorder|null>(null)
-const startTikTokPush=async()=>{
-  const rtmpUrl=tiktokRtmpUrl.trim()
-  const streamKey=tiktokStreamKey.trim()
+const lastTikTokPushRef=useRef<{rtmpUrl:string,streamKey:string}|null>(null)
+const startTikTokPush=async(rtmpUrlOverride?:string,streamKeyOverride?:string)=>{
+  const rtmpUrl=(rtmpUrlOverride||tiktokRtmpUrl).trim()
+  const streamKey=(streamKeyOverride||tiktokStreamKey).trim()
   if(!rtmpUrl || !streamKey){ alert('Paste TikTok Server URL + Stream Key first'); return }
   if(!canvasRef.current){ alert('Start Camera first'); return }
+  lastTikTokPushRef.current={rtmpUrl,streamKey}
   if(tiktokPushWsRef.current){ try{ tiktokPushWsRef.current.close() }catch{} }
+  try{ tiktokPushRecorderRef.current?.stop() }catch{}
   const ws=new WebSocket(WS_URL)
   tiktokPushWsRef.current=ws
   ws.onopen=()=>{
     ws.send(JSON.stringify({ type:'start_push', rtmpUrl, streamKey }))
+    // FIX 5: canvas.captureStream() already contains Intro/Outro + verse + logo drawn in draw loop
     const canvasStream=(canvasRef.current as any).captureStream(30) as MediaStream
+    // FIX 4+7: always take FRESH mic from current stream, not old dead track
     const micTrack=streamRef.current?.getAudioTracks()[0]
     if(micTrack) canvasStream.addTrack(micTrack)
     let mime='video/webm;codecs=vp8,opus'
@@ -144,8 +149,109 @@ const stopTikTokPush=()=>{
   try{ tiktokPushWsRef.current?.close() }catch{}
   tiktokPushWsRef.current=null
   setTiktokPushing(false)
+  lastTikTokPushRef.current=null
 }
 useEffect(()=>{ return ()=>{ try{ tiktokPushRecorderRef.current?.stop() }catch{}; try{ tiktokPushWsRef.current?.close() }catch{} } },[])
+// === UPDATE ONLY: Facebook RTMP Push - FIX 2+5+7 ===
+const fbPushWsRef=useRef<WebSocket|null>(null)
+const fbPushRecorderRef=useRef<MediaRecorder|null>(null)
+const fbPushingRef=useRef(false)
+const lastFbPushRef=useRef<string|null>(null)
+const startFbPush=async(fbRtmpUrl:string)=>{
+  if(!fbRtmpUrl) return
+  if(!canvasRef.current){ alert('Start Camera first'); return }
+  lastFbPushRef.current=fbRtmpUrl
+  if(fbPushWsRef.current){ try{ fbPushWsRef.current.close() }catch{} }
+  try{ fbPushRecorderRef.current?.stop() }catch{}
+  fbPushRecorderRef.current=null
+  const ws=new WebSocket(WS_URL)
+  fbPushWsRef.current=ws
+  ws.onopen=()=>{
+    let rtmpUrl=fbRtmpUrl
+    let streamKey=''
+    const parts=fbRtmpUrl.split('/')
+    if(parts.length>1){ streamKey=parts.pop() as string; rtmpUrl=parts.join('/') }
+    ws.send(JSON.stringify({ type:'start_push', rtmpUrl, streamKey }))
+    const canvasStream=(canvasRef.current as any).captureStream(30) as MediaStream
+    const micTrack=streamRef.current?.getAudioTracks()[0]
+    if(micTrack) canvasStream.addTrack(micTrack)
+    let mime='video/webm;codecs=vp8,opus'
+    if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm'
+    const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 2500000 })
+    fbPushRecorderRef.current=rec
+    rec.ondataavailable=(e)=>{ if(e.data.size>0 && ws.readyState===WebSocket.OPEN){ try{ ws.send(e.data) }catch{} } }
+    rec.start(500)
+    fbPushingRef.current=true
+  }
+  ws.onmessage=(e)=>{
+    try{
+      const d=JSON.parse(e.data)
+      if(d.type==='push_started') fbPushingRef.current=true
+      if(d.type==='push_stopped'){ fbPushingRef.current=false }
+      if(d.type==='error'){ fbPushingRef.current=false; if(d.message) alert('Facebook Push: '+d.message) }
+    }catch{}
+  }
+  ws.onerror=()=>{ fbPushingRef.current=false }
+  ws.onclose=()=>{ fbPushingRef.current=false }
+}
+const stopFbPush=()=>{
+  try{ fbPushRecorderRef.current?.stop() }catch{}
+  fbPushRecorderRef.current=null
+  try{ fbPushWsRef.current?.send(JSON.stringify({ type:'stop_push' })) }catch{}
+  try{ fbPushWsRef.current?.close() }catch{}
+  fbPushWsRef.current=null
+  fbPushingRef.current=false
+  lastFbPushRef.current=null
+}
+useEffect(()=>{ return ()=>{ try{ fbPushRecorderRef.current?.stop() }catch{}; try{ fbPushWsRef.current?.close() }catch{} } },[])
+// === UPDATE ONLY: YouTube RTMP Push - FIX 3+5+7: YouTube was only timer before, now real push ===
+const ytPushWsRef=useRef<WebSocket|null>(null)
+const ytPushRecorderRef=useRef<MediaRecorder|null>(null)
+const ytPushingRef=useRef(false)
+const lastYtPushRef=useRef<string|null>(null)
+const startYtPush=async(ytKeyOverride?:string)=>{
+  const key=(ytKeyOverride||ytKey).trim()
+  if(!key){ alert('Paste YouTube Stream Key first'); return }
+  if(!canvasRef.current){ alert('Start Camera first'); return }
+  lastYtPushRef.current=key
+  if(ytPushWsRef.current){ try{ ytPushWsRef.current.close() }catch{} }
+  try{ ytPushRecorderRef.current?.stop() }catch{}
+  const ws=new WebSocket(WS_URL)
+  ytPushWsRef.current=ws
+  ws.onopen=()=>{
+    ws.send(JSON.stringify({ type:'start_push', rtmpUrl:'rtmp://a.rtmp.youtube.com/live2', streamKey:key }))
+    const canvasStream=(canvasRef.current as any).captureStream(30) as MediaStream
+    const micTrack=streamRef.current?.getAudioTracks()[0]
+    if(micTrack) canvasStream.addTrack(micTrack)
+    let mime='video/webm;codecs=vp8,opus'
+    if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm'
+    const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 2500000 })
+    ytPushRecorderRef.current=rec
+    rec.ondataavailable=(e)=>{ if(e.data.size>0 && ws.readyState===WebSocket.OPEN){ try{ ws.send(e.data) }catch{} } }
+    rec.start(500)
+    ytPushingRef.current=true
+    setYtLive(true); setIsLive(true); startTimer()
+  }
+  ws.onmessage=(e)=>{ try{ const d=JSON.parse(e.data); if(d.type==='error'){ ytPushingRef.current=false; alert('YouTube Push: '+(d.message||'Failed')) } }catch{} }
+  ws.onerror=()=>{ ytPushingRef.current=false }
+  ws.onclose=()=>{ ytPushingRef.current=false }
+}
+const stopYtPush=()=>{
+  try{ ytPushRecorderRef.current?.stop() }catch{}
+  ytPushRecorderRef.current=null
+  try{ ytPushWsRef.current?.send(JSON.stringify({ type:'stop_push' })) }catch{}
+  try{ ytPushWsRef.current?.close() }catch{}
+  ytPushWsRef.current=null
+  ytPushingRef.current=false
+  lastYtPushRef.current=null
+}
+useEffect(()=>{ return ()=>{ try{ ytPushRecorderRef.current?.stop() }catch{}; try{ ytPushWsRef.current?.close() }catch{} } },[])
+// === FIX 4+7: After Flip, restart any active push with fresh mic so audio no die ===
+const restartActivePushes=async()=>{
+  if(lastFbPushRef.current){ const u=lastFbPushRef.current; await new Promise(r=>setTimeout(r,150)); startFbPush(u) }
+  if(lastYtPushRef.current){ const k=lastYtPushRef.current; await new Promise(r=>setTimeout(r,150)); startYtPush(k) }
+  if(lastTikTokPushRef.current){ const t=lastTikTokPushRef.current; await new Promise(r=>setTimeout(r,150)); startTikTokPush(t.rtmpUrl,t.streamKey) }
+}
 const tickerOffsetRef=useRef(720)
 const introFileRef=useRef<HTMLInputElement>(null)
 const outroFileRef=useRef<HTMLInputElement>(null)
@@ -167,20 +273,16 @@ const audioCtxRef=useRef<any>(null)
 const introTimeoutRef=useRef<any>(null)
 const fbPendingRef=useRef<any>(null)
 const heartbeatRef=useRef<any>(null)
-
 useEffect(()=>{
 if(typeof window==='undefined') return
 if(window.FB) return
-window.fbAsyncInit=function(){
-  window.FB.init({ appId:'1951327349161990', cookie:true, xfbml:true, version:'v19.0' })
-}
+window.fbAsyncInit=function(){ window.FB.init({ appId:'1951327349161990', cookie:true, xfbml:true, version:'v19.0' }) }
 const id='facebook-jssdk'
 if(document.getElementById(id)) return
 const js=document.createElement('script')
 js.id=id; js.src='https://connect.facebook.net/en_US/sdk.js'; js.async=true; js.defer=true
 document.head.appendChild(js)
 },[])
-
 useEffect(()=>{
 try{
 const params=new URLSearchParams(window.location.search)
@@ -189,7 +291,6 @@ else if(params.get('admin')==='taglive2026'){ localStorage.setItem('taglive_admi
 else if(localStorage.getItem('taglive_admin')==='true'){ setIsAdmin(true) }
 }catch{}
 },[])
-
 useEffect(()=>{
 try{
 const joined=localStorage.getItem('taglive_telegram_joined')
@@ -200,7 +301,6 @@ const t=setTimeout(()=>setShowTelegramPopup(true),1500)
 return()=>clearTimeout(t)
 }catch{}
 },[])
-
 const formatTime=(sec:number)=>{ const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60; return h.toString().padStart(2,'0')+':'+m.toString().padStart(2,'0')+':'+s.toString().padStart(2,'0') }
 const startTimer=()=>{ if(timerRef.current) clearInterval(timerRef.current); setLiveSeconds(0); timerRef.current=setInterval(()=>setLiveSeconds(p=>p+1),1000) }
 const stopTimer=()=>{ if(timerRef.current) clearInterval(timerRef.current); timerRef.current=null; setLiveSeconds(0) }
@@ -219,7 +319,6 @@ setMonthCount(count||0)
 }catch{ setMonthCount(0) }
 setMonthLoading(false)
 }
-
 const getGlobalDeviceId=()=>{
  try{
   let gid=localStorage.getItem('taglive_global_device')
@@ -232,7 +331,6 @@ const getGlobalDeviceId=()=>{
   return gid
  }catch{ return 'gid_' + Date.now() + '_' + Math.random().toString(36).slice(2,9) }
 }
-
 useEffect(()=>{
  let mounted=true
  const trackDevice=async()=>{
@@ -250,14 +348,7 @@ useEffect(()=>{
      }
    }
    try{
-     await supabase.from('taglive_devices').upsert({ 
-       device_id: deviceId, 
-       last_seen: new Date().toISOString(), 
-       country: 'Nigeria', 
-       city: 'Ilorin', 
-       country_code: 'NG',
-       user_agent: navigator.userAgent.substring(0,80)
-     }, { onConflict: 'device_id' })
+     await supabase.from('taglive_devices').upsert({ device_id: deviceId, last_seen: new Date().toISOString(), country: 'Nigeria', city: 'Ilorin', country_code: 'NG', user_agent: navigator.userAgent.substring(0,80) }, { onConflict: 'device_id' })
    }catch{}
    try{
     const nowDate=new Date()
@@ -275,11 +366,7 @@ useEffect(()=>{
      const { data: liveRows }=await supabase.from('taglive_devices').select('country,country_code').gt('last_seen', liveCutoff.toISOString())
      if(liveRows && mounted){
        const map:any={}
-       liveRows.forEach((r:any)=>{
-         const key=(r.country_code||'')+'|'+(r.country||'Unknown')
-         if(!map[key]) map[key]={ name: r.country||'Unknown', code: r.country_code||'', count:0 }
-         map[key].count+=1
-       })
+       liveRows.forEach((r:any)=>{ const key=(r.country_code||'')+'|'+(r.country||'Unknown'); if(!map[key]) map[key]={ name: r.country||'Unknown', code: r.country_code||'', count:0 }; map[key].count+=1 })
        setCountries(Object.values(map))
      }
     }catch{}
@@ -290,7 +377,6 @@ useEffect(()=>{
  heartbeatRef.current=setInterval(trackDevice, 10*1000)
  return()=>{ mounted=false; clearInterval(heartbeatRef.current) }
 },[isAdmin])
-
 const IDB_NAME='taglive_videos_db'; const IDB_STORE='media';
 const getDB=()=>new Promise<any>((res,rej)=>{ const r=indexedDB.open(IDB_NAME,1); r.onupgradeneeded=()=>{ if(!r.result.objectStoreNames.contains(IDB_STORE)) r.result.createObjectStore(IDB_STORE) }; r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error) })
 const idbSave=async(key:string,val:any)=>{ try{ const db=await getDB(); const tx=db.transaction(IDB_STORE,'readwrite'); tx.objectStore(IDB_STORE).put(val,key); }catch(e){ console.log('IDB save fail',e) } }
@@ -311,80 +397,55 @@ try{
 const iOld=localStorage.getItem('taglive_intros'); if(iOld){ const parsed=JSON.parse(iOld); if(parsed.length && intros.length===0){ setIntros(parsed); idbSave('intros', parsed) } }
 const oOld=localStorage.getItem('taglive_outros'); if(oOld){ const parsed=JSON.parse(oOld); if(parsed.length && outros.length===0){ setOutros(parsed); idbSave('outros', parsed) } }
 }catch{}
-setTimeout(()=>{
-  if(canvasRef.current){ canvasRef.current.width=480; canvasRef.current.height=854 }
-  setPos((p:any)=>{ return {...p, x:240, y:700 }})
-  setLogoPos((p:any)=>{ return {...p, x:90, y:90 }})
-},600)
+setTimeout(()=>{ if(canvasRef.current){ canvasRef.current.width=480; canvasRef.current.height=854 }; setPos((p:any)=>{ return {...p, x:240, y:700 }}); setLogoPos((p:any)=>{ return {...p, x:90, y:90 }}) },600)
 }catch{}
 },[])
 const saveIntros=async(arr:any[])=>{ setIntros(arr); await idbSave('intros', arr); try{ localStorage.removeItem('taglive_intros') }catch{} }
 const saveOutros=async(arr:any[])=>{ setOutros(arr); await idbSave('outros', arr); try{ localStorage.removeItem('taglive_outros') }catch{} }
 const fileToBase64=(file:File)=>new Promise<string>((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result as string); r.onerror=rej; r.readAsDataURL(file) })
 const getVideoDuration=(base64:string)=>new Promise<number>((res)=>{ const v=document.createElement('video'); v.src=base64; v.onloadedmetadata=()=>res(v.duration); setTimeout(()=>res(5),2000) })
-const handleIntroFile=async(e:any)=>{
-const file=e.target.files?.[0]; if(!file) return
-const base64=await fileToBase64(file)
-let dur=5
-if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }
-const item={ id:'id_' + Date.now(), type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }
-const n=[...intros,item]; await saveIntros(n); setActiveIntroId(item.id); localStorage.setItem('taglive_active_intro', item.id); e.target.value=''
-}
-const handleOutroFile=async(e:any)=>{
-const file=e.target.files?.[0]; if(!file) return
-const base64=await fileToBase64(file)
-let dur=5
-if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }
-const item={ id:'id_' + Date.now(), type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }
-const n=[...outros,item]; await saveOutros(n); setActiveOutroId(item.id); localStorage.setItem('taglive_active_outro', item.id); e.target.value=''
-}
-// === FINAL WORKING CAMERA SWITCH - NO STOCK, NO SLOW-MO ===
+const handleIntroFile=async(e:any)=>{ const file=e.target.files?.[0]; if(!file) return; const base64=await fileToBase64(file); let dur=5; if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }; const item={ id:'id_' + Date.now(), type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }; const n=[...intros,item]; await saveIntros(n); setActiveIntroId(item.id); localStorage.setItem('taglive_active_intro', item.id); e.target.value='' }
+const handleOutroFile=async(e:any)=>{ const file=e.target.files?.[0]; if(!file) return; const base64=await fileToBase64(file); let dur=5; if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }; const item={ id:'id_' + Date.now(), type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }; const n=[...outros,item]; await saveOutros(n); setActiveOutroId(item.id); localStorage.setItem('taglive_active_outro', item.id); e.target.value='' }
+// === FIX 1: FINAL WORKING CAMERA SWITCH ===
 const startCamera=async(newFacing=facing)=>{
 try{
 const wasRecording=isRecording
 const oldStream=streamRef.current
 const w=lowData?640:1280
 const h=lowData?480:720
-
+if((startCamera as any)._switching) return
+;(startCamera as any)._switching=true
+try{
 if(wasRecording && oldStream){
-  // LIVE RECORDING: VIDEO ONLY, keep old audio alive
   const oldAudioTracks=oldStream.getAudioTracks()
   const oldVideoTracks=oldStream.getVideoTracks()
   oldVideoTracks.forEach(t=>{ try{ t.stop() }catch{} })
-  // Small delay to let device release video only
-  await new Promise(r=>setTimeout(r,120))
+  await new Promise(r=>setTimeout(r,150))
   let newVideoStream: MediaStream
-  try{
-    newVideoStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:newFacing,width:{ideal:w},height:{ideal:h}}, audio:false})
-  }catch{
-    newVideoStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:newFacing},width:{ideal:w},height:{ideal:h}}, audio:false})
-  }
+  try{ newVideoStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:newFacing},width:{ideal:w},height:{ideal:h}}, audio:false}) }catch{ newVideoStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:newFacing},width:{ideal:w},height:{ideal:h}}, audio:false}) }
   const newVideoTrack=newVideoStream.getVideoTracks()[0]
   const combined=new MediaStream([newVideoTrack, ...oldAudioTracks])
-  streamRef.current=combined
-  trackRef.current=newVideoTrack
+  streamRef.current=combined; trackRef.current=newVideoTrack
   if(videoRef.current){ videoRef.current.srcObject=combined; await videoRef.current.play().catch(()=>{}) }
   setFacing(newFacing); setIsCam(true)
-  return
 }else{
-  // NOT RECORDING: normal switch
-  if(oldStream) oldStream.getTracks().forEach(t=>{ try{ t.stop() }catch{} })
-  await new Promise(r=>setTimeout(r,150))
+  if(oldStream){ oldStream.getTracks().forEach(t=>{ try{ t.stop() }catch{} }); streamRef.current=null; trackRef.current=null; if(videoRef.current) videoRef.current.srcObject=null }
+  await new Promise(r=>setTimeout(r,200))
   let s: MediaStream
-  try{
-    s=await navigator.mediaDevices.getUserMedia({video:{facingMode:newFacing,width:{ideal:w},height:{ideal:h}},audio:true})
-  }catch{
-    s=await navigator.mediaDevices.getUserMedia({video:true, audio:true})
-  }
+  try{ s=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:newFacing},width:{ideal:w},height:{ideal:h}},audio:true}) }catch{ s=await navigator.mediaDevices.getUserMedia({video:true, audio:true}) }
   streamRef.current=s; trackRef.current=s.getVideoTracks()[0]
   if(videoRef.current){ videoRef.current.srcObject=s; await videoRef.current.play() }
   if(canvasRef.current){ canvasRef.current.width=480; canvasRef.current.height=854 }
   setFacing(newFacing); setIsCam(true)
 }
-}catch(e:any){ alert('Camera: '+e.message) }
+}finally{ (startCamera as any)._switching=false }
+await restartActivePushes()
+}catch(e:any){ (startCamera as any)._switching=false; alert('Camera: '+e.message) }
 }
 const stopCamera=()=>{
 if(isRecording) stopRecordingFinal();
+// FIX 6: Stop ALL pushes on Stop Camera - FB + YT + TikTok + Timer
+stopFbPush(); stopYtPush(); stopTikTokPush(); disconnectTikTok();
 try{ if(audioCtxRef.current){ audioCtxRef.current.close() } }catch{}
 audioCtxRef.current=null
 streamRef.current?.getTracks().forEach(t=>t.stop());
@@ -393,81 +454,48 @@ setIsCam(false); setIsLive(false); setTorch(false); setYtLive(false); stopTimer(
 }
 const toggleCamera=async()=>{ await startCamera(facing==='user'?'environment':'user') }
 const toggleTorch=async()=>{ try{ const track:any=trackRef.current; if(!track?.getCapabilities?.()?.torch) return; await track.applyConstraints({advanced:[{torch:!torch}] as any}); setTorch(!torch) }catch(e:any){ } }
-const loginFacebook=()=>{
-if(!window.FB){ alert('Facebook SDK still loading, wait 3s'); return }
-window.FB.login((resp:any)=>{ if(resp.authResponse){ window.FB.api('/me?fields=name,picture', (u:any)=>{ setFbUser(u); loadPages(resp.authResponse.accessToken) }) } },{scope:'public_profile,pages_show_list,pages_read_engagement,pages_manage_posts,business_management'})
-}
+const loginFacebook=()=>{ if(!window.FB){ alert('Facebook SDK still loading, wait 3s'); return }; window.FB.login((resp:any)=>{ if(resp.authResponse){ window.FB.api('/me?fields=name,picture', (u:any)=>{ setFbUser(u); loadPages(resp.authResponse.accessToken) }) } },{scope:'public_profile,pages_show_list,pages_read_engagement,pages_manage_posts,business_management'}) }
 const loadPages=(tok?:string)=>{ const t=tok||window.FB?.getAuthResponse()?.accessToken; if(!t) return; window.FB.api('/me/accounts', {access_token:t}, (res:any)=>{ if(res.data?.length){ setPages(res.data) } }) }
 const stopIntroOnly=()=>{
   try{ if(introTimeoutRef.current) clearTimeout(introTimeoutRef.current) }catch{}
-  introTimeoutRef.current=null
-  setBroadcastPlaying(null)
-  broadcastImageRef.current=null
+  introTimeoutRef.current=null; setBroadcastPlaying(null); broadcastImageRef.current=null
   if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.removeAttribute('src'); broadcastVideoRef.current.load() }catch{} }
   try{
     const el=(audioCtxRef.current as any)?.introAudioEl
     if(el && el._tagliveCleanup) el._tagliveCleanup()
     const mg=(audioCtxRef.current as any)?._micGain
     if(mg){ try{ mg.gain.value=1 }catch{} }
-    if(fbPendingRef.current){
-      const p=fbPendingRef.current; fbPendingRef.current=null
-      setSelectedPage(p.page)
-    }
+    if(fbPendingRef.current){ const p=fbPendingRef.current; fbPendingRef.current=null; setSelectedPage(p.page) }
   }catch{}
 }
-// FACEBOOK LIVE UPDATE ONLY
+// FACEBOOK LIVE UPDATE ONLY - FIX 2
 const createFbLiveForPage=async(page:any)=>{
   setSelectedPage(page)
   try{
-    const res=await fetch('https://graph.facebook.com/v19.0/' + page.id + '/live_videos',{
-      method:'POST',
-      headers:{'Content-Type':'application/x-www-form-urlencoded'},
-      body: new URLSearchParams({ access_token: page.access_token, title: verse.substring(0,60), description: 'TagLive - '+verse, status: 'LIVE_NOW' })
-    })
+    const res=await fetch('https://graph.facebook.com/v19.0/' + page.id + '/live_videos',{ method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({ access_token: page.access_token, title: verse.substring(0,60), description: 'TagLive - '+verse, status: 'LIVE_NOW' }) })
     const data=await res.json()
     if(data.error) throw new Error(data.error?.message || JSON.stringify(data.error))
     if(!data.stream_url) throw new Error('Facebook did not return a stream_url.')
-    setFbStreamUrl(data.stream_url)
-    setLiveId(data.id)
-    setIsLive(true)
-    startTimer()
+    setFbStreamUrl(data.stream_url); setLiveId(data.id); setIsLive(true); startTimer()
+    await startFbPush(data.stream_url)
     return data
-  }catch(e:any){
-    setFbStreamUrl('')
-    setLiveId('')
-    setIsLive(false)
-    setSelectedPage(null)
-    alert('Facebook Live failed for this Page: ' + (e.message || e))
-    throw e
-  }
+  }catch(e:any){ stopFbPush(); setFbStreamUrl(''); setLiveId(''); setIsLive(false); setSelectedPage(null); alert('Facebook Live failed for this Page: ' + (e.message || e)); throw e }
 }
 const createFbLiveAuto=async(page:any)=>{
   const active=intros.find(i=>i.id===activeIntroId)
   if(active){
     setBroadcastPlaying(active)
-    if(active.type==='image'){
-      const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }
-      broadcastImageRef.current=img
-    } else if(active.type==='video' && broadcastVideoRef.current){
-      try{ broadcastVideoRef.current.src=active.data; broadcastVideoRef.current.muted=true; await broadcastVideoRef.current.play() }catch{}
-    }
+    if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
+    else if(active.type==='video' && broadcastVideoRef.current){ try{ broadcastVideoRef.current.src=active.data; broadcastVideoRef.current.muted=true; await broadcastVideoRef.current.play() }catch{} }
     fbPendingRef.current={ page }
-    introTimeoutRef.current=setTimeout(async()=>{
-      setBroadcastPlaying(null); broadcastImageRef.current=null
-      if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause() }catch{} }
-      fbPendingRef.current=null
-      await createFbLiveForPage(page)
-    }, (active.duration||5)*1000)
-  } else {
-    await createFbLiveForPage(page)
-  }
+    introTimeoutRef.current=setTimeout(async()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause() }catch{} }; fbPendingRef.current=null; await createFbLiveForPage(page) }, (active.duration||5)*1000)
+  } else { await createFbLiveForPage(page) }
 }
 const openBibleApp=()=>{ setShowBible(true) }
 const fetchBible=async(overrideQuery?:string)=>{
 const queryToUse=overrideQuery||bibleQuery
 if(!queryToUse.trim()) return
-setBibleLoading(true)
-setBibleResult('')
+setBibleLoading(true); setBibleResult('')
 const qLower=queryToUse.toLowerCase().trim()
 const getOffline=(q:string)=>{
 try{ const cache=JSON.parse(localStorage.getItem('taglive_bible_cache')||'{}'); if(cache[q]) return cache[q]+' [CACHED]' }catch{}
@@ -479,15 +507,10 @@ return null
 try{
 const res=await fetch('https://bible-api.com/'+encodeURIComponent(queryToUse)+'?translation='+bibleVer)
 const data=await res.json()
-if(data.text){
-const full=data.reference+' ('+bibleVer.toUpperCase()+') - '+data.text
-setBibleResult(full)
-try{ const cache=JSON.parse(localStorage.getItem('taglive_bible_cache')||'{}'); cache[qLower]=full; localStorage.setItem('taglive_bible_cache', JSON.stringify(cache)) }catch{}
-} else throw new Error('not found')
+if(data.text){ const full=data.reference+' ('+bibleVer.toUpperCase()+') - '+data.text; setBibleResult(full); try{ const cache=JSON.parse(localStorage.getItem('taglive_bible_cache')||'{}'); cache[qLower]=full; localStorage.setItem('taglive_bible_cache', JSON.stringify(cache)) }catch{} } else throw new Error('not found')
 }catch{
 const off=getOffline(qLower)
-if(off){ setBibleResult(off) }
-else { setBibleResult('Not found offline. Try John 3:16, Romans 1:20, Psalm 23.') }
+if(off){ setBibleResult(off) } else { setBibleResult('Not found offline. Try John 3:16, Romans 1:20, Psalm 23.') }
 }
 setBibleLoading(false)
 }
@@ -512,9 +535,7 @@ const startRecording=async()=>{
   canvas.width=480; canvas.height=854
   const canvasStream=(canvas as any).captureStream(24) as MediaStream
   try{ if(audioCtxRef.current) audioCtxRef.current.close() }catch{}
-  audioCtxRef.current=null
-  setBroadcastPlaying(null)
-  broadcastImageRef.current=null
+  audioCtxRef.current=null; setBroadcastPlaying(null); broadcastImageRef.current=null
   if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.removeAttribute('src'); broadcastVideoRef.current.load() }catch{} }
   if(introTimeoutRef.current){ try{ clearTimeout(introTimeoutRef.current) }catch{} }
   const audioCtx=new (window.AudioContext||(window as any).webkitAudioContext)()
@@ -524,34 +545,19 @@ const startRecording=async()=>{
   const micTrack=streamRef.current?.getAudioTracks()[0]
   if(!micTrack) return
   const micSource=audioCtx.createMediaStreamSource(new MediaStream([micTrack]))
-  const micGain=audioCtx.createGain()
-  micGain.gain.value=1
-  ;(audioCtx as any)._micGain=micGain
-  ;(audioCtx as any)._micSource=micSource
-  micSource.connect(micGain)
-  micGain.connect(dest)
+  const micGain=audioCtx.createGain(); micGain.gain.value=1
+  ;(audioCtx as any)._micGain=micGain; (audioCtx as any)._micSource=micSource
+  micSource.connect(micGain); micGain.connect(dest)
   const active=intros.find(i=>i.id===activeIntroId)
   if(active){
     setBroadcastPlaying(active)
     try{ micGain.gain.value=0 }catch{}
-    if(active.type==='image'){
-      const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }
-      broadcastImageRef.current=img
-    } else if(active.type==='video'){
-      if(broadcastVideoRef.current){
-        const v=broadcastVideoRef.current
-        v.crossOrigin="anonymous"; v.playsInline=true; v.muted=true; v.volume=0
-        v.src=active.data; v.currentTime=0
-        try{ await v.play() }catch{}
-      }
+    if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
+    else if(active.type==='video'){
+      if(broadcastVideoRef.current){ const v=broadcastVideoRef.current; v.crossOrigin="anonymous"; v.playsInline=true; v.muted=true; v.volume=0; v.src=active.data; v.currentTime=0; try{ await v.play() }catch{} }
       try{
-        const audioEl=document.createElement('video')
-        audioEl.crossOrigin="anonymous"; audioEl.playsInline=true; audioEl.muted=false; audioEl.volume=1
-        audioEl.src=active.data
-        await audioEl.play().catch(()=>{})
-        const vSource=audioCtx.createMediaElementSource(audioEl)
-        vSource.connect(dest)
-        vSource.connect(audioCtx.destination)
+        const audioEl=document.createElement('video'); audioEl.crossOrigin="anonymous"; audioEl.playsInline=true; audioEl.muted=false; audioEl.volume=1; audioEl.src=active.data; await audioEl.play().catch(()=>{})
+        const vSource=audioCtx.createMediaElementSource(audioEl); vSource.connect(dest); vSource.connect(audioCtx.destination)
         ;(audioEl as any)._tagliveCleanup=()=>{ try{ vSource.disconnect() }catch{}; try{ audioEl.pause(); audioEl.removeAttribute('src'); audioEl.load() }catch{} }
         ;(audioCtxRef.current as any).introAudioEl=audioEl
       }catch{}
@@ -564,22 +570,11 @@ const startRecording=async()=>{
   if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm'
   const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 1500000 })
   rec.ondataavailable=(e)=>{ if(e.data.size>0) chunksRef.current.push(e.data) }
-  rec.onstop=()=>{
-    const blob=new Blob(chunksRef.current, { type: 'video/webm' })
-    if(recordedUrl) try{ URL.revokeObjectURL(recordedUrl) }catch{}
-    setRecordedUrl(URL.createObjectURL(blob))
-  }
+  rec.onstop=()=>{ const blob=new Blob(chunksRef.current, { type: 'video/webm' }); if(recordedUrl) try{ URL.revokeObjectURL(recordedUrl) }catch{}; setRecordedUrl(URL.createObjectURL(blob)) }
   rec.start(100); recorderRef.current=rec; setIsRecording(true); startTimer()
-  if(active){
-    introTimeoutRef.current=setTimeout(()=>{
-      setBroadcastPlaying(null); broadcastImageRef.current=null
-      if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.removeAttribute('src'); broadcastVideoRef.current.load() }catch{} }
-      try{ const el=(audioCtxRef.current as any)?.introAudioEl; if(el && el._tagliveCleanup) el._tagliveCleanup() }catch{}
-      try{ micGain.gain.value=1 }catch{}
-    }, (active.duration||5)*1000)
-  }
+  if(active){ introTimeoutRef.current=setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.removeAttribute('src'); broadcastVideoRef.current.load() }catch{} }; try{ const el=(audioCtxRef.current as any)?.introAudioEl; if(el && el._tagliveCleanup) el._tagliveCleanup() }catch{}; try{ micGain.gain.value=1 }catch{} }, (active.duration||5)*1000) }
 }
-const stopRecordingFinal=()=>{
+  const stopRecordingFinal=()=>{
   try{ if(introTimeoutRef.current) clearTimeout(introTimeoutRef.current) }catch{}
   introTimeoutRef.current=null
   try{ recorderRef.current?.stop() }catch{}
@@ -593,6 +588,7 @@ const stopRecordingFinal=()=>{
   audioCtxRef.current=null
   setIsRecording(false); setBroadcastPlaying(null); broadcastImageRef.current=null
   if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.removeAttribute('src'); broadcastVideoRef.current.load() }catch{} }
+  // FIX 6: Do NOT kill FB/YT push when recording stops. Recording != Live.
   if(!isLive&&!ytLive) stopTimer()
 }
 const stopRecording=async()=>{
@@ -629,6 +625,22 @@ const stopRecording=async()=>{
       setTimeout(()=>{ if(micGain){ try{ micGain.gain.value=1 }catch{} } stopRecordingFinal() }, (active.duration||5)*1000)
     }
   } else { stopRecordingFinal() }
+}
+// FIX 2+3: Real Stop for FB + YT - stops push, not just timer
+const stopFbLive=()=>{ stopFbPush(); setFbStreamUrl(''); setLiveId(''); setIsLive(false); setSelectedPage(null); if(!ytLive && !isRecording) stopTimer() }
+const stopYtLive=()=>{ stopYtPush(); setYtLive(false); if(!fbStreamUrl && !isRecording){ setIsLive(false); stopTimer() } }
+// FIX 3+5: YouTube Go Live with Intro - starts YT push NOW so Intro shows on YouTube too
+const startYtLiveWithIntro=async()=>{
+  if(!ytKey.trim()) return alert('Paste YouTube Stream Key first')
+  if(!isCam) return alert('Start Camera first')
+  const active=intros.find(i=>i.id===activeIntroId)
+  if(active){
+    setBroadcastPlaying(active)
+    if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
+    if(active.type==='video'&&broadcastVideoRef.current){ broadcastVideoRef.current.src=active.data; broadcastVideoRef.current.muted=true; broadcastVideoRef.current.volume=0; broadcastVideoRef.current.play().catch(()=>{}) }
+    await startYtPush(ytKey)
+    introTimeoutRef.current=setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null }, (active.duration||5)*1000)
+  } else { await startYtPush(ytKey) }
 }
   const editStateRef=useRef({ locked:false, target:null as any, lastTap:0, lastX:0, lastY:0 })
   const telegramBtnRef=useRef<HTMLDivElement>(null)
@@ -796,7 +808,7 @@ ctx.fillStyle='rgba(124,58,237,0.95)'; const pillH=28; ctx.fillRect(-tW/2,church
 ctx.fillStyle='#FFD700'; ctx.fillText(churchName.toUpperCase(),0,churchY)
 }
 if(editStateRef.current.locked && editStateRef.current.target==='text' && !isSplit){ ctx.strokeStyle='#7c3aed'; ctx.lineWidth=2; ctx.setLineDash([10,6]); ctx.strokeRect(-boxW/2-4,-boxH/2-4,boxW+8,boxH+8); ctx.setLineDash([]) } ctx.restore() }
-if(isLive||ytLive||isRecording||tiktokPushing){
+if(isLive||ytLive||isRecording){
 const timeStr=formatTime(liveSeconds)
 ctx.save(); ctx.fillStyle='#FF0000'; ctx.font='900 28px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top'; ctx.shadowColor='rgba(0,0,0,0.9)'; ctx.shadowBlur=6; ctx.fillText('● LIVE '+timeStr+(lowData?' [480p]':''),24,22); ctx.restore()
 }
@@ -821,7 +833,7 @@ a=requestAnimationFrame(draw)
 }
 draw()
 return()=>cancelAnimationFrame(a)
-},[isCam,verse,isLive,pos,bgMode,fontSize,align,bgImage,ytLive,textColor,boxColor,boxOpacity,logoImage,logoPos,isRecording,selected,showText,showLogo,tickerOn,tickerText,tickerSize,tickerSpeed,churchName,showChurchName,liveSeconds,lowData,broadcastPlaying,tiktokPushing]);
+},[isCam,verse,isLive,pos,bgMode,fontSize,align,bgImage,ytLive,textColor,boxColor,boxOpacity,logoImage,logoPos,isRecording,selected,showText,showLogo,tickerOn,tickerText,tickerSize,tickerSpeed,churchName,showChurchName,liveSeconds,lowData,broadcastPlaying]);
 return (
 <div style={{minHeight:'100vh',background:'#f5f5f7'}}>
 {showBible&&(
@@ -846,7 +858,7 @@ return (
 <div style={{fontWeight:900,fontSize:20,letterSpacing:-0.3}}>Tag<span style={{color:'#7c3aed'}}>Live</span></div>
 <div style={{fontWeight:700,fontSize:11,letterSpacing:1.2,color:'#666',marginTop:1}}>TAG YOUR LIVE</div>
 </div>
-{(isLive||ytLive||isRecording||tiktokPushing)&&<div style={{marginLeft:'auto',color:'#FF0000',fontWeight:900,border:'2px solid red',borderRadius:20,padding:'6px 12px',fontSize:11}}>● LIVE {formatTime(liveSeconds)}</div>}
+{(isLive||ytLive||isRecording)&&<div style={{marginLeft:'auto',color:'#FF0000',fontWeight:900,border:'2px solid red',borderRadius:20,padding:'6px 12px',fontSize:11}}>● LIVE {formatTime(liveSeconds)}</div>}
 </div>
 {isAdmin&&(<div style={{margin:12,background:'#000',border:'2px solid #00ff00',borderRadius:16,padding:12}}>
 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:12,color:'#00ff00'}}>ADMIN DASHBOARD</b><button onClick={()=>setShowAdmin(!showAdmin)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:showAdmin?'#00ff00':'#111',color:showAdmin?'#000':'#00ff00',fontWeight:800,fontSize:11}}>Open</button></div>
@@ -968,25 +980,8 @@ monthCount!==null?
 </div>}
 </div>
 <div style={{display:'flex',flexDirection:'column',gap:12}}>
-<div style={{border:'2px solid #111',borderRadius:14,padding:12}}><b>Connect Facebook</b><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={loginFacebook} style={{flex:1,background:fbUser?'#16a34a':'#1877F2',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{fbUser?'✓ '+fbUser.name:'Login Facebook'}</button><button onClick={()=>loadPages()} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Load My Pages</button></div>{pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6,padding:10,background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff',color:selectedPage?.id===p.id?'#fff':'#000',borderRadius:8,fontSize:13,fontWeight:700,cursor:'pointer'}}>{p.name} {selectedPage?.id===p.id?'LIVE '+formatTime(liveSeconds):'(Go Live)'}</div>)} {fbStreamUrl&&<div style={{marginTop:10,padding:10,background:'#dcfce7',borderRadius:8,fontSize:11,wordBreak:'break-all'}}>FB: {fbStreamUrl.substring(0,70)}...</div>}</div>
-<div style={{marginTop:14,border:'2px solid #ff0000',borderRadius:14,padding:12}}><b>Connect YouTube Live</b><input value={ytKey} onChange={e=>{setYtKey(e.target.value);localStorage.setItem('taglive_ytkey',e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={()=>{if(!ytKey)return alert('Paste YouTube key first'); const active=intros.find(i=>i.id===activeIntroId); if(active){setBroadcastPlaying(active); if(active.type==='image'){const img=new Image();img.src=active.data;img.onload=()=>{broadcastImageRef.current=img}} if(active.type==='video'&&broadcastVideoRef.current){broadcastVideoRef.current.src=active.data;broadcastVideoRef.current.muted=false;broadcastVideoRef.current.volume=1;broadcastVideoRef.current.play().catch(()=>{})} introTimeoutRef.current=setTimeout(()=>{setBroadcastPlaying(null);broadcastImageRef.current=null;setYtLive(true);setIsLive(true);startTimer()},(active.duration||5)*1000)} else {setYtLive(true);setIsLive(true);startTimer()}}} style={{flex:1,background:ytLive?'#16a34a':'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{ytLive?'YouTube LIVE '+formatTime(liveSeconds):'Go Live YouTube + Intro FULL'}</button><button onClick={()=>{const active=outros.find(o=>o.id===activeOutroId); if(active){setBroadcastPlaying(active); if(active.type==='video'&&broadcastVideoRef.current){broadcastVideoRef.current.src=active.data;broadcastVideoRef.current.muted=false;broadcastVideoRef.current.play()} setTimeout(()=>{setBroadcastPlaying(null);setYtLive(false);if(!fbStreamUrl)setIsLive(false);stopTimer()},(active.duration||5)*1000)} else {setYtLive(false);if(!fbStreamUrl)setIsLive(false);stopTimer()}}} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Stop YT + Outro</button></div></div>
-{/* === FIXED: TikTok Chat + RTMP Push UI - INSERTED === */}
-<div style={{marginTop:14,border:'2px solid #000',borderRadius:14,padding:12,background:'#fff'}}>
-<b>Connect TikTok</b>
-<div style={{fontSize:11,marginTop:4,fontWeight:700}}>Status: {tiktokStatus} | Viewers: {tiktokViewerCount} | Likes: {tiktokLikes}</div>
-<input value={tiktokUsername} onChange={e=>setTiktokUsername(e.target.value)} placeholder="@your_tiktok_username" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12,boxSizing:'border-box'}} />
-<div style={{display:'flex',gap:8,marginTop:8}}>
-<button onClick={connectTikTok} style={{flex:1,background:'#000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>Connect Chat</button>
-<button onClick={disconnectTikTok} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Disconnect</button>
-</div>
-{tiktokLastComment && <div style={{marginTop:8,padding:8,background:'#f3f0ff',borderRadius:8,fontSize:12,wordBreak:'break-word'}}>{tiktokLastComment}</div>}
-<input value={tiktokRtmpUrl} onChange={e=>setTiktokRtmpUrl(e.target.value)} placeholder="TikTok RTMP Server URL - rtmp://..." style={{width:'100%',marginTop:10,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12,boxSizing:'border-box'}} />
-<input value={tiktokStreamKey} onChange={e=>setTiktokStreamKey(e.target.value)} placeholder="TikTok Stream Key" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12,boxSizing:'border-box'}} />
-{!tiktokPushing ? <button onClick={startTikTokPush} disabled={!isCam} style={{width:'100%',marginTop:8,background:isCam?'#ff0050':'#ccc',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>Start Push to TikTok</button>
-: <button onClick={stopTikTokPush} style={{width:'100%',marginTop:8,background:'#111',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>Stop Push - {formatTime(liveSeconds)}</button>}
-{!isCam && <div style={{fontSize:11,marginTop:6,opacity:0.7}}>Start Camera first before Push</div>}
-{tiktokPushing && <div style={{fontSize:11,marginTop:6,color:'#16a34a',fontWeight:800}}>● PUSHING Canvas to TikTok...</div>}
-</div>
+<div style={{border:'2px solid #111',borderRadius:14,padding:12}}><b>Connect Facebook</b><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={loginFacebook} style={{flex:1,background:fbUser?'#16a34a':'#1877F2',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{fbUser?'✓ '+fbUser.name:'Login Facebook'}</button><button onClick={()=>loadPages()} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Load My Pages</button></div>{pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6,padding:10,background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff',color:selectedPage?.id===p.id?'#fff':'#000',borderRadius:8,fontSize:13,fontWeight:700,cursor:'pointer'}}>{p.name} {selectedPage?.id===p.id?'LIVE '+formatTime(liveSeconds):'(Go Live)'}</div>)} {fbStreamUrl&&<div style={{marginTop:10,padding:10,background:'#dcfce7',borderRadius:8,fontSize:11,wordBreak:'break-all'}}>FB: {fbStreamUrl.substring(0,70)}...</div>}{isLive&&<button onClick={stopFbLive} style={{marginTop:10,width:'100%',background:'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>■ Stop Facebook Live</button>}</div>
+<div style={{marginTop:14,border:'2px solid #ff0000',borderRadius:14,padding:12}}><b>Connect YouTube Live</b><input value={ytKey} onChange={e=>{setYtKey(e.target.value);localStorage.setItem('taglive_ytkey',e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={startYtLiveWithIntro} style={{flex:1,background:ytLive?'#16a34a':'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{ytLive?'YouTube LIVE '+formatTime(liveSeconds):'Go Live YouTube + Intro FULL'}</button><button onClick={()=>{const active=outros.find(o=>o.id===activeOutroId); if(active){setBroadcastPlaying(active); if(active.type==='video'&&broadcastVideoRef.current){broadcastVideoRef.current.src=active.data;broadcastVideoRef.current.muted=false;broadcastVideoRef.current.play()} setTimeout(()=>{setBroadcastPlaying(null);stopYtLive()},(active.duration||5)*1000)} else {stopYtLive()}}} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Stop YT + Outro</button></div></div>
 </div>
 </div>
 {showTelegramPopup&&(
