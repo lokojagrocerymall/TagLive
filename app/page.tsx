@@ -192,14 +192,24 @@ const playIntroAudioForLive=(active:any)=>{
     setTimeout(()=>{ try{ if(liveMicGainRef.current) liveMicGainRef.current.gain.value=1 }catch{} }, (active.duration||5)*1000)
   }catch{}
 }
-// === FIX ONLY: Intro - play muted first (browser always allows muted play), then unmute after play() succeeds ===
+// === FIX ONLY: Intro hang - play muted first, then verify frame advance, force seek if stuck at 0 ===
 const playBroadcastVideoMutedFirst=async(v:any)=>{
   try{
     v.muted=true; v.volume=0
+    try{ v.preload='auto' }catch{}
+    try{ v.load() }catch{}
+    try{ v.currentTime=0 }catch{}
     await v.play()
-    // Small delay so frame is ready, then unmute for real sound
     await new Promise(r=>setTimeout(r,100))
     v.muted=false; v.volume=1
+    // FIX ONLY: If video hang for currentTime=0, no frame go draw (black Intro). Force seek + play again.
+    await new Promise(r=>setTimeout(r,500))
+    try{
+      if(v.paused || (v.currentTime||0)<0.05){
+        try{ v.currentTime=0.1 }catch{}
+        try{ await v.play() }catch{}
+      }
+    }catch{}
   }catch{
     try{ v.muted=true; v.volume=0; await v.play() }catch{}
   }
@@ -307,6 +317,7 @@ const fbPageRef=useRef<any>(null)
 const fbStopIntentionalRef=useRef(false)
 const fbResumeTimerRef=useRef<any>(null)
 const fbKeepaliveRef=useRef<any>(null)
+const fbPushStoppedResolverRef=useRef<any>(null)
 const clearFbKeepalive=()=>{ try{ if(fbKeepaliveRef.current) clearInterval(fbKeepaliveRef.current) }catch{}; fbKeepaliveRef.current=null }
 const clearFbResumeTimer=()=>{ try{ if(fbResumeTimerRef.current) clearTimeout(fbResumeTimerRef.current) }catch{}; fbResumeTimerRef.current=null }
 const scheduleFbPushResume=()=>{
@@ -364,17 +375,25 @@ const startFbPush=async(fbRtmpUrl:string)=>{
       const d=JSON.parse(e.data)
       if(d.type==='push_started'){ starter.clearFallback(); starter.doStart() }
       // FIX ONLY: bridge say push stopped but we never press Stop -> resume same stream_url, no kill live
-      if(d.type==='push_stopped'){ fbPushingRef.current=false; clearFbKeepalive(); scheduleFbPushResume() }
+      // FIX ONLY: if we ARE stopping, resolve the stopFbPush waiter instead of resuming
+      if(d.type==='push_stopped'){
+        if(fbPushStoppedResolverRef.current){ const r=fbPushStoppedResolverRef.current; fbPushStoppedResolverRef.current=null; try{ r() }catch{} }
+        fbPushingRef.current=false; clearFbKeepalive(); scheduleFbPushResume()
+      }
       if(d.type==='error'){ fbPushingRef.current=false; if(d.message) alert('Facebook Push: '+d.message) }
     }catch{}
   }
   // FIX ONLY: WS drop mid-live (the 15s / 33s cut) -> resume same stream_url, no new live_video, no replay Intro
   ws.onerror=()=>{ fbPushingRef.current=false; clearFbKeepalive(); scheduleFbPushResume() }
-  ws.onclose=()=>{ fbPushingRef.current=false; clearFbKeepalive(); scheduleFbPushResume() }
+  ws.onclose=()=>{
+    // FIX ONLY: close during intentional stop also counts as stopped, resolve waiter so stop no hang
+    if(fbPushStoppedResolverRef.current){ const r=fbPushStoppedResolverRef.current; fbPushStoppedResolverRef.current=null; try{ r() }catch{} }
+    fbPushingRef.current=false; clearFbKeepalive(); scheduleFbPushResume()
+  }
 }
 const stopFbPush=async()=>{
-  // FIX ONLY: Flush while recorder still dey run - wait 2s FIRST so last Outro frames enter FB, THEN stop recorder.
-  // Before: stop recorder first, then wait - nothing to flush, Outro cut.
+  // FIX ONLY: Wait for bridge push_stopped ack before close + end_live_video, else Facebook discard buffered tail and cut.
+  // Before: send stop_push -> wait fixed 0.8s -> close. Now: send stop_push -> wait ack (max 5s) -> close.
   if(stoppingFbRef.current) return
   stoppingFbRef.current=true
   // FIX ONLY: intentional stop must NOT trigger auto-resume
@@ -385,14 +404,18 @@ const stopFbPush=async()=>{
     await new Promise(r=>setTimeout(r,2000))
     try{ fbPushRecorderRef.current?.stop() }catch{}
     fbPushRecorderRef.current=null
-    try{ fbPushWsRef.current?.send(JSON.stringify({ type:'stop_push' })) }catch{}
-    await new Promise(r=>setTimeout(r,800))
+    const ackPromise=new Promise<void>((resolve)=>{
+      fbPushStoppedResolverRef.current=()=>{ resolve() }
+      setTimeout(()=>{ if(fbPushStoppedResolverRef.current){ fbPushStoppedResolverRef.current=null; resolve() } },5000)
+    })
+    try{ fbPushWsRef.current?.send(JSON.stringify({ type:'stop_push' })) }catch{ if(fbPushStoppedResolverRef.current){ const r=fbPushStoppedResolverRef.current; fbPushStoppedResolverRef.current=null; try{ r() }catch{} } }
+    await ackPromise
     try{ fbPushWsRef.current?.close() }catch{}
     fbPushWsRef.current=null
     fbPushingRef.current=false
     lastFbPushRef.current=null
     await endFbLiveVideo()
-  } finally { stoppingFbRef.current=false }
+  } finally { stoppingFbRef.current=false; fbPushStoppedResolverRef.current=null }
 }
 useEffect(()=>{ return ()=>{ fbStopIntentionalRef.current=true; clearFbResumeTimer(); clearFbKeepalive(); try{ fbPushRecorderRef.current?.stop() }catch{}; try{ fbPushWsRef.current?.close() }catch{} } },[])
 // === UPDATE ONLY: YouTube RTMP Push - FIX 3+5+7: YouTube was only timer before, now real push ===
@@ -1276,7 +1299,7 @@ monthCount!==null?
 </div>
 <div>
 <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{background:'#000',borderRadius:18,overflow:'hidden',position:'relative',aspectRatio:'9/16',touchAction: editStateRef.current.locked ? 'none' : 'pan-y'}}><video ref={videoRef} muted playsInline autoPlay style={{width:'100%',height:'100%',objectFit:'cover',display:isCam&&bgMode==='face'?'block':'none'}}/>{!isCam&&<div style={{color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',height:420}}>Camera off - {lowData?'480p ON':'720p'}</div>}<canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%'}}/>
-<video ref={broadcastVideoRef} playsInline crossOrigin="anonymous" style={{position:'absolute',left:'-9999px',top:'-9999px',width:'10px',height:'10px',opacity:0.01}}/>
+<video ref={broadcastVideoRef} playsInline crossOrigin="anonymous" style={{position:'absolute',left:0,top:0,width:'480px',height:'854px',opacity:0,pointerEvents:'none'}}/>
 {broadcastPlaying&&(
   <div style={{position:'absolute',top:12,left:12,right:12,display:'flex',justifyContent:'flex-end',zIndex:100}}>
     <button onClick={stopIntroOnly} style={{background:'#ff0000',color:'#fff',border:'2px solid #fff',padding:'10px 16px',borderRadius:20,fontWeight:900,fontSize:12}}>✕</button>
