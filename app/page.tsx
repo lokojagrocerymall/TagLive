@@ -189,6 +189,16 @@ const playIntroAudioForLive=(active:any)=>{
     try{ if(liveAudioCtxRef.current && liveAudioCtxRef.current.state==='suspended') liveAudioCtxRef.current.resume() }catch{}
     connectBroadcastVideoToMixer()
     if(liveMicGainRef.current) liveMicGainRef.current.gain.value=0
+    // FIX: Unmute mic on real video end, no be stored duration. Fallback to stored duration + 2s if onended never fire.
+    try{
+      const v=broadcastVideoRef.current as any
+      if(v){
+        v.onended=()=>{ try{ if(liveMicGainRef.current) liveMicGainRef.current.gain.value=1 }catch{} }
+        const realDur=(v.duration && isFinite(v.duration) ? v.duration : (active.duration||5))
+        setTimeout(()=>{ try{ if(liveMicGainRef.current) liveMicGainRef.current.gain.value=1 }catch{} }, (realDur+2)*1000)
+        return
+      }
+    }catch{}
     setTimeout(()=>{ try{ if(liveMicGainRef.current) liveMicGainRef.current.gain.value=1 }catch{} }, (active.duration||5)*1000)
   }catch{}
 }
@@ -542,7 +552,8 @@ setTimeout(()=>{ if(canvasRef.current){ canvasRef.current.width=480; canvasRef.c
 const saveIntros=async(arr:any[])=>{ setIntros(arr); await idbSave('intros', arr); try{ localStorage.removeItem('taglive_intros') }catch{} }
 const saveOutros=async(arr:any[])=>{ setOutros(arr); await idbSave('outros', arr); try{ localStorage.removeItem('taglive_outros') }catch{} }
 const fileToBase64=(file:File)=>new Promise<string>((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result as string); r.onerror=rej; r.readAsDataURL(file) })
-const getVideoDuration=(base64:string)=>new Promise<number>((res)=>{ const v=document.createElement('video'); v.src=base64; v.onloadedmetadata=()=>res(v.duration); setTimeout(()=>res(5),2000) })
+// FIX: Intro cut 15s-33s - old getVideoDuration return fake 5s after only 2s if big Intro never load metadata, so saved duration wrong, live cut Intro early. Now wait up to 10s for real metadata.
+const getVideoDuration=(base64:string)=>new Promise<number>((res)=>{ const v=document.createElement('video'); v.preload='metadata'; v.src=base64; v.onloadedmetadata=()=>res(v.duration||5); v.onerror=()=>res(5); setTimeout(()=>res(v.duration||5),10000) })
 const handleIntroFile=async(e:any)=>{ const file=e.target.files?.[0]; if(!file) return; const base64=await fileToBase64(file); let dur=5; if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }; const item={ id:'id_' + Date.now(), type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }; const n=[...intros,item]; await saveIntros(n); setActiveIntroId(item.id); localStorage.setItem('taglive_active_intro', item.id); e.target.value='' }
 const handleOutroFile=async(e:any)=>{ const file=e.target.files?.[0]; if(!file) return; const base64=await fileToBase64(file); let dur=5; if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }; const item={ id:'id_' + Date.now(), type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }; const n=[...outros,item]; await saveOutros(n); setActiveOutroId(item.id); localStorage.setItem('taglive_active_outro', item.id); e.target.value='' }
 // === FIX 1: FINAL WORKING CAMERA SWITCH ===
@@ -606,7 +617,7 @@ const loadPages=(tok?:string)=>{ const t=tok||window.FB?.getAuthResponse()?.acce
 const stopIntroOnly=()=>{
   try{ if(introTimeoutRef.current) clearTimeout(introTimeoutRef.current) }catch{}
   introTimeoutRef.current=null; setBroadcastPlaying(null); broadcastImageRef.current=null
-  if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.removeAttribute('src'); broadcastVideoRef.current.load() }catch{} }
+  if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.removeAttribute('src'); broadcastVideoRef.current.load() }catch{}; try{ (broadcastVideoRef.current as any).onended=null }catch{} }
   try{
     const el=(audioCtxRef.current as any)?.introAudioEl
     if(el && el._tagliveCleanup) el._tagliveCleanup()
@@ -670,17 +681,28 @@ const createFbLiveAuto=async(page:any)=>{
     try{ if(liveAudioCtxRef.current && liveAudioCtxRef.current.state==='suspended') await liveAudioCtxRef.current.resume() }catch{}
     playIntroAudioForLive(active)
     setBroadcastPlaying(active)
-    if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
+    if(active.type==='image'){
+      const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img
+      fbPendingRef.current=null
+      introTimeoutRef.current=setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null }, (active.duration||5)*1000)
+    }
     else if(active.type==='video' && broadcastVideoRef.current){
       try{
         const v=broadcastVideoRef.current as any
         v.crossOrigin="anonymous"; v.playsInline=true; v.muted=false; v.volume=1; v.src=active.data; v.currentTime=0
         connectBroadcastVideoToMixer()
+        // FIX: Warm-up 2s so ffmpeg get keyframe before Intro start, else FB cut first seconds
+        await new Promise(r=>setTimeout(r,2000))
+        // FIX: Video Intro end by real onended, no be stored duration. Safety = real v.duration + 2s.
+        v.onended=()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; try{ v.pause() }catch{}; v.onended=null; try{ if(liveMicGainRef.current) liveMicGainRef.current.gain.value=1 }catch{} }
         await v.play()
+        const realDur=(v.duration && isFinite(v.duration) ? v.duration : (active.duration||5))
+        introTimeoutRef.current=setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause() }catch{}; try{ (broadcastVideoRef.current as any).onended=null }catch{} } }, (realDur+2)*1000)
       }catch{}
+      fbPendingRef.current=null
+    } else {
+      fbPendingRef.current=null
     }
-    fbPendingRef.current=null
-    introTimeoutRef.current=setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause() }catch{} } }, (active.duration||5)*1000)
   } finally { creatingFbRef.current=false }
 }
 const openBibleApp=()=>{ setShowBible(true) }
@@ -771,7 +793,17 @@ const startRecording=async()=>{
   rec.ondataavailable=(e)=>{ if(e.data.size>0) chunksRef.current.push(e.data) }
   rec.onstop=()=>{ const blob=new Blob(chunksRef.current, { type: 'video/webm' }); if(recordedUrl) try{ URL.revokeObjectURL(recordedUrl) }catch{}; setRecordedUrl(URL.createObjectURL(blob)) }
   rec.start(100); recorderRef.current=rec; setIsRecording(true); startTimer()
-  if(active){ introTimeoutRef.current=setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.removeAttribute('src'); broadcastVideoRef.current.load() }catch{} }; try{ const el=(audioCtxRef.current as any)?.introAudioEl; if(el && el._tagliveCleanup) el._tagliveCleanup() }catch{}; try{ micGain.gain.value=1 }catch{} }, (active.duration||5)*1000) }
+  if(active){
+    // FIX: Video Intro end by real onended + real duration, no be stored duration (15s-33s cut fix)
+    if(active.type==='video' && broadcastVideoRef.current){
+      const v=broadcastVideoRef.current as any
+      const realDur=(v.duration && isFinite(v.duration) ? v.duration : (active.duration||5))
+      v.onended=()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; try{ v.pause(); v.removeAttribute('src'); v.load() }catch{}; v.onended=null; try{ const el=(audioCtxRef.current as any)?.introAudioEl; if(el && el._tagliveCleanup) el._tagliveCleanup() }catch{}; try{ micGain.gain.value=1 }catch{} }
+      introTimeoutRef.current=setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.removeAttribute('src'); broadcastVideoRef.current.load() }catch{}; try{ (broadcastVideoRef.current as any).onended=null }catch{} }; try{ const el=(audioCtxRef.current as any)?.introAudioEl; if(el && el._tagliveCleanup) el._tagliveCleanup() }catch{}; try{ micGain.gain.value=1 }catch{} }, (realDur+2)*1000)
+    } else {
+      introTimeoutRef.current=setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.removeAttribute('src'); broadcastVideoRef.current.load() }catch{} }; try{ const el=(audioCtxRef.current as any)?.introAudioEl; if(el && el._tagliveCleanup) el._tagliveCleanup() }catch{}; try{ micGain.gain.value=1 }catch{} }, (active.duration||5)*1000)
+    }
+  }
 }
   const stopRecordingFinal=()=>{
   try{ if(introTimeoutRef.current) clearTimeout(introTimeoutRef.current) }catch{}
@@ -790,7 +822,7 @@ const startRecording=async()=>{
   try{ if(audioCtxRef.current) audioCtxRef.current.close() }catch{}
   audioCtxRef.current=null
   setIsRecording(false); setBroadcastPlaying(null); broadcastImageRef.current=null
-  if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.removeAttribute('src'); broadcastVideoRef.current.load() }catch{} }
+  if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.removeAttribute('src'); broadcastVideoRef.current.load() }catch{}; try{ (broadcastVideoRef.current as any).onended=null }catch{} }
   // FIX 6: Do NOT kill FB/YT push when recording stops alone. Recording != Live. (Stop Live in stopFbLive/stopYtLive stops both on purpose)
   if(!isLive&&!ytLive) stopTimer()
 }
@@ -836,18 +868,33 @@ const stopRecording=async()=>{
         v.crossOrigin="anonymous"; v.playsInline=true; v.muted=false; v.volume=1
         v.src=active.data; v.currentTime=0
         try{ await v.play() }catch{}
+        // FIX: Outro cut 15s-33s - video Outro end by real onended, no be stored duration. Safety = real v.duration + 2s.
+        const finishOutro=async()=>{
+          if(!outroPlayingRef.current) return
+          try{ v.onended=null }catch{}
+          if(micGain){ try{ micGain.gain.value=1 }catch{} }
+          outroPlayingRef.current=false
+          await new Promise(r=>setTimeout(r,1000))
+          stopRecordingFinal()
+          if(wasFbLive) await stopFbLive()
+          if(wasYtLive) stopYtLive()
+          if(wasTikTokLive) stopTikTokLive()
+        }
+        v.onended=()=>{ finishOutro() }
+        const realDur=(v.duration && isFinite(v.duration) ? v.duration : (active.duration||5))
+        setTimeout(()=>{ finishOutro() }, (realDur+2)*1000)
+      } else {
+        // No video element - fall back to stored duration
+        setTimeout(async()=>{
+          if(micGain){ try{ micGain.gain.value=1 }catch{} }
+          outroPlayingRef.current=false
+          await new Promise(r=>setTimeout(r,1000))
+          stopRecordingFinal()
+          if(wasFbLive) await stopFbLive()
+          if(wasYtLive) stopYtLive()
+          if(wasTikTokLive) stopTikTokLive()
+        }, (active.duration||5)*1000)
       }
-      setTimeout(async()=>{
-        if(micGain){ try{ micGain.gain.value=1 }catch{} }
-        outroPlayingRef.current=false
-        // FIX: Graceful FB stop - hold 1s extra so last Outro frame enter push before recording stop
-        await new Promise(r=>setTimeout(r,1000))
-        stopRecordingFinal()
-        // FIX: Outro don finish inside live - NOW stop pushes, so Facebook VOD gets full outro, not 9s cut
-        if(wasFbLive) await stopFbLive()
-        if(wasYtLive) stopYtLive()
-        if(wasTikTokLive) stopTikTokLive()
-      }, (active.duration||5)*1000)
     } else {
       outroPlayingRef.current=false
     }
@@ -889,14 +936,21 @@ const startYtLiveWithIntro=async()=>{
     try{ if(liveAudioCtxRef.current && liveAudioCtxRef.current.state==='suspended') await liveAudioCtxRef.current.resume() }catch{}
     playIntroAudioForLive(active)
     setBroadcastPlaying(active)
-    if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
-    if(active.type==='video'&&broadcastVideoRef.current){
+    if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img; introTimeoutRef.current=setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null }, (active.duration||5)*1000) }
+    else if(active.type==='video'&&broadcastVideoRef.current){
       const v=broadcastVideoRef.current as any
       v.crossOrigin="anonymous"; v.playsInline=true; v.muted=false; v.volume=1; v.src=active.data; v.currentTime=0
       connectBroadcastVideoToMixer()
+      // FIX: Warm-up 2s so ffmpeg get keyframe before Intro start, else YT cut first seconds (same as FB in Part 1)
+      await new Promise(r=>setTimeout(r,2000))
+      // FIX: YT Intro cut 15s-33s - video Intro end by real onended, no be stored duration. Safety = real v.duration + 2s.
+      v.onended=()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; try{ v.pause() }catch{}; v.onended=null; try{ if(liveMicGainRef.current) liveMicGainRef.current.gain.value=1 }catch{} }
       try{ await v.play() }catch{}
+      const realDur=(v.duration && isFinite(v.duration) ? v.duration : (active.duration||5))
+      introTimeoutRef.current=setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; try{ v.pause() }catch{}; try{ v.onended=null }catch{} }, (realDur+2)*1000)
+    } else if(active.type==='image'){
+      introTimeoutRef.current=setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null }, (active.duration||5)*1000)
     }
-    introTimeoutRef.current=setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null }, (active.duration||5)*1000)
   } finally { creatingYtRef.current=false }
 }
   const editStateRef=useRef({ locked:false, target:null as any, lastTap:0, lastX:0, lastY:0 })
@@ -1246,7 +1300,7 @@ monthCount!==null?
 <textarea value={liveDescription} onChange={e=>setLiveDescription(e.target.value)} placeholder="Live Description - this shows on Facebook, NOT your verse" style={{width:'100%',padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12,boxSizing:'border-box',height:60}} />
 </div>
 {pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6,padding:10,background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff',color:selectedPage?.id===p.id?'#fff':'#000',borderRadius:8,fontSize:13,fontWeight:700,cursor:'pointer'}}>{p.name} {selectedPage?.id===p.id?'LIVE '+formatTime(liveSeconds):'(Go Live)'}</div>)} {fbStreamUrl&&<div style={{marginTop:10,padding:10,background:'#dcfce7',borderRadius:8,fontSize:11,wordBreak:'break-all'}}>FB: {fbStreamUrl.substring(0,70)}...</div>}{isLive&&<button onClick={stopFbLive} style={{marginTop:10,width:'100%',background:'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>■ Stop Facebook Live</button>}</div>
-<div style={{marginTop:14,border:'2px solid #ff0000',borderRadius:14,padding:12}}><b>Connect YouTube Live</b><input value={ytKey} onChange={e=>{setYtKey(e.target.value);localStorage.setItem('taglive_ytkey',e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={startYtLiveWithIntro} style={{flex:1,background:ytLive?'#16a34a':'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{ytLive?'YouTube LIVE '+formatTime(liveSeconds):'Go Live YouTube + Intro FULL'}</button><button onClick={()=>{if(broadcastPlaying) return; const active=outros.find(o=>o.id===activeOutroId); if(active){setBroadcastPlaying(active); if(active.type==='video'&&broadcastVideoRef.current){ const v=broadcastVideoRef.current as any; v.muted=false; v.volume=1; v.src=active.data; ensureLiveAudio(); try{ if(liveAudioCtxRef.current) liveAudioCtxRef.current.resume() }catch{}; connectBroadcastVideoToMixer(); v.play() } setTimeout(async()=>{setBroadcastPlaying(null); await new Promise(r=>setTimeout(r,1000)); stopYtLive()},(active.duration||5)*1000)} else {stopYtLive()}}} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Stop YT + Outro</button></div></div>
+<div style={{marginTop:14,border:'2px solid #ff0000',borderRadius:14,padding:12}}><b>Connect YouTube Live</b><input value={ytKey} onChange={e=>{setYtKey(e.target.value);localStorage.setItem('taglive_ytkey',e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={startYtLiveWithIntro} style={{flex:1,background:ytLive?'#16a34a':'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{ytLive?'YouTube LIVE '+formatTime(liveSeconds):'Go Live YouTube + Intro FULL'}</button><button onClick={()=>{if(broadcastPlaying) return; const active=outros.find(o=>o.id===activeOutroId); if(active){setBroadcastPlaying(active); if(active.type==='video'&&broadcastVideoRef.current){ const v=broadcastVideoRef.current as any; v.muted=false; v.volume=1; v.src=active.data; ensureLiveAudio(); try{ if(liveAudioCtxRef.current) liveAudioCtxRef.current.resume() }catch{}; connectBroadcastVideoToMixer(); v.play(); const finishYtOutro=async()=>{ try{ v.onended=null }catch{}; setBroadcastPlaying(null); await new Promise(r=>setTimeout(r,1000)); stopYtLive() }; v.onended=()=>{ finishYtOutro() }; const realDur=(v.duration && isFinite(v.duration) ? v.duration : (active.duration||5)); setTimeout(()=>{ finishYtOutro() }, (realDur+2)*1000) } else if(active.type==='image'){ setTimeout(async()=>{setBroadcastPlaying(null); await new Promise(r=>setTimeout(r,1000)); stopYtLive()},(active.duration||5)*1000) } else { setTimeout(async()=>{setBroadcastPlaying(null); await new Promise(r=>setTimeout(r,1000)); stopYtLive()},(active.duration||5)*1000) } } else {stopYtLive()}}} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Stop YT + Outro</button></div></div>
 {/* === UPDATE ONLY: RESTORED TikTok Box - was missing in Part 2 UI, logic still in Part 1 === */}
 <div style={{marginTop:14,border:'2px solid #000',borderRadius:14,padding:12}}><b>Connect TikTok Live</b>
 <input value={tiktokUsername} onChange={e=>setTiktokUsername(e.target.value)} placeholder="@your TikTok username" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/>
