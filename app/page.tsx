@@ -707,7 +707,8 @@ const createFbLiveForPage=async(page:any)=>{
     const data=await res.json()
     if(data.error) throw new Error(data.error?.message || JSON.stringify(data.error))
     if(!data.stream_url) throw new Error('Facebook did not return a stream_url.')
-    setFbStreamUrl(data.stream_url); setLiveId(data.id); setIsLive(true); startTimer()
+    // FIX ONLY: Master flow - timer already started in startRecording(). No reset here.
+    setFbStreamUrl(data.stream_url); setLiveId(data.id); setIsLive(true)
     // FIX: Save for end_live_video - state fit stale inside async stop, refs no stale
     fbLiveIdRef.current=data.id; fbPageRef.current=page
     // FIX 1: Ensure mixer is running before push, so audio no be silent
@@ -722,35 +723,14 @@ const createFbLiveForPage=async(page:any)=>{
     alert('Facebook Live failed for this Page: ' + (e.message || e)); throw e
   }
 }
+// === FIX ONLY: NEW MASTER FLOW - Page tap no longer starts live. createFbLiveAuto = FB push ONLY, no Intro replay. Intro + Recording na startRecording() master. ===
 const createFbLiveAuto=async(page:any)=>{
-  // FIX: Guard - no 2nd create while creating or already live for same Page. 2nd tap was killing 1st live.
   if(creatingFbRef.current) return
   if(isLive && selectedPage?.id===page.id) return
   creatingFbRef.current=true
   try{
-    // FIX: PUSH FIRST, INTRO SECOND - Intro must be INSIDE live + recording, not before live.
-    // Before: Intro (5s) -> create FB -> push -> recording. Intro never entered FB / file.
-    // Now: Create FB + Push + Recording FIRST, wait for bridge ready, THEN play Intro on live canvas.
     await createFbLiveForPage(page)
-    const active=intros.find(i=>i.id===activeIntroId)
-    if(!active) return
-    await waitForFbPushReady()
-    ensureLiveAudio()
-    try{ if(liveAudioCtxRef.current && liveAudioCtxRef.current.state==='suspended') await liveAudioCtxRef.current.resume() }catch{}
-    playIntroAudioForLive(active)
-    setBroadcastPlaying(active)
-    if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
-    else if(active.type==='video' && broadcastVideoRef.current){
-      try{
-        const v=broadcastVideoRef.current as any
-        v.crossOrigin="anonymous"; v.playsInline=true; v.src=active.data; v.currentTime=0
-        connectBroadcastVideoToMixer()
-        // FIX ONLY: muted-first play, then unmute - unmuted play after awaits was blocked
-        await playBroadcastVideoMutedFirst(v)
-      }catch{}
-    }
     fbPendingRef.current=null
-    introTimeoutRef.current=setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause() }catch{} } }, (active.duration||5)*1000)
   } finally { creatingFbRef.current=false }
 }
 const openBibleApp=()=>{ setShowBible(true) }
@@ -792,8 +772,10 @@ const onFilePick=(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const ur
 const onLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const base64=await fileToBase64(f); setLogoImage(base64); localStorage.setItem('taglive_church_logo', base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; setSelected('logo'); setShowLogo(true); localStorage.setItem('taglive_show_logo','true'); }
 const handleChurchLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const base64=await fileToBase64(f); setLogoImage(base64); localStorage.setItem('taglive_church_logo', base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; setShowLogo(true); localStorage.setItem('taglive_show_logo','true'); }
 const removeChurchLogo=()=>{ localStorage.removeItem('taglive_church_logo'); setLogoImage(null); logoImageRef.current=null; if(churchLogoInputRef.current) churchLogoInputRef.current.value=''; if(logoInputRef.current) logoInputRef.current.value=''; }
+// === FIX ONLY: NEW MASTER FLOW - Start Recording + Intro na ONLY master. Intro + Recording + Timer first (same tap, no await), FB push after for background, no await blocking Intro ===
 const startRecording=async()=>{
   const canvas=canvasRef.current; if(!canvas) return
+  const fbPageToStart=selectedPage
   canvas.width=480; canvas.height=854
   const canvasStream=(canvas as any).captureStream(24) as MediaStream
   try{ if(audioCtxRef.current) audioCtxRef.current.close() }catch{}
@@ -842,6 +824,10 @@ const startRecording=async()=>{
   rec.onstop=()=>{ const blob=new Blob(chunksRef.current, { type: 'video/webm' }); if(recordedUrl) try{ URL.revokeObjectURL(recordedUrl) }catch{}; setRecordedUrl(URL.createObjectURL(blob)) }
   rec.start(100); recorderRef.current=rec; setIsRecording(true); startTimer()
   if(active){ introTimeoutRef.current=setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.removeAttribute('src'); broadcastVideoRef.current.load() }catch{} }; try{ const el=(audioCtxRef.current as any)?.introAudioEl; if(el && el._tagliveCleanup) el._tagliveCleanup() }catch{}; try{ micGain.gain.value=1 }catch{} }, (active.duration||5)*1000) }
+  // FIX ONLY: FB push AFTER Intro + Recording don start for same tap. No await, no block Intro. FB go join Intro wey already dey play.
+  if(fbPageToStart && !fbPushingRef.current){
+    try{ createFbLiveAuto(fbPageToStart)?.catch(()=>{}) }catch{}
+  }
 }
   const stopRecordingFinal=()=>{
   try{ if(introTimeoutRef.current) clearTimeout(introTimeoutRef.current) }catch{}
@@ -1309,8 +1295,8 @@ monthCount!==null?
 </div>
 <div style={{display:'flex',gap:8,marginTop:12}}>{!isCam?<button onClick={()=>startCamera()} style={{flex:1,background:'#111',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Start Camera {lowData?'(480p)':''}</button>:<><button onClick={toggleCamera} style={{flex:1,background:'#7c3aed',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Switch Camera</button><button onClick={stopCamera} style={{flex:1,background:'#444',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Stop</button></>}</div>
 <div style={{display:'flex',gap:6,marginTop:10}}>
-{/* FIX 2: Record button shows merged state - Go Live already records, this is Record Only when not live */}
-{!isRecording?<button onClick={startRecording} disabled={!isCam} style={{flex:1,background:isCam?'#a21caf':'#ccc',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>{(isLive||ytLive)?'● LIVE + Recording':'Record'}</button>
+{/* FIX ONLY: NEW MASTER FLOW - Start Recording + Intro na ONLY master for FB Live. Page tap no longer starts live. */}
+{!isRecording?<button onClick={startRecording} disabled={!isCam} style={{flex:1,background:isCam?'#a21caf':'#ccc',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>{(isLive||ytLive)?'● LIVE + Recording':'Start Recording + Intro'}</button>
 :<><button onClick={stopRecording} style={{flex:1,background:'#111',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Stop + Outro ({formatTime(liveSeconds)})</button>{broadcastPlaying&&<button onClick={stopIntroOnly} style={{background:'#ff0000',color:'#fff',padding:12,borderRadius:10,fontWeight:900,border:'none',fontSize:11}}>STOP INTRO</button>}</>}
 {recordedUrl&&<a href={recordedUrl} download={'TagLive-'+Date.now()+'.mp4'} style={{flex:1,background:'#16a34a',color:'#fff',padding:12,borderRadius:10,fontWeight:800,textAlign:'center',textDecoration:'none',fontSize:12}}>Download</a>}
 </div>
@@ -1333,7 +1319,8 @@ monthCount!==null?
 <input value={liveTitle} onChange={e=>setLiveTitle(e.target.value)} placeholder="Live Title - e.g. Sunday Service Live" style={{width:'100%',padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12,fontWeight:700,boxSizing:'border-box'}} />
 <textarea value={liveDescription} onChange={e=>setLiveDescription(e.target.value)} placeholder="Live Description - this shows on Facebook, NOT your verse" style={{width:'100%',padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12,boxSizing:'border-box',height:60}} />
 </div>
-{pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6,padding:10,background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff',color:selectedPage?.id===p.id?'#fff':'#000',borderRadius:8,fontSize:13,fontWeight:700,cursor:'pointer'}}>{p.name} {selectedPage?.id===p.id?'LIVE '+formatTime(liveSeconds):'(Go Live)'}</div>)} {fbStreamUrl&&<div style={{marginTop:10,padding:10,background:'#dcfce7',borderRadius:8,fontSize:11,wordBreak:'break-all'}}>FB: {fbStreamUrl.substring(0,70)}...</div>}{isLive&&<button onClick={stopFbLive} style={{marginTop:10,width:'100%',background:'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>■ Stop Facebook Live</button>}</div>
+{/* FIX ONLY: NEW MASTER FLOW - Page tap = Select ONLY, no Go Live. Livestream only answerable to Start Recording + Intro. */}
+{pages.map((p:any)=><div key={p.id} onClick={()=>setSelectedPage(p)} style={{marginTop:6,padding:10,background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff',color:selectedPage?.id===p.id?'#fff':'#000',borderRadius:8,fontSize:13,fontWeight:700,cursor:'pointer'}}>{p.name} {selectedPage?.id===p.id?'✓ Selected':' (Tap to Select)'}</div>)} {fbStreamUrl&&<div style={{marginTop:10,padding:10,background:'#dcfce7',borderRadius:8,fontSize:11,wordBreak:'break-all'}}>FB: {fbStreamUrl.substring(0,70)}...</div>}{isLive&&<button onClick={stopFbLive} style={{marginTop:10,width:'100%',background:'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>■ Stop Facebook Live</button>}</div>
 <div style={{marginTop:14,border:'2px solid #ff0000',borderRadius:14,padding:12}}><b>Connect YouTube Live</b><input value={ytKey} onChange={e=>{setYtKey(e.target.value);localStorage.setItem('taglive_ytkey',e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={startYtLiveWithIntro} style={{flex:1,background:ytLive?'#16a34a':'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{ytLive?'YouTube LIVE '+formatTime(liveSeconds):'Go Live YouTube + Intro FULL'}</button><button onClick={()=>{if(broadcastPlaying) return; const active=outros.find(o=>o.id===activeOutroId); if(active){setBroadcastPlaying(active); if(active.type==='video'&&broadcastVideoRef.current){ const v=broadcastVideoRef.current as any; v.src=active.data; ensureLiveAudio(); try{ if(liveAudioCtxRef.current) liveAudioCtxRef.current.resume() }catch{}; connectBroadcastVideoToMixer(); playBroadcastVideoMutedFirst(v) } setTimeout(async()=>{setBroadcastPlaying(null); await new Promise(r=>setTimeout(r,1000)); stopYtLive()},(active.duration||5)*1000)} else {stopYtLive()}}} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Stop YT + Outro</button></div></div>
 {/* === UPDATE ONLY: RESTORED TikTok Box - was missing in Part 2 UI, logic still in Part 1 === */}
 <div style={{marginTop:14,border:'2px solid #000',borderRadius:14,padding:12}}><b>Connect TikTok Live</b>
