@@ -192,6 +192,18 @@ const playIntroAudioForLive=(active:any)=>{
     setTimeout(()=>{ try{ if(liveMicGainRef.current) liveMicGainRef.current.gain.value=1 }catch{} }, (active.duration||5)*1000)
   }catch{}
 }
+// === FIX ONLY: Intro - play muted first (browser always allows muted play), then unmute after play() succeeds ===
+const playBroadcastVideoMutedFirst=async(v:any)=>{
+  try{
+    v.muted=true; v.volume=0
+    await v.play()
+    // Small delay so frame is ready, then unmute for real sound
+    await new Promise(r=>setTimeout(r,100))
+    v.muted=false; v.volume=1
+  }catch{
+    try{ v.muted=true; v.volume=0; await v.play() }catch{}
+  }
+}
 // === FIX: WAIT FOR BRIDGE push_started BEFORE starting MediaRecorder, else Facebook rejects corrupt stream ===
 const startPushRecorderOnReady=(ws:any, recorderRef:any, onStarted?:()=>void)=>{
   let started=false
@@ -315,7 +327,11 @@ const endFbLiveVideo=async()=>{
   const page=fbPageRef.current
   if(!id || !page) return
   try{
-    await fetch('https://graph.facebook.com/v19.0/'+id,{ method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({ access_token: page.access_token, end_live_video: 'true' }) })
+    // FIX ONLY: 3s timeout - this fetch must never hang timer 10s-15s after Outro
+    await Promise.race([
+      fetch('https://graph.facebook.com/v19.0/'+id,{ method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({ access_token: page.access_token, end_live_video: 'true' }) }),
+      new Promise((_,rej)=>setTimeout(()=>rej(new Error('end_live_video timeout')),3000))
+    ])
   }catch{}
 }
 const startFbPush=async(fbRtmpUrl:string)=>{
@@ -357,8 +373,8 @@ const startFbPush=async(fbRtmpUrl:string)=>{
   ws.onclose=()=>{ fbPushingRef.current=false; clearFbKeepalive(); scheduleFbPushResume() }
 }
 const stopFbPush=async()=>{
-  // FIX: Graceful stop - Outro dey for TagLive + Recorded but NO for FB VOD because WS close immediately killed ffmpeg mid-stream.
-  // Now: stop recorder -> wait 1.5s flush so last Outro frames enter FB -> send stop_push -> wait 0.8s -> close -> end_live_video.
+  // FIX ONLY: Flush while recorder still dey run - wait 2s FIRST so last Outro frames enter FB, THEN stop recorder.
+  // Before: stop recorder first, then wait - nothing to flush, Outro cut.
   if(stoppingFbRef.current) return
   stoppingFbRef.current=true
   // FIX ONLY: intentional stop must NOT trigger auto-resume
@@ -366,9 +382,9 @@ const stopFbPush=async()=>{
   clearFbResumeTimer()
   clearFbKeepalive()
   try{
+    await new Promise(r=>setTimeout(r,2000))
     try{ fbPushRecorderRef.current?.stop() }catch{}
     fbPushRecorderRef.current=null
-    await new Promise(r=>setTimeout(r,1500))
     try{ fbPushWsRef.current?.send(JSON.stringify({ type:'stop_push' })) }catch{}
     await new Promise(r=>setTimeout(r,800))
     try{ fbPushWsRef.current?.close() }catch{}
@@ -704,9 +720,10 @@ const createFbLiveAuto=async(page:any)=>{
     else if(active.type==='video' && broadcastVideoRef.current){
       try{
         const v=broadcastVideoRef.current as any
-        v.crossOrigin="anonymous"; v.playsInline=true; v.muted=false; v.volume=1; v.src=active.data; v.currentTime=0
+        v.crossOrigin="anonymous"; v.playsInline=true; v.src=active.data; v.currentTime=0
         connectBroadcastVideoToMixer()
-        await v.play()
+        // FIX ONLY: muted-first play, then unmute - unmuted play after awaits was blocked
+        await playBroadcastVideoMutedFirst(v)
       }catch{}
     }
     fbPendingRef.current=null
@@ -776,8 +793,8 @@ const startRecording=async()=>{
     try{ micGain.gain.value=0 }catch{}
     if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
     else if(active.type==='video'){
-      // FIX: Record-only Intro was muted=true, volume=0 - MediaElementSource outputs silence. Now unmuted.
-      if(broadcastVideoRef.current){ const v=broadcastVideoRef.current as any; v.crossOrigin="anonymous"; v.playsInline=true; v.muted=false; v.volume=1; v.src=active.data; v.currentTime=0; try{ await v.play() }catch{} }
+      // FIX ONLY: muted-first play, then unmute - same autoplay block as Live Intro
+      if(broadcastVideoRef.current){ const v=broadcastVideoRef.current as any; v.crossOrigin="anonymous"; v.playsInline=true; v.src=active.data; v.currentTime=0; try{ await playBroadcastVideoMutedFirst(v) }catch{} }
       // Do NOT create a second audioEl playing same file. If live mixer already connected broadcast video, its sound already enters live mixer. For Record-only, connect broadcast video to THIS recording ctx only if it was never connected before.
       try{
         if(!broadcastConnectedRef.current && broadcastVideoRef.current){
@@ -849,6 +866,8 @@ const stopRecording=async()=>{
       setTimeout(async()=>{
         if(micGain){ try{ micGain.gain.value=1 }catch{} }
         outroPlayingRef.current=false
+        // FIX ONLY: Timer + LIVE must end together with Outro - stop timer NOW, before flush / stopFbPush
+        stopTimer()
         // FIX: Graceful FB stop - hold 1s extra so last Outro frame enter push before recording stop
         await new Promise(r=>setTimeout(r,1000))
         stopRecordingFinal()
@@ -865,13 +884,15 @@ const stopRecording=async()=>{
       connectBroadcastVideoToMixer()
       if(broadcastVideoRef.current){
         const v=broadcastVideoRef.current as any
-        v.crossOrigin="anonymous"; v.playsInline=true; v.muted=false; v.volume=1
-        v.src=active.data; v.currentTime=0
-        try{ await v.play() }catch{}
+        v.crossOrigin="anonymous"; v.playsInline=true; v.src=active.data; v.currentTime=0
+        // FIX ONLY: muted-first play (Part 1 helper) - unmuted play after awaits was blocked, same as Intro
+        try{ await playBroadcastVideoMutedFirst(v) }catch{}
       }
       setTimeout(async()=>{
         if(micGain){ try{ micGain.gain.value=1 }catch{} }
         outroPlayingRef.current=false
+        // FIX ONLY: Timer + LIVE must end together with Outro - stop timer NOW, before flush / stopFbPush
+        stopTimer()
         // FIX: Graceful FB stop - hold 1s extra so last Outro frame enter push before recording stop
         await new Promise(r=>setTimeout(r,1000))
         stopRecordingFinal()
@@ -892,7 +913,11 @@ const stopFbLive=async()=>{
   if(stoppingFbLiveRef.current) return
   stoppingFbLiveRef.current=true
   try{
-    await stopFbPush(); if(isRecording) stopRecordingFinal(); setFbStreamUrl(''); setLiveId(''); setIsLive(false); setSelectedPage(null); stopTimer()
+    // FIX ONLY: Timer + LIVE must end together with Outro - clear UI + stop timer BEFORE await stopFbPush flush
+    // Before: stopTimer() dey after await stopFbPush() (2s flush + end_live_video) -> timer count 10s-15s extra
+    const wasRecording=isRecording
+    setFbStreamUrl(''); setLiveId(''); setIsLive(false); setSelectedPage(null); stopTimer()
+    await stopFbPush(); if(wasRecording) stopRecordingFinal()
   } finally { stoppingFbLiveRef.current=false }
 }
 const stopYtLive=()=>{ stopYtPush(); if(isRecording) stopRecordingFinal(); setYtLive(false); if(!fbStreamUrl){ setIsLive(false); stopTimer() } }
@@ -931,9 +956,10 @@ const startYtLiveWithIntro=async()=>{
     if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
     if(active.type==='video'&&broadcastVideoRef.current){
       const v=broadcastVideoRef.current as any
-      v.crossOrigin="anonymous"; v.playsInline=true; v.muted=false; v.volume=1; v.src=active.data; v.currentTime=0
+      v.crossOrigin="anonymous"; v.playsInline=true; v.src=active.data; v.currentTime=0
       connectBroadcastVideoToMixer()
-      try{ await v.play() }catch{}
+      // FIX ONLY: muted-first play, same autoplay block as FB Intro
+      try{ await playBroadcastVideoMutedFirst(v) }catch{}
     }
     introTimeoutRef.current=setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null }, (active.duration||5)*1000)
   } finally { creatingYtRef.current=false }
@@ -1285,7 +1311,7 @@ monthCount!==null?
 <textarea value={liveDescription} onChange={e=>setLiveDescription(e.target.value)} placeholder="Live Description - this shows on Facebook, NOT your verse" style={{width:'100%',padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12,boxSizing:'border-box',height:60}} />
 </div>
 {pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6,padding:10,background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff',color:selectedPage?.id===p.id?'#fff':'#000',borderRadius:8,fontSize:13,fontWeight:700,cursor:'pointer'}}>{p.name} {selectedPage?.id===p.id?'LIVE '+formatTime(liveSeconds):'(Go Live)'}</div>)} {fbStreamUrl&&<div style={{marginTop:10,padding:10,background:'#dcfce7',borderRadius:8,fontSize:11,wordBreak:'break-all'}}>FB: {fbStreamUrl.substring(0,70)}...</div>}{isLive&&<button onClick={stopFbLive} style={{marginTop:10,width:'100%',background:'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>■ Stop Facebook Live</button>}</div>
-<div style={{marginTop:14,border:'2px solid #ff0000',borderRadius:14,padding:12}}><b>Connect YouTube Live</b><input value={ytKey} onChange={e=>{setYtKey(e.target.value);localStorage.setItem('taglive_ytkey',e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={startYtLiveWithIntro} style={{flex:1,background:ytLive?'#16a34a':'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{ytLive?'YouTube LIVE '+formatTime(liveSeconds):'Go Live YouTube + Intro FULL'}</button><button onClick={()=>{if(broadcastPlaying) return; const active=outros.find(o=>o.id===activeOutroId); if(active){setBroadcastPlaying(active); if(active.type==='video'&&broadcastVideoRef.current){ const v=broadcastVideoRef.current as any; v.muted=false; v.volume=1; v.src=active.data; ensureLiveAudio(); try{ if(liveAudioCtxRef.current) liveAudioCtxRef.current.resume() }catch{}; connectBroadcastVideoToMixer(); v.play() } setTimeout(async()=>{setBroadcastPlaying(null); await new Promise(r=>setTimeout(r,1000)); stopYtLive()},(active.duration||5)*1000)} else {stopYtLive()}}} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Stop YT + Outro</button></div></div>
+<div style={{marginTop:14,border:'2px solid #ff0000',borderRadius:14,padding:12}}><b>Connect YouTube Live</b><input value={ytKey} onChange={e=>{setYtKey(e.target.value);localStorage.setItem('taglive_ytkey',e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={startYtLiveWithIntro} style={{flex:1,background:ytLive?'#16a34a':'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{ytLive?'YouTube LIVE '+formatTime(liveSeconds):'Go Live YouTube + Intro FULL'}</button><button onClick={()=>{if(broadcastPlaying) return; const active=outros.find(o=>o.id===activeOutroId); if(active){setBroadcastPlaying(active); if(active.type==='video'&&broadcastVideoRef.current){ const v=broadcastVideoRef.current as any; v.src=active.data; ensureLiveAudio(); try{ if(liveAudioCtxRef.current) liveAudioCtxRef.current.resume() }catch{}; connectBroadcastVideoToMixer(); playBroadcastVideoMutedFirst(v) } setTimeout(async()=>{setBroadcastPlaying(null); await new Promise(r=>setTimeout(r,1000)); stopYtLive()},(active.duration||5)*1000)} else {stopYtLive()}}} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Stop YT + Outro</button></div></div>
 {/* === UPDATE ONLY: RESTORED TikTok Box - was missing in Part 2 UI, logic still in Part 1 === */}
 <div style={{marginTop:14,border:'2px solid #000',borderRadius:14,padding:12}}><b>Connect TikTok Live</b>
 <input value={tiktokUsername} onChange={e=>setTiktokUsername(e.target.value)} placeholder="@your TikTok username" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/>
