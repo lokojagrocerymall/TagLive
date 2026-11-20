@@ -29,6 +29,11 @@ const [showComments,setShowComments]=useState(true)
 // === FIX ONLY: Reactions + comments error - Part 2 go show ❤️ count + permission error ===
 const [fbReactionCount,setFbReactionCount]=useState(0)
 const [fbCommentsError,setFbCommentsError]=useState('')
+// === FIX ONLY: Push Watchdog - visible push health for Part 2. Preview/timer kept counting while push was dead. ===
+const [pushStatus,setPushStatus]=useState<'Idle'|'Sending'|'Stalled'>('Idle')
+const lastFbChunkAtRef=useRef<number>(0)
+const pushWatchdogRef=useRef<any>(null)
+const pushRestartingRef=useRef(false)
 const fbCommentsTimerRef=useRef<any>(null)
 const fbCommentsSeenRef=useRef<Set<string>>(new Set())
 const addLiveComment=(c:any)=>{
@@ -223,7 +228,7 @@ const playBroadcastVideoMutedFirst=async(v:any)=>{
   }
 }
 // === FIX ONLY: Skipping - push bitrate 2.5 Mbps -> 800kbps (600kbps Data Saver), chunk 500ms -> 250ms ===
-const startPushRecorderOnReady=(ws:any, recorderRef:any, onStarted?:()=>void)=>{
+const startPushRecorderOnReady=(ws:any, recorderRef:any, onStarted?:()=>void, isFbPush?:boolean)=>{
   let started=false
   const doStart=()=>{
     if(started) return
@@ -235,7 +240,15 @@ const startPushRecorderOnReady=(ws:any, recorderRef:any, onStarted?:()=>void)=>{
       const pushBits=lowData?600000:800000
       const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: pushBits })
       recorderRef.current=rec
-      rec.ondataavailable=(e)=>{ if(e.data.size>0 && ws.readyState===WebSocket.OPEN){ try{ ws.send(e.data) }catch{} } }
+      rec.ondataavailable=(e)=>{
+        if(e.data.size>0 && ws.readyState===WebSocket.OPEN){
+          try{ ws.send(e.data) }catch{}
+          // FIX ONLY: Watchdog heartbeat - only for FB push, so YT/TikTok chunks do not mask an FB stall.
+          if(isFbPush){ lastFbChunkAtRef.current=Date.now(); setPushStatus('Sending') }
+          // FIX ONLY: Stale socket - buffer full means bridge is not draining. Close it so resume can run.
+          try{ if(ws.bufferedAmount>4000000){ try{ ws.close() }catch{} } }catch{}
+        }
+      }
       rec.start(250)
       if(onStarted) onStarted()
     }catch{}
@@ -327,6 +340,32 @@ const fbPushStoppedResolverRef=useRef<any>(null)
 const fbResumeAttemptsRef=useRef(0)
 const clearFbKeepalive=()=>{ try{ if(fbKeepaliveRef.current) clearInterval(fbKeepaliveRef.current) }catch{}; fbKeepaliveRef.current=null }
 const clearFbResumeTimer=()=>{ try{ if(fbResumeTimerRef.current) clearTimeout(fbResumeTimerRef.current) }catch{}; fbResumeTimerRef.current=null }
+// === FIX ONLY: Push Watchdog - detect dead push even when WS stays OPEN. Previous code only resumed on WS close. ===
+const stopPushWatchdog=()=>{ try{ if(pushWatchdogRef.current) clearInterval(pushWatchdogRef.current) }catch{}; pushWatchdogRef.current=null; pushRestartingRef.current=false }
+const startPushWatchdog=()=>{
+  stopPushWatchdog()
+  lastFbChunkAtRef.current=Date.now()
+  pushWatchdogRef.current=setInterval(()=>{
+    try{
+      if(fbStopIntentionalRef.current) return
+      if(!lastFbPushRef.current) return
+      if(!fbPushingRef.current) return
+      if(pushRestartingRef.current) return
+      const idleMs=Date.now()-lastFbChunkAtRef.current
+      if(idleMs<3000) return
+      // No chunk sent for 3s while marked live: push is stalled, even though WS may still be OPEN.
+      setPushStatus('Stalled')
+      pushRestartingRef.current=true
+      fbPushingRef.current=false
+      try{ fbPushRecorderRef.current?.stop() }catch{}
+      fbPushRecorderRef.current=null
+      try{ fbPushWsRef.current?.close() }catch{}
+      fbPushWsRef.current=null
+      const url=lastFbPushRef.current
+      setTimeout(()=>{ pushRestartingRef.current=false; if(!fbStopIntentionalRef.current && url) startFbPush(url) },300)
+    }catch{}
+  },2000)
+}
 const scheduleFbPushResume=()=>{
   if(fbStopIntentionalRef.current) return
   if(!lastFbPushRef.current) return
@@ -415,7 +454,7 @@ const startFbPush=async(fbRtmpUrl:string)=>{
   fbPushRecorderRef.current=null
   const ws=new WebSocket(WS_URL)
   fbPushWsRef.current=ws
-  const starter=startPushRecorderOnReady(ws, fbPushRecorderRef, ()=>{ fbPushingRef.current=true; fbResumeAttemptsRef.current=0; startTimer(); startLocalRecording() })
+  const starter=startPushRecorderOnReady(ws, fbPushRecorderRef, ()=>{ fbPushingRef.current=true; fbResumeAttemptsRef.current=0; lastFbChunkAtRef.current=Date.now(); setPushStatus('Sending'); startPushWatchdog(); startTimer(); startLocalRecording() }, true)
   ws.onopen=()=>{
     let rtmpUrl=fbRtmpUrl
     let streamKey=''
@@ -447,6 +486,8 @@ const stopFbPush=async()=>{
   fbStopIntentionalRef.current=true
   clearFbResumeTimer()
   clearFbKeepalive()
+  stopPushWatchdog()
+  setPushStatus('Idle')
   stopFbCommentsPolling()
   try{
     await new Promise(r=>setTimeout(r,2000))
@@ -466,7 +507,7 @@ const stopFbPush=async()=>{
     await endFbLiveVideo()
   } finally { stoppingFbRef.current=false; fbPushStoppedResolverRef.current=null }
 }
-useEffect(()=>{ return ()=>{ fbStopIntentionalRef.current=true; clearFbResumeTimer(); clearFbKeepalive(); stopFbCommentsPolling(); try{ fbPushRecorderRef.current?.stop() }catch{}; try{ fbPushWsRef.current?.close() }catch{} } },[])
+useEffect(()=>{ return ()=>{ fbStopIntentionalRef.current=true; clearFbResumeTimer(); clearFbKeepalive(); stopPushWatchdog(); stopFbCommentsPolling(); try{ fbPushRecorderRef.current?.stop() }catch{}; try{ fbPushWsRef.current?.close() }catch{} } },[])
 // === END OF PART 1A - CONTINUE WITH PART 1B BELOW ===
 // === UPDATE ONLY: YouTube RTMP Push - FIX 3+5+7: YouTube was only timer before, now real push ===
 const ytPushWsRef=useRef<WebSocket|null>(null)
@@ -1337,6 +1378,8 @@ monthCount!==null?
 )}
 {isCam&&!broadcastPlaying&&(<div style={{position:'absolute',top: bgMode==='split'?'auto':'12px',bottom: bgMode==='split'?'50px':'auto',right:12,display:'flex',gap:8,zIndex:50}}><button onClick={toggleCamera} style={{background:'rgba(0,0,0,0.85)',color:'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>Flip</button><button onClick={toggleTorch} style={{background:torch?'#fbbf24':'rgba(0,0,0,0.85)',color:torch?'#000':'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>{torch?'Flash On':'Flash'}</button></div>)}
 </div>
+{/* === FIX ONLY: Push Status - directly under preview, from Part 1A watchdog === */}
+{(isLive||pushStatus!=='Idle')&&(<div style={{marginTop:10,padding:'10px 12px',borderRadius:12,background:pushStatus==='Stalled'?'#fef2f2':pushStatus==='Sending'?'#f0fdf4':'#f5f5f7',border:pushStatus==='Stalled'?'2px solid #ff0000':'1px solid #ddd',fontWeight:900,fontSize:12,color:pushStatus==='Stalled'?'#b91c1c':'#111'}}>{pushStatus==='Sending'?'🟢 PUSH: Sending — Facebook is receiving video':pushStatus==='Stalled'?'🔴 PUSH: Stalled — Restarting... Do NOT close TagLive':`⚪ PUSH: ${pushStatus}`}</div>)}
 <div style={{display:'flex',gap:8,marginTop:12}}>{!isCam?<button onClick={()=>startCamera()} style={{flex:1,background:'#111',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Start Camera {lowData?'(480p)':''}</button>:<><button onClick={toggleCamera} style={{flex:1,background:'#7c3aed',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Switch Camera</button><button onClick={stopCamera} style={{flex:1,background:'#444',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Stop</button></>}</div>
 <div style={{display:'flex',gap:6,marginTop:10}}>
 {/* FIX 2: Record button shows merged state - Go Live already records, this is Record Only when not live */}
