@@ -26,6 +26,9 @@ const [liveId,setLiveId]=useState('')
 // === UPDATE ONLY: Live Comments - ONE list for FB + YT + TikTok. Part 2 go show am. ===
 const [liveComments,setLiveComments]=useState<any[]>([])
 const [showComments,setShowComments]=useState(true)
+// === FIX ONLY: Reactions + comments error - Part 2 go show ❤️ count + permission error ===
+const [fbReactionCount,setFbReactionCount]=useState(0)
+const [fbCommentsError,setFbCommentsError]=useState('')
 const fbCommentsTimerRef=useRef<any>(null)
 const fbCommentsSeenRef=useRef<Set<string>>(new Set())
 const addLiveComment=(c:any)=>{
@@ -160,8 +163,9 @@ const getPushAudioTrack=()=>{
   }catch{}
   return streamRef.current?.getAudioTracks()[0]||null
 }
+// === FIX ONLY: Skipping - push canvas 30fps -> 15fps. Less frames, less data, no ffmpeg drop. ===
 const getPushStream=()=>{
-  const canvasStream=(canvasRef.current as any).captureStream(30) as MediaStream
+  const canvasStream=(canvasRef.current as any).captureStream(15) as MediaStream
   const audioTrack=getPushAudioTrack()
   if(audioTrack) canvasStream.addTrack(audioTrack)
   return canvasStream
@@ -218,7 +222,7 @@ const playBroadcastVideoMutedFirst=async(v:any)=>{
     try{ v.muted=true; v.volume=0; await v.play() }catch{}
   }
 }
-// === FIX: WAIT FOR BRIDGE push_started BEFORE starting MediaRecorder, else Facebook rejects corrupt stream ===
+// === FIX ONLY: Skipping - push bitrate 2.5 Mbps -> 800kbps (600kbps Data Saver), chunk 500ms -> 250ms ===
 const startPushRecorderOnReady=(ws:any, recorderRef:any, onStarted?:()=>void)=>{
   let started=false
   const doStart=()=>{
@@ -228,10 +232,11 @@ const startPushRecorderOnReady=(ws:any, recorderRef:any, onStarted?:()=>void)=>{
       const canvasStream=getPushStream()
       let mime='video/webm;codecs=vp8,opus'
       if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm'
-      const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 2500000 })
+      const pushBits=lowData?600000:800000
+      const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: pushBits })
       recorderRef.current=rec
       rec.ondataavailable=(e)=>{ if(e.data.size>0 && ws.readyState===WebSocket.OPEN){ try{ ws.send(e.data) }catch{} } }
-      rec.start(500)
+      rec.start(250)
       if(onStarted) onStarted()
     }catch{}
   }
@@ -327,7 +332,6 @@ const scheduleFbPushResume=()=>{
   if(!lastFbPushRef.current) return
   if(fbResumeTimerRef.current) return
   if(fbResumeAttemptsRef.current>=5) return
-  // FIX ONLY: Debounce + backoff. Before: resume after 1s on every blip, killing recorder, Facebook see gap and finalize VOD.
   const delay=1500+fbResumeAttemptsRef.current*1500
   fbResumeTimerRef.current=setTimeout(()=>{
     fbResumeTimerRef.current=null
@@ -349,25 +353,50 @@ const endFbLiveVideo=async()=>{
     ])
   }catch{}
 }
-// === UPDATE ONLY: Facebook comments poll - every 5s, only while FB live ===
+// === FIX ONLY: Comments + Reactions - FB.api first (no CORS), fetch fallback, poll both ===
+const fbApiGet=(path:string)=>{
+  return new Promise<any>((resolve)=>{
+    try{
+      if(window.FB && window.FB.api){ window.FB.api(path,(res:any)=>{ resolve(res||{}) }); return }
+    }catch{}
+    resolve({})
+  })
+}
 const fetchFbComments=async()=>{
   const id=fbLiveIdRef.current
   const page=fbPageRef.current
   if(!id || !page?.access_token) return
   try{
-    const res=await fetch('https://graph.facebook.com/v19.0/'+id+'/comments?fields=id,from{name},message,created_time&limit=25&access_token='+encodeURIComponent(page.access_token))
-    const data=await res.json()
+    // Comments via FB.api - page token already inside FB SDK session, no CORS block like fetch
+    let data:any={}
+    try{ data=await fbApiGet('/'+id+'/comments?fields=id,from{name},message,created_time&limit=25') }catch{}
+    if(!data?.data?.length){
+      const res=await fetch('https://graph.facebook.com/v19.0/'+id+'/comments?fields=id,from{name},message,created_time&limit=25&access_token='+encodeURIComponent(page.access_token))
+      data=await res.json()
+    }
+    if(data?.error){ setFbCommentsError(data.error?.message||'Facebook comments blocked - re-login Facebook'); return }
+    setFbCommentsError('')
     if(data?.data?.length){
       data.data.forEach((c:any)=>{
         addLiveComment({ id:c.id, source:'Facebook', name:c.from?.name||'Facebook', text:c.message||'', time:c.created_time?new Date(c.created_time).toLocaleTimeString():new Date().toLocaleTimeString() })
       })
     }
-  }catch{}
+    // Reactions - separate endpoint, never fetched before, that is why ❤️ never show
+    try{
+      let r:any={}
+      try{ r=await fbApiGet('/'+id+'/reactions?summary=true&limit=0') }catch{}
+      if(!r?.summary){
+        const rr=await fetch('https://graph.facebook.com/v19.0/'+id+'/reactions?summary=true&limit=0&access_token='+encodeURIComponent(page.access_token))
+        r=await rr.json()
+      }
+      if(r?.summary?.total_count!=null) setFbReactionCount(Number(r.summary.total_count||0))
+    }catch{}
+  }catch(e:any){ setFbCommentsError('Comments fetch failed - check network / re-login') }
 }
 const startFbCommentsPolling=()=>{
   try{ if(fbCommentsTimerRef.current) clearInterval(fbCommentsTimerRef.current) }catch{}
   fbCommentsSeenRef.current=new Set()
-  setLiveComments([])
+  setLiveComments([]); setFbReactionCount(0); setFbCommentsError('')
   fetchFbComments()
   fbCommentsTimerRef.current=setInterval(()=>{ fetchFbComments() },5000)
 }
@@ -375,7 +404,6 @@ const stopFbCommentsPolling=()=>{ try{ if(fbCommentsTimerRef.current) clearInter
 const startFbPush=async(fbRtmpUrl:string)=>{
   if(!fbRtmpUrl) return
   if(!canvasRef.current){ alert('Start Camera first'); return }
-  // FIX ONLY: No restart if push already OPEN. Before: any resume call kill running recorder and cut Facebook VOD.
   if(fbPushingRef.current && fbPushWsRef.current && fbPushWsRef.current.readyState===WebSocket.OPEN) return
   stoppingFbRef.current=false
   fbStopIntentionalRef.current=false
@@ -394,7 +422,6 @@ const startFbPush=async(fbRtmpUrl:string)=>{
     const parts=fbRtmpUrl.split('/')
     if(parts.length>1){ streamKey=parts.pop() as string; rtmpUrl=parts.join('/') }
     ws.send(JSON.stringify({ type:'start_push', rtmpUrl, streamKey }))
-    // FIX ONLY: No ping keepalive. Before: ping every 10s bridge no understand fit close WS. Video chunks every 500ms already keep WS alive.
     clearFbKeepalive()
   }
   ws.onmessage=(e)=>{
@@ -436,7 +463,6 @@ const stopFbPush=async()=>{
     fbPushingRef.current=false
     lastFbPushRef.current=null
     fbResumeAttemptsRef.current=0
-    // FIX ONLY: end_live_video ONLY here, for intentional Stop. Never on WS drop / resume.
     await endFbLiveVideo()
   } finally { stoppingFbRef.current=false; fbPushStoppedResolverRef.current=null }
 }
@@ -727,7 +753,6 @@ const createFbLiveForPage=async(page:any)=>{
     fbLiveIdRef.current=data.id; fbPageRef.current=page
     ensureLiveAudio()
     await startFbPush(data.stream_url)
-    // UPDATE ONLY: Start FB comments poll AFTER push, so liveId + page token ready.
     startFbCommentsPolling()
     return data
   }catch(e:any){
@@ -1320,6 +1345,14 @@ monthCount!==null?
 {recordedUrl&&<a href={recordedUrl} download={'TagLive-'+Date.now()+'.mp4'} style={{flex:1,background:'#16a34a',color:'#fff',padding:12,borderRadius:10,fontWeight:800,textAlign:'center',textDecoration:'none',fontSize:12}}>Download</a>}
 </div>
 {recordedUrl&&<video src={recordedUrl} controls playsInline style={{width:'100%',marginTop:8,borderRadius:12}}/>}
+{/* === FIX ONLY: Live Comments MOVED HERE - directly under preview / Record, no scroll needed === */}
+<div style={{marginTop:10,border:'2px solid #7c3aed',borderRadius:14,padding:12,background:'#fff'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b>💬 Live Comments ({liveComments.length})</b><button onClick={()=>setShowComments(!showComments)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:showComments?'#7c3aed':'#111',color:'#fff',fontWeight:800,fontSize:11}}>{showComments?'Hide':'Show'}</button></div>
+<div style={{marginTop:8,fontSize:11,fontWeight:700}}>❤️ FB Reactions: {fbReactionCount} | 👀 TikTok Viewers: {tiktokViewerCount} | ❤️ TikTok Likes: {tiktokLikes} {isLive?'| ● FB LIVE '+formatTime(liveSeconds):''}</div>
+{fbCommentsError&&<div style={{marginTop:6,padding:8,background:'#fef2f2',borderRadius:8,fontSize:11,color:'#b91c1c',fontWeight:700}}>⚠️ {fbCommentsError} — Re-login Facebook with pages_read_engagement</div>}
+{showComments&&(<div style={{marginTop:8,maxHeight:320,overflowY:'auto',display:'flex',flexDirection:'column',gap:6}}>
+{liveComments.length===0?<div style={{padding:12,background:'#f9f5ff',borderRadius:10,fontSize:12,opacity:.7}}>{isLive?'Waiting for comments... Ask viewers to comment "Amen"':'Go Live on Facebook / TikTok, comments go show here.'}</div>:liveComments.slice().reverse().map((c:any)=>(<div key={c.id} style={{padding:'8px 10px',background:c.source==='TikTok'?'#f0fdf4':'#f3f0ff',borderRadius:10,border:'1px solid #eee'}}><div style={{display:'flex',justifyContent:'space-between',gap:6}}><b style={{fontSize:12}}>{c.name}</b><span style={{fontSize:10,background:c.source==='TikTok'?'#16a34a':'#1877F2',color:'#fff',padding:'2px 7px',borderRadius:10,fontWeight:800}}>{c.source}</span></div><div style={{fontSize:13,marginTop:2,lineHeight:1.4}}>{c.text}</div><div style={{fontSize:10,opacity:.6,marginTop:2}}>{c.time||''}</div></div>))}
+</div>)}
+</div>
 <div style={{display:'flex',gap:6,marginTop:10}}><button onClick={openBibleApp} style={{flex:1,background:'#2563eb',color:'#fff',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Open Bible</button><button onClick={pasteClipboard} style={{flex:1,background:'#059669',color:'#fff',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Paste</button><button onClick={saveVerse} style={{flex:1,background:'#f59e0b',color:'#000',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Save</button></div>
 <textarea value={verse} onChange={e=>setVerse(e.target.value)} style={{width:'100%',height:90,marginTop:10,padding:12,borderRadius:12,border:'1px solid #ddd'}} placeholder={"Ministering:\nNAME OF PRESENTER"}/>
 {saved.length>0&&<div style={{marginTop:8,border:'1px solid #eee',borderRadius:12,padding:8,background:'#fff'}}>
@@ -1355,13 +1388,6 @@ monthCount!==null?
 <button onClick={()=>{ ensureLiveAudio(); startTikTokPush() }} style={{flex:1,background:tiktokPushing?'#16a34a':'#000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none',fontSize:12}}>{tiktokPushing?'TikTok LIVE '+formatTime(liveSeconds):'Go Live TikTok'}</button>
 <button onClick={stopTikTokLive} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff',fontSize:12}}>Stop TikTok</button>
 </div>
-</div>
-{/* === UPDATE ONLY: Live Comments - ONE box for FB + TikTok. Logic dey Part 1A. === */}
-<div style={{marginTop:14,border:'2px solid #7c3aed',borderRadius:14,padding:12,background:'#fff'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b>💬 Live Comments ({liveComments.length})</b><button onClick={()=>setShowComments(!showComments)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:showComments?'#7c3aed':'#111',color:'#fff',fontWeight:800,fontSize:11}}>{showComments?'Hide':'Show'}</button></div>
-<div style={{marginTop:8,fontSize:11,fontWeight:700}}>👀 TikTok Viewers: {tiktokViewerCount} | ❤️ Likes: {tiktokLikes} {isLive?'| ● FB LIVE '+formatTime(liveSeconds):''}</div>
-{showComments&&(<div style={{marginTop:8,maxHeight:320,overflowY:'auto',display:'flex',flexDirection:'column',gap:6}}>
-{liveComments.length===0?<div style={{padding:12,background:'#f9f5ff',borderRadius:10,fontSize:12,opacity:.7}}>{isLive?'Waiting for comments... Ask viewers to comment "Amen"':'Go Live on Facebook / TikTok, comments go show here.'}</div>:liveComments.slice().reverse().map((c:any)=>(<div key={c.id} style={{padding:'8px 10px',background:c.source==='TikTok'?'#f0fdf4':'#f3f0ff',borderRadius:10,border:'1px solid #eee'}}><div style={{display:'flex',justifyContent:'space-between',gap:6}}><b style={{fontSize:12}}>{c.name}</b><span style={{fontSize:10,background:c.source==='TikTok'?'#16a34a':'#1877F2',color:'#fff',padding:'2px 7px',borderRadius:10,fontWeight:800}}>{c.source}</span></div><div style={{fontSize:13,marginTop:2,lineHeight:1.4}}>{c.text}</div><div style={{fontSize:10,opacity:.6,marginTop:2}}>{c.time||''}</div></div>))}
-</div>)}
 </div>
 </div>
 </div>
