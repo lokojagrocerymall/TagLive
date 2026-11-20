@@ -29,7 +29,7 @@ const [showComments,setShowComments]=useState(true)
 // === FIX ONLY: Reactions + comments error - Part 2 go show ❤️ count + permission error ===
 const [fbReactionCount,setFbReactionCount]=useState(0)
 const [fbCommentsError,setFbCommentsError]=useState('')
-// === FIX ONLY: Push Watchdog - visible push health for Part 2. Preview/timer kept counting while push was dead. ===
+// === FIX ONLY: FB cutting - pushStatus shows real push, not timer. Local preview can be complete while push is dead. ===
 const [pushStatus,setPushStatus]=useState<'Idle'|'Sending'|'Stalled'>('Idle')
 const lastFbChunkAtRef=useRef<number>(0)
 const pushWatchdogRef=useRef<any>(null)
@@ -243,9 +243,9 @@ const startPushRecorderOnReady=(ws:any, recorderRef:any, onStarted?:()=>void, is
       rec.ondataavailable=(e)=>{
         if(e.data.size>0 && ws.readyState===WebSocket.OPEN){
           try{ ws.send(e.data) }catch{}
-          // FIX ONLY: Watchdog heartbeat - only for FB push, so YT/TikTok chunks do not mask an FB stall.
+          // FIX ONLY: FB cutting - heartbeat for watchdog. Only FB chunks count, so YT/TikTok cannot mask an FB stall.
           if(isFbPush){ lastFbChunkAtRef.current=Date.now(); setPushStatus('Sending') }
-          // FIX ONLY: Stale socket - buffer full means bridge is not draining. Close it so resume can run.
+          // FIX ONLY: FB cutting - stale socket, buffer full means bridge is not draining. Close it so resume can run.
           try{ if(ws.bufferedAmount>4000000){ try{ ws.close() }catch{} } }catch{}
         }
       }
@@ -340,7 +340,7 @@ const fbPushStoppedResolverRef=useRef<any>(null)
 const fbResumeAttemptsRef=useRef(0)
 const clearFbKeepalive=()=>{ try{ if(fbKeepaliveRef.current) clearInterval(fbKeepaliveRef.current) }catch{}; fbKeepaliveRef.current=null }
 const clearFbResumeTimer=()=>{ try{ if(fbResumeTimerRef.current) clearTimeout(fbResumeTimerRef.current) }catch{}; fbResumeTimerRef.current=null }
-// === FIX ONLY: Push Watchdog - detect dead push even when WS stays OPEN. Previous code only resumed on WS close. ===
+// === FIX ONLY: FB cutting - watchdog. Old code only resumed on WS close. Push can die while WS stays OPEN, local preview still complete. ===
 const stopPushWatchdog=()=>{ try{ if(pushWatchdogRef.current) clearInterval(pushWatchdogRef.current) }catch{}; pushWatchdogRef.current=null; pushRestartingRef.current=false }
 const startPushWatchdog=()=>{
   stopPushWatchdog()
@@ -353,7 +353,6 @@ const startPushWatchdog=()=>{
       if(pushRestartingRef.current) return
       const idleMs=Date.now()-lastFbChunkAtRef.current
       if(idleMs<3000) return
-      // No chunk sent for 3s while marked live: push is stalled, even though WS may still be OPEN.
       setPushStatus('Stalled')
       pushRestartingRef.current=true
       fbPushingRef.current=false
@@ -370,8 +369,9 @@ const scheduleFbPushResume=()=>{
   if(fbStopIntentionalRef.current) return
   if(!lastFbPushRef.current) return
   if(fbResumeTimerRef.current) return
-  if(fbResumeAttemptsRef.current>=5) return
-  const delay=1500+fbResumeAttemptsRef.current*1500
+  // FIX ONLY: FB cutting - was 5 attempts, so a push that died at 0:50 never resumed for a long live. Now 30.
+  if(fbResumeAttemptsRef.current>=30) return
+  const delay=Math.min(1500+fbResumeAttemptsRef.current*500, 4000)
   fbResumeTimerRef.current=setTimeout(()=>{
     fbResumeTimerRef.current=null
     if(fbStopIntentionalRef.current) return
@@ -380,6 +380,19 @@ const scheduleFbPushResume=()=>{
     fbResumeAttemptsRef.current+=1
     startFbPush(lastFbPushRef.current)
   },delay)
+}
+// FIX ONLY: FB cutting - manual resume for Part 2 button. Use before Facebook finalizes the post.
+const resumeFbPushNow=()=>{
+  if(fbStopIntentionalRef.current) return
+  if(!lastFbPushRef.current) return
+  if(fbPushingRef.current && Date.now()-lastFbChunkAtRef.current<3000) return
+  clearFbResumeTimer()
+  fbPushingRef.current=false
+  try{ fbPushRecorderRef.current?.stop() }catch{}
+  fbPushRecorderRef.current=null
+  try{ fbPushWsRef.current?.close() }catch{}
+  fbPushWsRef.current=null
+  startFbPush(lastFbPushRef.current)
 }
 const endFbLiveVideo=async()=>{
   const id=fbLiveIdRef.current
@@ -392,11 +405,15 @@ const endFbLiveVideo=async()=>{
     ])
   }catch{}
 }
-// === FIX ONLY: Comments + Reactions - FB.api first (no CORS), fetch fallback, poll both ===
-const fbApiGet=(path:string)=>{
+// === FIX ONLY: Comments + Reactions - FB.api with Page token, fetch fallback, live_comments fallback ===
+const fbApiGet=(path:string, accessToken?:string)=>{
   return new Promise<any>((resolve)=>{
     try{
-      if(window.FB && window.FB.api){ window.FB.api(path,(res:any)=>{ resolve(res||{}) }); return }
+      if(window.FB && window.FB.api){
+        // FIX ONLY: Chats - old code called FB.api(path) with no token, so Page live comments returned empty.
+        if(accessToken){ window.FB.api(path, { access_token: accessToken }, (res:any)=>{ resolve(res||{}) }); return }
+        window.FB.api(path,(res:any)=>{ resolve(res||{}) }); return
+      }
     }catch{}
     resolve({})
   })
@@ -406,12 +423,20 @@ const fetchFbComments=async()=>{
   const page=fbPageRef.current
   if(!id || !page?.access_token) return
   try{
-    // Comments via FB.api - page token already inside FB SDK session, no CORS block like fetch
     let data:any={}
-    try{ data=await fbApiGet('/'+id+'/comments?fields=id,from{name},message,created_time&limit=25') }catch{}
+    try{ data=await fbApiGet('/'+id+'/comments?fields=id,from{name},message,created_time&limit=25&order=reverse_chronological', page.access_token) }catch{}
     if(!data?.data?.length){
-      const res=await fetch('https://graph.facebook.com/v19.0/'+id+'/comments?fields=id,from{name},message,created_time&limit=25&access_token='+encodeURIComponent(page.access_token))
+      const res=await fetch('https://graph.facebook.com/v19.0/'+id+'/comments?fields=id,from{name},message,created_time&limit=25&order=reverse_chronological&access_token='+encodeURIComponent(page.access_token))
       data=await res.json()
+    }
+    // FIX ONLY: Chats - Facebook live videos also expose live_comments. If /comments is empty, try that before giving up.
+    if(!data?.data?.length){
+      try{
+        const res2=await fetch('https://graph.facebook.com/v19.0/'+id+'/live_comments?fields=id,from{name},message,created_time&limit=25&access_token='+encodeURIComponent(page.access_token))
+        const data2=await res2.json()
+        if(data2?.data?.length) data=data2
+        else if(data2?.error && !data?.error) data=data2
+      }catch{}
     }
     if(data?.error){ setFbCommentsError(data.error?.message||'Facebook comments blocked - re-login Facebook'); return }
     setFbCommentsError('')
@@ -423,7 +448,7 @@ const fetchFbComments=async()=>{
     // Reactions - separate endpoint, never fetched before, that is why ❤️ never show
     try{
       let r:any={}
-      try{ r=await fbApiGet('/'+id+'/reactions?summary=true&limit=0') }catch{}
+      try{ r=await fbApiGet('/'+id+'/reactions?summary=true&limit=0', page.access_token) }catch{}
       if(!r?.summary){
         const rr=await fetch('https://graph.facebook.com/v19.0/'+id+'/reactions?summary=true&limit=0&access_token='+encodeURIComponent(page.access_token))
         r=await rr.json()
@@ -471,7 +496,7 @@ const startFbPush=async(fbRtmpUrl:string)=>{
         if(fbPushStoppedResolverRef.current){ const r=fbPushStoppedResolverRef.current; fbPushStoppedResolverRef.current=null; try{ r() }catch{} }
         fbPushingRef.current=false; clearFbKeepalive(); scheduleFbPushResume()
       }
-      if(d.type==='error'){ fbPushingRef.current=false; if(d.message) alert('Facebook Push: '+d.message) }
+      if(d.type==='error'){ fbPushingRef.current=false; if(d.message) alert('Facebook Push: '+d.message); scheduleFbPushResume() }
     }catch{}
   }
   ws.onerror=()=>{ fbPushingRef.current=false; clearFbKeepalive(); scheduleFbPushResume() }
@@ -1378,8 +1403,8 @@ monthCount!==null?
 )}
 {isCam&&!broadcastPlaying&&(<div style={{position:'absolute',top: bgMode==='split'?'auto':'12px',bottom: bgMode==='split'?'50px':'auto',right:12,display:'flex',gap:8,zIndex:50}}><button onClick={toggleCamera} style={{background:'rgba(0,0,0,0.85)',color:'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>Flip</button><button onClick={toggleTorch} style={{background:torch?'#fbbf24':'rgba(0,0,0,0.85)',color:torch?'#000':'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>{torch?'Flash On':'Flash'}</button></div>)}
 </div>
-{/* === FIX ONLY: Push Status - directly under preview, from Part 1A watchdog === */}
-{(isLive||pushStatus!=='Idle')&&(<div style={{marginTop:10,padding:'10px 12px',borderRadius:12,background:pushStatus==='Stalled'?'#fef2f2':pushStatus==='Sending'?'#f0fdf4':'#f5f5f7',border:pushStatus==='Stalled'?'2px solid #ff0000':'1px solid #ddd',fontWeight:900,fontSize:12,color:pushStatus==='Stalled'?'#b91c1c':'#111'}}>{pushStatus==='Sending'?'🟢 PUSH: Sending — Facebook is receiving video':pushStatus==='Stalled'?'🔴 PUSH: Stalled — Restarting... Do NOT close TagLive':`⚪ PUSH: ${pushStatus}`}</div>)}
+{/* === FIX ONLY: FB cutting - pushStatus + Resume Push directly under preview, from Part 1A watchdog === */}
+{(isLive||pushStatus!=='Idle')&&(<div style={{marginTop:10,padding:'10px 12px',borderRadius:12,background:pushStatus==='Stalled'?'#fef2f2':pushStatus==='Sending'?'#f0fdf4':'#f5f5f7',border:pushStatus==='Stalled'?'2px solid #ff0000':'1px solid #ddd',display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><span style={{fontWeight:900,fontSize:12,color:pushStatus==='Stalled'?'#b91c1c':'#111'}}>{pushStatus==='Sending'?'🟢 PUSH: Sending — Facebook is receiving video':pushStatus==='Stalled'?'🔴 PUSH: Stalled — Restarting... Do NOT tap Stop yet':`⚪ PUSH: ${pushStatus}`}</span>{pushStatus==='Stalled'&&(<button onClick={()=>{ try{ resumeFbPushNow() }catch{} }} style={{padding:'8px 12px',borderRadius:20,border:'none',background:'#ff0000',color:'#fff',fontWeight:900,fontSize:11,flexShrink:0}}>🔁 Resume Push</button>)}</div>)}
 <div style={{display:'flex',gap:8,marginTop:12}}>{!isCam?<button onClick={()=>startCamera()} style={{flex:1,background:'#111',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Start Camera {lowData?'(480p)':''}</button>:<><button onClick={toggleCamera} style={{flex:1,background:'#7c3aed',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Switch Camera</button><button onClick={stopCamera} style={{flex:1,background:'#444',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Stop</button></>}</div>
 <div style={{display:'flex',gap:6,marginTop:10}}>
 {/* FIX 2: Record button shows merged state - Go Live already records, this is Record Only when not live */}
