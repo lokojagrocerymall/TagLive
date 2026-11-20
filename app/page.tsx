@@ -23,6 +23,17 @@ const [pages,setPages]=useState<any[]>([])
 const [selectedPage,setSelectedPage]=useState<any>(null)
 const [fbStreamUrl,setFbStreamUrl]=useState('')
 const [liveId,setLiveId]=useState('')
+// === UPDATE ONLY: Live Comments - ONE list for FB + YT + TikTok. Part 2 go show am. ===
+const [liveComments,setLiveComments]=useState<any[]>([])
+const [showComments,setShowComments]=useState(true)
+const fbCommentsTimerRef=useRef<any>(null)
+const fbCommentsSeenRef=useRef<Set<string>>(new Set())
+const addLiveComment=(c:any)=>{
+  const id=c.id||('c_'+Date.now()+'_'+Math.random().toString(36).slice(2,7))
+  if(fbCommentsSeenRef.current.has(id)) return
+  fbCommentsSeenRef.current.add(id)
+  setLiveComments((p)=>[...p.slice(-99),{...c,id}])
+}
 const [pos,setPos]=useState({ x: 360, y: 1050, scale: 0.95 })
 const [bgMode,setBgMode]=useState<'face'|'black'|'image'|'split'>('face')
 const [saved,setSaved]=useState<string[]>([])
@@ -89,7 +100,8 @@ const connectTikTok=()=>{
   ws.onmessage=(e)=>{
     try{
       const d=JSON.parse(e.data)
-      if(d.type==='chat' || d.type==='comment'){ setTiktokLastComment((d.nickname||d.username||'')+': '+(d.comment||d.text||'')) }
+      // UPDATE ONLY: TikTok chat also enter ONE liveComments list, so Part 2 box show am with FB.
+      if(d.type==='chat' || d.type==='comment'){ const txt=(d.nickname||d.username||'')+': '+(d.comment||d.text||''); setTiktokLastComment(txt); addLiveComment({ source:'TikTok', name:d.nickname||d.username||'TikTok', text:d.comment||d.text||'', time:new Date().toLocaleTimeString() }) }
       if(d.type==='viewerCount' || d.type==='viewers'){ setTiktokViewerCount(Number(d.count||d.viewers||0)) }
       if(d.type==='like' || d.type==='likes'){ setTiktokLikes((p)=>p+Number(d.count||1)) }
       if(d.type==='connected' || d.type==='roomInfo'){ setTiktokStatus('Connected') }
@@ -162,11 +174,8 @@ const connectBroadcastVideoToMixer=()=>{
     const v=broadcastVideoRef.current as any
     if(!v) return
     if(broadcastConnectedRef.current) return
-    // A video element can only have ONE MediaElementSource in its lifetime. Connect once, reuse forever.
     const src=ctx.createMediaElementSource(v)
     src.connect(liveAudioDestRef.current)
-    // FIX: Monitor sound - MediaElementSource cuts video from phone speaker. Connect back to speaker so YOU hear Intro/Outro too.
-    // Mic stays NOT connected to speaker (no echo), only Intro/Outro video goes to speaker.
     try{
       const monitorGain=ctx.createGain(); monitorGain.gain.value=0.8
       src.connect(monitorGain); monitorGain.connect(ctx.destination)
@@ -177,14 +186,11 @@ const connectBroadcastVideoToMixer=()=>{
 }
 const playIntroAudioForLive=(active:any)=>{
   try{
-    // Image intro: no video audio, just mute mic for duration
     if(!active || active.type!=='video'){
       if(liveMicGainRef.current) liveMicGainRef.current.gain.value=0
       setTimeout(()=>{ try{ if(liveMicGainRef.current) liveMicGainRef.current.gain.value=1 }catch{} }, (active?.duration||5)*1000)
       return
     }
-    // Video intro: broadcastVideoRef itself IS the audio. Do NOT create a second audioEl.
-    // Mute mic so only intro sound enters, unmute after duration.
     ensureLiveAudio()
     try{ if(liveAudioCtxRef.current && liveAudioCtxRef.current.state==='suspended') liveAudioCtxRef.current.resume() }catch{}
     connectBroadcastVideoToMixer()
@@ -201,7 +207,6 @@ const playBroadcastVideoMutedFirst=async(v:any)=>{
     await v.play()
     await new Promise(r=>setTimeout(r,100))
     v.muted=false; v.volume=1
-    // FIX ONLY: If video hang for currentTime=0, no frame go draw (black Intro). Force seek + play again.
     await new Promise(r=>setTimeout(r,500))
     try{
       if(v.paused || (v.currentTime||0)<0.05){
@@ -230,11 +235,9 @@ const startPushRecorderOnReady=(ws:any, recorderRef:any, onStarted?:()=>void)=>{
       if(onStarted) onStarted()
     }catch{}
   }
-  // Fallback: if bridge never sends push_started (old bridge), start after 2.5s so live no hang forever
   const fallback=setTimeout(()=>{ doStart() }, 2500)
   return { doStart, clearFallback:()=>{ try{ clearTimeout(fallback) }catch{} } }
 }
-// === FIX: Wait for push to actually start before playing Intro, else Intro plays before ffmpeg ready and is lost ===
 const waitForFbPushReady=async()=>{
   const start=Date.now()
   while(Date.now()-start<3000){
@@ -281,7 +284,6 @@ const startTikTokPush=async(rtmpUrlOverride?:string,streamKeyOverride?:string)=>
   const starter=startPushRecorderOnReady(ws, tiktokPushRecorderRef, ()=>{ setTiktokPushing(true); setTiktokStatus('Connected'); startLocalRecording() })
   ws.onopen=()=>{
     ws.send(JSON.stringify({ type:'start_push', rtmpUrl, streamKey }))
-    // FIX: Do NOT start MediaRecorder here. Wait for push_started.
   }
   ws.onmessage=(e)=>{
     try{
@@ -312,41 +314,69 @@ const lastFbPushRef=useRef<string|null>(null)
 const stoppingFbRef=useRef(false)
 const fbLiveIdRef=useRef<string>('')
 const fbPageRef=useRef<any>(null)
-// === FIX ONLY: Facebook duration cut at ~15s / ~33s - keepalive + auto-resume same stream_url, no new live_video, no replay Intro ===
+// === FIX ONLY: Facebook post cutting - guarded resume, no ping, no restart if already OPEN ===
 const fbStopIntentionalRef=useRef(false)
 const fbResumeTimerRef=useRef<any>(null)
 const fbKeepaliveRef=useRef<any>(null)
 const fbPushStoppedResolverRef=useRef<any>(null)
+const fbResumeAttemptsRef=useRef(0)
 const clearFbKeepalive=()=>{ try{ if(fbKeepaliveRef.current) clearInterval(fbKeepaliveRef.current) }catch{}; fbKeepaliveRef.current=null }
 const clearFbResumeTimer=()=>{ try{ if(fbResumeTimerRef.current) clearTimeout(fbResumeTimerRef.current) }catch{}; fbResumeTimerRef.current=null }
 const scheduleFbPushResume=()=>{
   if(fbStopIntentionalRef.current) return
   if(!lastFbPushRef.current) return
   if(fbResumeTimerRef.current) return
+  if(fbResumeAttemptsRef.current>=5) return
+  // FIX ONLY: Debounce + backoff. Before: resume after 1s on every blip, killing recorder, Facebook see gap and finalize VOD.
+  const delay=1500+fbResumeAttemptsRef.current*1500
   fbResumeTimerRef.current=setTimeout(()=>{
     fbResumeTimerRef.current=null
     if(fbStopIntentionalRef.current) return
     if(!lastFbPushRef.current) return
     if(fbPushingRef.current) return
+    fbResumeAttemptsRef.current+=1
     startFbPush(lastFbPushRef.current)
-  },1000)
+  },delay)
 }
-// FIX: Tell Facebook live don end, so e finalize VOD immediately with full Outro, no wait RTMP timeout
 const endFbLiveVideo=async()=>{
   const id=fbLiveIdRef.current
   const page=fbPageRef.current
   if(!id || !page) return
   try{
-    // FIX ONLY: 3s timeout - this fetch must never hang timer 10s-15s after Outro
     await Promise.race([
       fetch('https://graph.facebook.com/v19.0/'+id,{ method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({ access_token: page.access_token, end_live_video: 'true' }) }),
       new Promise((_,rej)=>setTimeout(()=>rej(new Error('end_live_video timeout')),3000))
     ])
   }catch{}
 }
+// === UPDATE ONLY: Facebook comments poll - every 5s, only while FB live ===
+const fetchFbComments=async()=>{
+  const id=fbLiveIdRef.current
+  const page=fbPageRef.current
+  if(!id || !page?.access_token) return
+  try{
+    const res=await fetch('https://graph.facebook.com/v19.0/'+id+'/comments?fields=id,from{name},message,created_time&limit=25&access_token='+encodeURIComponent(page.access_token))
+    const data=await res.json()
+    if(data?.data?.length){
+      data.data.forEach((c:any)=>{
+        addLiveComment({ id:c.id, source:'Facebook', name:c.from?.name||'Facebook', text:c.message||'', time:c.created_time?new Date(c.created_time).toLocaleTimeString():new Date().toLocaleTimeString() })
+      })
+    }
+  }catch{}
+}
+const startFbCommentsPolling=()=>{
+  try{ if(fbCommentsTimerRef.current) clearInterval(fbCommentsTimerRef.current) }catch{}
+  fbCommentsSeenRef.current=new Set()
+  setLiveComments([])
+  fetchFbComments()
+  fbCommentsTimerRef.current=setInterval(()=>{ fetchFbComments() },5000)
+}
+const stopFbCommentsPolling=()=>{ try{ if(fbCommentsTimerRef.current) clearInterval(fbCommentsTimerRef.current) }catch{}; fbCommentsTimerRef.current=null }
 const startFbPush=async(fbRtmpUrl:string)=>{
   if(!fbRtmpUrl) return
   if(!canvasRef.current){ alert('Start Camera first'); return }
+  // FIX ONLY: No restart if push already OPEN. Before: any resume call kill running recorder and cut Facebook VOD.
+  if(fbPushingRef.current && fbPushWsRef.current && fbPushWsRef.current.readyState===WebSocket.OPEN) return
   stoppingFbRef.current=false
   fbStopIntentionalRef.current=false
   clearFbResumeTimer()
@@ -357,25 +387,20 @@ const startFbPush=async(fbRtmpUrl:string)=>{
   fbPushRecorderRef.current=null
   const ws=new WebSocket(WS_URL)
   fbPushWsRef.current=ws
-  // FIX ONLY: Timer start ONLY when bridge say push_started, so timer + Facebook start same second. No timer before push.
-  const starter=startPushRecorderOnReady(ws, fbPushRecorderRef, ()=>{ fbPushingRef.current=true; startTimer(); startLocalRecording() })
+  const starter=startPushRecorderOnReady(ws, fbPushRecorderRef, ()=>{ fbPushingRef.current=true; fbResumeAttemptsRef.current=0; startTimer(); startLocalRecording() })
   ws.onopen=()=>{
     let rtmpUrl=fbRtmpUrl
     let streamKey=''
     const parts=fbRtmpUrl.split('/')
     if(parts.length>1){ streamKey=parts.pop() as string; rtmpUrl=parts.join('/') }
     ws.send(JSON.stringify({ type:'start_push', rtmpUrl, streamKey }))
-    // FIX: Do NOT start MediaRecorder here. Wait for push_started, else FB rejects.
-    // FIX ONLY: keepalive so bridge / proxy no drop idle WS mid-live
+    // FIX ONLY: No ping keepalive. Before: ping every 10s bridge no understand fit close WS. Video chunks every 500ms already keep WS alive.
     clearFbKeepalive()
-    fbKeepaliveRef.current=setInterval(()=>{ try{ if(ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify({ type:'ping' })) }catch{} },10000)
   }
   ws.onmessage=(e)=>{
     try{
       const d=JSON.parse(e.data)
       if(d.type==='push_started'){ starter.clearFallback(); starter.doStart() }
-      // FIX ONLY: bridge say push stopped but we never press Stop -> resume same stream_url, no kill live
-      // FIX ONLY: if we ARE stopping, resolve the stopFbPush waiter instead of resuming
       if(d.type==='push_stopped'){
         if(fbPushStoppedResolverRef.current){ const r=fbPushStoppedResolverRef.current; fbPushStoppedResolverRef.current=null; try{ r() }catch{} }
         fbPushingRef.current=false; clearFbKeepalive(); scheduleFbPushResume()
@@ -383,23 +408,19 @@ const startFbPush=async(fbRtmpUrl:string)=>{
       if(d.type==='error'){ fbPushingRef.current=false; if(d.message) alert('Facebook Push: '+d.message) }
     }catch{}
   }
-  // FIX ONLY: WS drop mid-live (the 15s / 33s cut) -> resume same stream_url, no new live_video, no replay Intro
   ws.onerror=()=>{ fbPushingRef.current=false; clearFbKeepalive(); scheduleFbPushResume() }
   ws.onclose=()=>{
-    // FIX ONLY: close during intentional stop also counts as stopped, resolve waiter so stop no hang
     if(fbPushStoppedResolverRef.current){ const r=fbPushStoppedResolverRef.current; fbPushStoppedResolverRef.current=null; try{ r() }catch{} }
     fbPushingRef.current=false; clearFbKeepalive(); scheduleFbPushResume()
   }
 }
 const stopFbPush=async()=>{
-  // FIX ONLY: Wait for bridge push_stopped ack before close + end_live_video, else Facebook discard buffered tail and cut.
-  // Before: send stop_push -> wait fixed 0.8s -> close. Now: send stop_push -> wait ack (max 5s) -> close.
   if(stoppingFbRef.current) return
   stoppingFbRef.current=true
-  // FIX ONLY: intentional stop must NOT trigger auto-resume
   fbStopIntentionalRef.current=true
   clearFbResumeTimer()
   clearFbKeepalive()
+  stopFbCommentsPolling()
   try{
     await new Promise(r=>setTimeout(r,2000))
     try{ fbPushRecorderRef.current?.stop() }catch{}
@@ -414,10 +435,13 @@ const stopFbPush=async()=>{
     fbPushWsRef.current=null
     fbPushingRef.current=false
     lastFbPushRef.current=null
+    fbResumeAttemptsRef.current=0
+    // FIX ONLY: end_live_video ONLY here, for intentional Stop. Never on WS drop / resume.
     await endFbLiveVideo()
   } finally { stoppingFbRef.current=false; fbPushStoppedResolverRef.current=null }
 }
-useEffect(()=>{ return ()=>{ fbStopIntentionalRef.current=true; clearFbResumeTimer(); clearFbKeepalive(); try{ fbPushRecorderRef.current?.stop() }catch{}; try{ fbPushWsRef.current?.close() }catch{} } },[])
+useEffect(()=>{ return ()=>{ fbStopIntentionalRef.current=true; clearFbResumeTimer(); clearFbKeepalive(); stopFbCommentsPolling(); try{ fbPushRecorderRef.current?.stop() }catch{}; try{ fbPushWsRef.current?.close() }catch{} } },[])
+// === END OF PART 1A - CONTINUE WITH PART 1B BELOW ===
 // === UPDATE ONLY: YouTube RTMP Push - FIX 3+5+7: YouTube was only timer before, now real push ===
 const ytPushWsRef=useRef<WebSocket|null>(null)
 const ytPushRecorderRef=useRef<MediaRecorder|null>(null)
@@ -435,7 +459,6 @@ const startYtPush=async(ytKeyOverride?:string)=>{
   const starter=startPushRecorderOnReady(ws, ytPushRecorderRef, ()=>{ ytPushingRef.current=true; setYtLive(true); setIsLive(true); startTimer(); startLocalRecording() })
   ws.onopen=()=>{
     ws.send(JSON.stringify({ type:'start_push', rtmpUrl:'rtmp://a.rtmp.youtube.com/live2', streamKey:key }))
-    // FIX: Do NOT start MediaRecorder here. Wait for push_started.
   }
   ws.onmessage=(e)=>{ try{ const d=JSON.parse(e.data); if(d.type==='push_started'){ starter.clearFallback(); starter.doStart() } if(d.type==='error'){ ytPushingRef.current=false; alert('YouTube Push: '+(d.message||'Failed')) } }catch{} }
   ws.onerror=()=>{ ytPushingRef.current=false }
@@ -453,7 +476,6 @@ const stopYtPush=()=>{
 useEffect(()=>{ return ()=>{ try{ ytPushRecorderRef.current?.stop() }catch{}; try{ ytPushWsRef.current?.close() }catch{} } },[])
 // === FIX 4+7: After Flip, restart any active push with fresh mic so audio no die ===
 const restartActivePushes=async()=>{
-  // FIX 1: Rebuild mixer with NEW mic track after Flip, else pushes keep dead mic
   rebuildLiveAudio()
   if(lastFbPushRef.current){ const u=lastFbPushRef.current; await new Promise(r=>setTimeout(r,150)); startFbPush(u) }
   if(lastYtPushRef.current){ const k=lastYtPushRef.current; await new Promise(r=>setTimeout(r,150)); startYtPush(k) }
@@ -647,18 +669,15 @@ if(wasRecording && oldStream){
   setFacing(newFacing); setIsCam(true)
 }
 }finally{ (startCamera as any)._switching=false }
-// FIX 1: Rebuild mixer with new mic, then restart pushes. Also resume mixer so browser no block audio.
 ensureLiveAudio()
 await restartActivePushes()
 }catch(e:any){ (startCamera as any)._switching=false; alert('Camera: '+e.message) }
 }
 const stopCamera=()=>{
 if(isRecording) stopRecordingFinal();
-// FIX 6: Stop ALL pushes on Stop Camera - FB + YT + TikTok + Timer
 stopFbPush(); stopYtPush(); stopTikTokPush(); disconnectTikTok();
 try{ if(audioCtxRef.current){ audioCtxRef.current.close() } }catch{}
 audioCtxRef.current=null
-// FIX 1: Close live mixer too
 try{ if(liveIntroElRef.current && liveIntroElRef.current._tagliveCleanup) liveIntroElRef.current._tagliveCleanup() }catch{}
 liveIntroElRef.current=null
 try{ if(liveAudioCtxRef.current){ liveAudioCtxRef.current.close() } }catch{}
@@ -679,7 +698,6 @@ const stopIntroOnly=()=>{
   try{
     const el=(audioCtxRef.current as any)?.introAudioEl
     if(el && el._tagliveCleanup) el._tagliveCleanup()
-    // FIX 1: Also stop live intro audio + unmute mic
     try{ if(liveIntroElRef.current && liveIntroElRef.current._tagliveCleanup) liveIntroElRef.current._tagliveCleanup() }catch{}
     liveIntroElRef.current=null
     try{ if(liveMicGainRef.current) liveMicGainRef.current.gain.value=1 }catch{}
@@ -692,8 +710,6 @@ const stopIntroOnly=()=>{
 const createFbLiveForPage=async(page:any)=>{
   setSelectedPage(page)
   try{
-    // FIX 3: Use liveTitle + liveDescription, NEVER verse
-    // FIX: Retry once on Failed to fetch (network blip), else 1 glitch kills live
     let res:any=null
     for(let attempt=0; attempt<2; attempt++){
       try{
@@ -707,16 +723,14 @@ const createFbLiveForPage=async(page:any)=>{
     const data=await res.json()
     if(data.error) throw new Error(data.error?.message || JSON.stringify(data.error))
     if(!data.stream_url) throw new Error('Facebook did not return a stream_url.')
-    // FIX ONLY: Timer NO start here. Timer start for push_started, so timer + Facebook start same second.
     setFbStreamUrl(data.stream_url); setLiveId(data.id); setIsLive(true)
-    // FIX: Save for end_live_video - state fit stale inside async stop, refs no stale
     fbLiveIdRef.current=data.id; fbPageRef.current=page
-    // FIX 1: Ensure mixer is running before push, so audio no be silent
     ensureLiveAudio()
     await startFbPush(data.stream_url)
+    // UPDATE ONLY: Start FB comments poll AFTER push, so liveId + page token ready.
+    startFbCommentsPolling()
     return data
   }catch(e:any){
-    // FIX: No-kill on error - if push already dey running (2nd tap fail), NO stop am. Only clear if no push.
     if(!fbPushingRef.current){
       stopFbPush(); setFbStreamUrl(''); setLiveId(''); setIsLive(false); setSelectedPage(null)
     }
@@ -724,12 +738,10 @@ const createFbLiveForPage=async(page:any)=>{
   }
 }
 const createFbLiveAuto=async(page:any)=>{
-  // FIX: Guard - no 2nd create while creating or already live for same Page. 2nd tap was killing 1st live.
   if(creatingFbRef.current) return
   if(isLive && selectedPage?.id===page.id) return
   creatingFbRef.current=true
   try{
-    // FIX ONLY: Old flow kept - PUSH FIRST, INTRO SECOND. But NO 3s waitForFbPushReady. Intro start immediately after push WS open, so Intro enter Facebook, no black frames waste.
     await createFbLiveForPage(page)
     const active=intros.find(i=>i.id===activeIntroId)
     if(!active) return
@@ -743,7 +755,6 @@ const createFbLiveAuto=async(page:any)=>{
         const v=broadcastVideoRef.current as any
         v.crossOrigin="anonymous"; v.playsInline=true; v.src=active.data; v.currentTime=0
         connectBroadcastVideoToMixer()
-        // FIX ONLY: muted-first play, then unmute - unmuted play after awaits was blocked
         await playBroadcastVideoMutedFirst(v)
       }catch{}
     }
@@ -814,15 +825,11 @@ const startRecording=async()=>{
     try{ micGain.gain.value=0 }catch{}
     if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
     else if(active.type==='video'){
-      // FIX ONLY: muted-first play, then unmute - same autoplay block as Live Intro
       if(broadcastVideoRef.current){ const v=broadcastVideoRef.current as any; v.crossOrigin="anonymous"; v.playsInline=true; v.src=active.data; v.currentTime=0; try{ await playBroadcastVideoMutedFirst(v) }catch{} }
-      // Do NOT create a second audioEl playing same file. If live mixer already connected broadcast video, its sound already enters live mixer. For Record-only, connect broadcast video to THIS recording ctx only if it was never connected before.
       try{
         if(!broadcastConnectedRef.current && broadcastVideoRef.current){
           const v2=broadcastVideoRef.current as any
-          // Note: if live mixer already connected it, this will throw and we skip - sound already routed.
           const vSource=audioCtx.createMediaElementSource(v2); vSource.connect(dest)
-          // FIX: Monitor sound for Record-only too - let YOU hear Intro on phone
           try{ const mg=audioCtx.createGain(); mg.gain.value=0.8; vSource.connect(mg); mg.connect(audioCtx.destination) }catch{}
           broadcastConnectedRef.current=true
           ;(audioCtxRef.current as any).introAudioEl=v2
@@ -1348,6 +1355,13 @@ monthCount!==null?
 <button onClick={()=>{ ensureLiveAudio(); startTikTokPush() }} style={{flex:1,background:tiktokPushing?'#16a34a':'#000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none',fontSize:12}}>{tiktokPushing?'TikTok LIVE '+formatTime(liveSeconds):'Go Live TikTok'}</button>
 <button onClick={stopTikTokLive} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff',fontSize:12}}>Stop TikTok</button>
 </div>
+</div>
+{/* === UPDATE ONLY: Live Comments - ONE box for FB + TikTok. Logic dey Part 1A. === */}
+<div style={{marginTop:14,border:'2px solid #7c3aed',borderRadius:14,padding:12,background:'#fff'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b>💬 Live Comments ({liveComments.length})</b><button onClick={()=>setShowComments(!showComments)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:showComments?'#7c3aed':'#111',color:'#fff',fontWeight:800,fontSize:11}}>{showComments?'Hide':'Show'}</button></div>
+<div style={{marginTop:8,fontSize:11,fontWeight:700}}>👀 TikTok Viewers: {tiktokViewerCount} | ❤️ Likes: {tiktokLikes} {isLive?'| ● FB LIVE '+formatTime(liveSeconds):''}</div>
+{showComments&&(<div style={{marginTop:8,maxHeight:320,overflowY:'auto',display:'flex',flexDirection:'column',gap:6}}>
+{liveComments.length===0?<div style={{padding:12,background:'#f9f5ff',borderRadius:10,fontSize:12,opacity:.7}}>{isLive?'Waiting for comments... Ask viewers to comment "Amen"':'Go Live on Facebook / TikTok, comments go show here.'}</div>:liveComments.slice().reverse().map((c:any)=>(<div key={c.id} style={{padding:'8px 10px',background:c.source==='TikTok'?'#f0fdf4':'#f3f0ff',borderRadius:10,border:'1px solid #eee'}}><div style={{display:'flex',justifyContent:'space-between',gap:6}}><b style={{fontSize:12}}>{c.name}</b><span style={{fontSize:10,background:c.source==='TikTok'?'#16a34a':'#1877F2',color:'#fff',padding:'2px 7px',borderRadius:10,fontWeight:800}}>{c.source}</span></div><div style={{fontSize:13,marginTop:2,lineHeight:1.4}}>{c.text}</div><div style={{fontSize:10,opacity:.6,marginTop:2}}>{c.time||''}</div></div>))}
+</div>)}
 </div>
 </div>
 </div>
