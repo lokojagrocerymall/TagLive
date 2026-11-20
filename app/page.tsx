@@ -107,7 +107,6 @@ const connectTikTok=()=>{
   ws.onmessage=(e)=>{
     try{
       const d=JSON.parse(e.data)
-      // UPDATE ONLY: TikTok chat also enter ONE liveComments list, so Part 2 box show am with FB.
       if(d.type==='chat' || d.type==='comment'){ const txt=(d.nickname||d.username||'')+': '+(d.comment||d.text||''); setTiktokLastComment(txt); addLiveComment({ source:'TikTok', name:d.nickname||d.username||'TikTok', text:d.comment||d.text||'', time:new Date().toLocaleTimeString() }) }
       if(d.type==='viewerCount' || d.type==='viewers'){ setTiktokViewerCount(Number(d.count||d.viewers||0)) }
       if(d.type==='like' || d.type==='likes'){ setTiktokLikes((p)=>p+Number(d.count||1)) }
@@ -167,14 +166,12 @@ const getPushAudioTrack=()=>{
   }catch{}
   return streamRef.current?.getAudioTracks()[0]||null
 }
-// === FIX ONLY: Skipping - push canvas 30fps -> 15fps. Less frames, less data, no ffmpeg drop. ===
 const getPushStream=()=>{
   const canvasStream=(canvasRef.current as any).captureStream(15) as MediaStream
   const audioTrack=getPushAudioTrack()
   if(audioTrack) canvasStream.addTrack(audioTrack)
   return canvasStream
 }
-// === FIX: INTRO/OUTRO - ONE VIDEO ONLY + MONITOR SOUND. broadcastVideoRef carries picture + sound. No separate audioEl again. ===
 const connectBroadcastVideoToMixer=()=>{
   try{
     const ctx=ensureLiveAudio()
@@ -206,7 +203,6 @@ const playIntroAudioForLive=(active:any)=>{
     setTimeout(()=>{ try{ if(liveMicGainRef.current) liveMicGainRef.current.gain.value=1 }catch{} }, (active.duration||5)*1000)
   }catch{}
 }
-// === FIX ONLY: Intro hang - NO v.load() after v.src. v.load() reset video to 0 and hang black. ===
 const playBroadcastVideoMutedFirst=async(v:any)=>{
   try{
     v.muted=true; v.volume=0
@@ -241,7 +237,6 @@ const startPushRecorderOnReady=(ws:any, recorderRef:any, onStarted?:()=>void, is
       recorderRef.current=rec
       rec.ondataavailable=(e)=>{
         if(e.data.size>0 && ws.readyState===WebSocket.OPEN){
-          // SINGLE-CONNECTION: Do NOT close on bufferedAmount. Drop this chunk, keep the one RTMP connection alive.
           try{ if(ws.bufferedAmount>4000000) return }catch{}
           try{ ws.send(e.data) }catch{}
           if(isFbPush){ lastFbChunkAtRef.current=Date.now(); setPushStatus('Sending') }
@@ -262,7 +257,6 @@ const waitForFbPushReady=async()=>{
   }
   return fbPushingRef.current
 }
-// === FIX 2: Go Live = Push + Auto Local Record. Records SAME canvas + SAME mixed audio, without replaying Intro or killing mixer ===
 const startLocalRecording=async()=>{
   if(isRecording) return
   const canvas=canvasRef.current; if(!canvas) return
@@ -280,7 +274,6 @@ const startLocalRecording=async()=>{
     rec.start(100); recorderRef.current=rec; setIsRecording(true)
   }catch{}
 }
-// === UPDATE ONLY: TikTok RTMP Push - FIX 4+5+7: fresh mic on every start, canvas = Intro/Outro included ===
 const [tiktokRtmpUrl,setTiktokRtmpUrl]=useState('')
 const [tiktokStreamKey,setTiktokStreamKey]=useState('')
 const [tiktokPushing,setTiktokPushing]=useState(false)
@@ -298,9 +291,7 @@ const startTikTokPush=async(rtmpUrlOverride?:string,streamKeyOverride?:string)=>
   const ws=new WebSocket(WS_URL)
   tiktokPushWsRef.current=ws
   const starter=startPushRecorderOnReady(ws, tiktokPushRecorderRef, ()=>{ setTiktokPushing(true); setTiktokStatus('Connected'); startLocalRecording() })
-  ws.onopen=()=>{
-    ws.send(JSON.stringify({ type:'start_push', rtmpUrl, streamKey }))
-  }
+  ws.onopen=()=>{ ws.send(JSON.stringify({ type:'start_push', rtmpUrl, streamKey })) }
   ws.onmessage=(e)=>{
     try{
       const d=JSON.parse(e.data)
@@ -322,7 +313,6 @@ const stopTikTokPush=()=>{
   lastTikTokPushRef.current=null
 }
 useEffect(()=>{ return ()=>{ try{ tiktokPushRecorderRef.current?.stop() }catch{}; try{ tiktokPushWsRef.current?.close() }catch{} } },[])
-// === UPDATE ONLY: Facebook RTMP Push - FIX 2+5+7 ===
 const fbPushWsRef=useRef<WebSocket|null>(null)
 const fbPushRecorderRef=useRef<MediaRecorder|null>(null)
 const fbPushingRef=useRef(false)
@@ -331,7 +321,6 @@ const lastFbPushRef=useRef<string|null>(null)
 const stoppingFbRef=useRef(false)
 const fbLiveIdRef=useRef<string>('')
 const fbPageRef=useRef<any>(null)
-// === SINGLE-CONNECTION FIX: No auto-resume, no watchdog restart, no graceful-restart helper. Only intentional Stop disconnects. ===
 const fbStopIntentionalRef=useRef(false)
 const fbKeepaliveRef=useRef<any>(null)
 const fbPushStoppedResolverRef=useRef<any>(null)
@@ -347,12 +336,10 @@ const startPushWatchdog=()=>{
       if(!fbPushingRef.current) return
       const idleMs=Date.now()-lastFbChunkAtRef.current
       if(idleMs<2000) return
-      // SINGLE-CONNECTION: Monitor ONLY. Do NOT close, do NOT restart. Restart = Facebook finalizes VOD at that second.
       setPushStatus('Stalled')
     }catch{}
   },1000)
 }
-// SINGLE-CONNECTION: Kept only so Part 2 still compiles. Intentionally does NOTHING - restarting to same URL would cut the post.
 const resumeFbPushNow=()=>{ return }
 const endFbLiveVideo=async()=>{
   const id=fbLiveIdRef.current
@@ -365,7 +352,6 @@ const endFbLiveVideo=async()=>{
     ])
   }catch{}
 }
-// === FIX ONLY: Comments + Reactions - FB.api with Page token, fetch fallback. NO /live_comments - that path does not exist. ===
 const fbApiGet=(path:string, accessToken?:string)=>{
   return new Promise<any>((resolve)=>{
     try{
@@ -417,7 +403,6 @@ const stopFbCommentsPolling=()=>{ try{ if(fbCommentsTimerRef.current) clearInter
 const startFbPush=async(fbRtmpUrl:string)=>{
   if(!fbRtmpUrl) return
   if(!canvasRef.current){ alert('Start Camera first'); return }
-  // SINGLE-CONNECTION: One live = one push. Second call while starting/running is ignored, so timer never resets to 00:00:00 mid-live.
   if(fbStartingRef.current) return
   if(fbPushingRef.current) return
   if(fbPushWsRef.current && fbPushWsRef.current.readyState!==WebSocket.CLOSED) return
@@ -434,7 +419,6 @@ const startFbPush=async(fbRtmpUrl:string)=>{
     lastFbChunkAtRef.current=Date.now()
     setPushStatus('Sending')
     startPushWatchdog()
-    // SINGLE-CONNECTION: Do NOT reset timer if already running. Old startTimer() reset liveSeconds to 0 mid-live.
     if(!timerRef.current) startTimer()
     startLocalRecording()
   }, true)
@@ -452,20 +436,24 @@ const startFbPush=async(fbRtmpUrl:string)=>{
       if(d.type==='push_started'){ starter.clearFallback(); starter.doStart() }
       if(d.type==='push_stopped'){
         if(fbPushStoppedResolverRef.current){ const r=fbPushStoppedResolverRef.current; fbPushStoppedResolverRef.current=null; try{ r() }catch{} }
-        // SINGLE-CONNECTION: No auto-resume. Show Stalled, keep lastFbPushRef so intentional Stop can still end the live cleanly.
-        fbPushingRef.current=false; fbStartingRef.current=false; clearFbKeepalive(); setPushStatus('Stalled')
+        fbPushingRef.current=false; fbStartingRef.current=false; clearFbKeepalive()
+        // FIX ONLY: Stalled after Stop - push_stopped after intentional Stop is expected, do NOT overwrite Idle with Stalled.
+        if(!fbStopIntentionalRef.current) setPushStatus('Stalled')
       }
-      // SINGLE-CONNECTION: No auto-resume on error. Alert once, do NOT start a second push to same URL.
-      if(d.type==='error'){ fbPushingRef.current=false; fbStartingRef.current=false; setPushStatus('Stalled'); if(d.message) alert('Facebook Push: '+d.message) }
+      if(d.type==='error'){
+        fbPushingRef.current=false; fbStartingRef.current=false; clearFbKeepalive()
+        // FIX ONLY: Stalled after Stop - error after intentional Stop is expected, do NOT show Stalled / alert.
+        if(!fbStopIntentionalRef.current){ setPushStatus('Stalled'); if(d.message) alert('Facebook Push: '+d.message) }
+      }
     }catch{}
   }
   ws.onerror=()=>{
-    // SINGLE-CONNECTION: No auto-resume. Keep socket as-is, show Stalled.
-    fbPushingRef.current=false; fbStartingRef.current=false; clearFbKeepalive(); setPushStatus('Stalled')
+    fbPushingRef.current=false; fbStartingRef.current=false; clearFbKeepalive()
+    // FIX ONLY: Stalled after Stop - onerror after intentional Stop, do NOT show Stalled.
+    if(!fbStopIntentionalRef.current) setPushStatus('Stalled')
   }
   ws.onclose=()=>{
     if(fbPushStoppedResolverRef.current){ const r=fbPushStoppedResolverRef.current; fbPushStoppedResolverRef.current=null; try{ r() }catch{} }
-    // SINGLE-CONNECTION: No auto-resume on close.
     fbPushingRef.current=false; fbStartingRef.current=false; clearFbKeepalive()
     if(!fbStopIntentionalRef.current) setPushStatus('Stalled')
   }
@@ -512,7 +500,7 @@ const startYtPush=async(ytKeyOverride?:string)=>{
   try{ ytPushRecorderRef.current?.stop() }catch{}
   const ws=new WebSocket(WS_URL)
   ytPushWsRef.current=ws
-  const starter=startPushRecorderOnReady(ws, ytPushRecorderRef, ()=>{ ytPushingRef.current=true; setYtLive(true); setIsLive(true); startTimer(); startLocalRecording() })
+  const starter=startPushRecorderOnReady(ws, ytPushRecorderRef, ()=>{ ytPushingRef.current=true; setYtLive(true); setIsLive(true); if(!timerRef.current) startTimer(); startLocalRecording() })
   ws.onopen=()=>{
     ws.send(JSON.stringify({ type:'start_push', rtmpUrl:'rtmp://a.rtmp.youtube.com/live2', streamKey:key }))
   }
@@ -530,10 +518,10 @@ const stopYtPush=()=>{
   lastYtPushRef.current=null
 }
 useEffect(()=>{ return ()=>{ try{ ytPushRecorderRef.current?.stop() }catch{}; try{ ytPushWsRef.current?.close() }catch{} } },[])
-// === FIX 4+7: After Flip, restart any active push with fresh mic so audio no die ===
+// === SINGLE-CONNECTION FIX: After Flip, do NOT restart Facebook push. Flip only rebuilds audio. FB keeps its one connection. ===
 const restartActivePushes=async()=>{
   rebuildLiveAudio()
-  if(lastFbPushRef.current){ const u=lastFbPushRef.current; await new Promise(r=>setTimeout(r,150)); startFbPush(u) }
+  // FIX ONLY: FB removed here. Old code called startFbPush(u) on every Flip, which disconnected FB and finalized the VOD.
   if(lastYtPushRef.current){ const k=lastYtPushRef.current; await new Promise(r=>setTimeout(r,150)); startYtPush(k) }
   if(lastTikTokPushRef.current){ const t=lastTikTokPushRef.current; await new Promise(r=>setTimeout(r,150)); startTikTokPush(t.rtmpUrl,t.streamKey) }
 }
@@ -692,7 +680,6 @@ const fileToBase64=(file:File)=>new Promise<string>((res,rej)=>{ const r=new Fil
 const getVideoDuration=(base64:string)=>new Promise<number>((res)=>{ const v=document.createElement('video'); v.src=base64; v.onloadedmetadata=()=>res(v.duration); setTimeout(()=>res(5),2000) })
 const handleIntroFile=async(e:any)=>{ const file=e.target.files?.[0]; if(!file) return; const base64=await fileToBase64(file); let dur=5; if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }; const item={ id:'id_' + Date.now(), type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }; const n=[...intros,item]; await saveIntros(n); setActiveIntroId(item.id); localStorage.setItem('taglive_active_intro', item.id); e.target.value='' }
 const handleOutroFile=async(e:any)=>{ const file=e.target.files?.[0]; if(!file) return; const base64=await fileToBase64(file); let dur=5; if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }; const item={ id:'id_' + Date.now(), type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }; const n=[...outros,item]; await saveOutros(n); setActiveOutroId(item.id); localStorage.setItem('taglive_active_outro', item.id); e.target.value='' }
-// === FIX 1: FINAL WORKING CAMERA SWITCH ===
 const startCamera=async(newFacing=facing)=>{
 try{
 const wasRecording=isRecording
@@ -762,7 +749,6 @@ const stopIntroOnly=()=>{
     if(fbPendingRef.current){ const p=fbPendingRef.current; fbPendingRef.current=null; setSelectedPage(p.page) }
   }catch{}
 }
-// FACEBOOK LIVE UPDATE ONLY - FIX 2 + FIX 3
 const createFbLiveForPage=async(page:any)=>{
   setSelectedPage(page)
   try{
@@ -900,7 +886,7 @@ const startRecording=async()=>{
   const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 1500000 })
   rec.ondataavailable=(e)=>{ if(e.data.size>0) chunksRef.current.push(e.data) }
   rec.onstop=()=>{ const blob=new Blob(chunksRef.current, { type: 'video/webm' }); if(recordedUrl) try{ URL.revokeObjectURL(recordedUrl) }catch{}; setRecordedUrl(URL.createObjectURL(blob)) }
-  rec.start(100); recorderRef.current=rec; setIsRecording(true); startTimer()
+  rec.start(100); recorderRef.current=rec; setIsRecording(true); if(!timerRef.current) startTimer()
   if(active){ introTimeoutRef.current=setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.removeAttribute('src'); broadcastVideoRef.current.load() }catch{} }; try{ const el=(audioCtxRef.current as any)?.introAudioEl; if(el && el._tagliveCleanup) el._tagliveCleanup() }catch{}; try{ micGain.gain.value=1 }catch{} }, (active.duration||5)*1000) }
 }
   const stopRecordingFinal=()=>{
@@ -1367,17 +1353,15 @@ monthCount!==null?
 )}
 {isCam&&!broadcastPlaying&&(<div style={{position:'absolute',top: bgMode==='split'?'auto':'12px',bottom: bgMode==='split'?'50px':'auto',right:12,display:'flex',gap:8,zIndex:50}}><button onClick={toggleCamera} style={{background:'rgba(0,0,0,0.85)',color:'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>Flip</button><button onClick={toggleTorch} style={{background:torch?'#fbbf24':'rgba(0,0,0,0.85)',color:torch?'#000':'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>{torch?'Flash On':'Flash'}</button></div>)}
 </div>
-{/* === FIX ONLY: FB cutting - pushStatus + Resume Push directly under preview, from Part 1A watchdog === */}
-{(isLive||pushStatus!=='Idle')&&(<div style={{marginTop:10,padding:'10px 12px',borderRadius:12,background:pushStatus==='Stalled'?'#fef2f2':pushStatus==='Sending'?'#f0fdf4':'#f5f5f7',border:pushStatus==='Stalled'?'2px solid #ff0000':'1px solid #ddd',display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><span style={{fontWeight:900,fontSize:12,color:pushStatus==='Stalled'?'#b91c1c':'#111'}}>{pushStatus==='Sending'?'🟢 PUSH: Sending — Facebook is receiving video':pushStatus==='Stalled'?'🔴 PUSH: Stalled — Restarting... Do NOT tap Stop yet':`⚪ PUSH: ${pushStatus}`}</span>{pushStatus==='Stalled'&&(<button onClick={()=>{ try{ resumeFbPushNow() }catch{} }} style={{padding:'8px 12px',borderRadius:20,border:'none',background:'#ff0000',color:'#fff',fontWeight:900,fontSize:11,flexShrink:0}}>🔁 Resume Push</button>)}</div>)}
+{/* === SINGLE-CONNECTION FIX: No Resume button. Restarting to same URL finalizes FB VOD. Stalled = keep going, do NOT tap Stop. === */}
+{(isLive||pushStatus!=='Idle')&&(<div style={{marginTop:10,padding:'10px 12px',borderRadius:12,background:pushStatus==='Stalled'?'#fef2f2':pushStatus==='Sending'?'#f0fdf4':'#f5f5f7',border:pushStatus==='Stalled'?'2px solid #ff0000':'1px solid #ddd',display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><span style={{fontWeight:900,fontSize:12,color:pushStatus==='Stalled'?'#b91c1c':'#111'}}>{pushStatus==='Sending'?'🟢 PUSH: Sending — Facebook is receiving video':pushStatus==='Stalled'?'🔴 PUSH: Stalled — Keep going, do NOT tap Stop yet':`⚪ PUSH: ${pushStatus}`}</span></div>)}
 <div style={{display:'flex',gap:8,marginTop:12}}>{!isCam?<button onClick={()=>startCamera()} style={{flex:1,background:'#111',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Start Camera {lowData?'(480p)':''}</button>:<><button onClick={toggleCamera} style={{flex:1,background:'#7c3aed',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Switch Camera</button><button onClick={stopCamera} style={{flex:1,background:'#444',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Stop</button></>}</div>
 <div style={{display:'flex',gap:6,marginTop:10}}>
-{/* FIX 2: Record button shows merged state - Go Live already records, this is Record Only when not live */}
 {!isRecording?<button onClick={startRecording} disabled={!isCam} style={{flex:1,background:isCam?'#a21caf':'#ccc',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>{(isLive||ytLive)?'● LIVE + Recording':'Record'}</button>
 :<><button onClick={stopRecording} style={{flex:1,background:'#111',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Stop + Outro ({formatTime(liveSeconds)})</button>{broadcastPlaying&&<button onClick={stopIntroOnly} style={{background:'#ff0000',color:'#fff',padding:12,borderRadius:10,fontWeight:900,border:'none',fontSize:11}}>STOP INTRO</button>}</>}
 {recordedUrl&&<a href={recordedUrl} download={'TagLive-'+Date.now()+'.mp4'} style={{flex:1,background:'#16a34a',color:'#fff',padding:12,borderRadius:10,fontWeight:800,textAlign:'center',textDecoration:'none',fontSize:12}}>Download</a>}
 </div>
 {recordedUrl&&<video src={recordedUrl} controls playsInline style={{width:'100%',marginTop:8,borderRadius:12}}/>}
-{/* === FIX ONLY: Live Comments MOVED HERE - directly under preview / Record, no scroll needed === */}
 <div style={{marginTop:10,border:'2px solid #7c3aed',borderRadius:14,padding:12,background:'#fff'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b>💬 Live Comments ({liveComments.length})</b><button onClick={()=>setShowComments(!showComments)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:showComments?'#7c3aed':'#111',color:'#fff',fontWeight:800,fontSize:11}}>{showComments?'Hide':'Show'}</button></div>
 <div style={{marginTop:8,fontSize:11,fontWeight:700}}>❤️ FB Reactions: {fbReactionCount} | 👀 TikTok Viewers: {tiktokViewerCount} | ❤️ TikTok Likes: {tiktokLikes} {isLive?'| ● FB LIVE '+formatTime(liveSeconds):''}</div>
 {fbCommentsError&&<div style={{marginTop:6,padding:8,background:'#fef2f2',borderRadius:8,fontSize:11,color:'#b91c1c',fontWeight:700}}>⚠️ {fbCommentsError} — Re-login Facebook with pages_read_engagement</div>}
@@ -1398,14 +1382,12 @@ monthCount!==null?
 </div>
 <div style={{display:'flex',flexDirection:'column',gap:12}}>
 <div style={{border:'2px solid #111',borderRadius:14,padding:12}}><b>Connect Facebook</b><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={loginFacebook} style={{flex:1,background:fbUser?'#16a34a':'#1877F2',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{fbUser?'✓ '+fbUser.name:'Login Facebook'}</button><button onClick={()=>loadPages()} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Load My Pages</button></div>
-{/* FIX 3: Live Title + Description inputs - these go to Facebook, verse NEVER does again */}
 <div style={{marginTop:8,display:'flex',flexDirection:'column',gap:6}}>
 <input value={liveTitle} onChange={e=>setLiveTitle(e.target.value)} placeholder="Live Title - e.g. Sunday Service Live" style={{width:'100%',padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12,fontWeight:700,boxSizing:'border-box'}} />
 <textarea value={liveDescription} onChange={e=>setLiveDescription(e.target.value)} placeholder="Live Description - this shows on Facebook, NOT your verse" style={{width:'100%',padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12,boxSizing:'border-box',height:60}} />
 </div>
 {pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6,padding:10,background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff',color:selectedPage?.id===p.id?'#fff':'#000',borderRadius:8,fontSize:13,fontWeight:700,cursor:'pointer'}}>{p.name} {selectedPage?.id===p.id?'LIVE '+formatTime(liveSeconds):'(Go Live)'}</div>)} {fbStreamUrl&&<div style={{marginTop:10,padding:10,background:'#dcfce7',borderRadius:8,fontSize:11,wordBreak:'break-all'}}>FB: {fbStreamUrl.substring(0,70)}...</div>}{isLive&&<button onClick={stopFbLive} style={{marginTop:10,width:'100%',background:'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>■ Stop Facebook Live</button>}</div>
 <div style={{marginTop:14,border:'2px solid #ff0000',borderRadius:14,padding:12}}><b>Connect YouTube Live</b><input value={ytKey} onChange={e=>{setYtKey(e.target.value);localStorage.setItem('taglive_ytkey',e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={startYtLiveWithIntro} style={{flex:1,background:ytLive?'#16a34a':'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{ytLive?'YouTube LIVE '+formatTime(liveSeconds):'Go Live YouTube + Intro FULL'}</button><button onClick={()=>{if(broadcastPlaying) return; const active=outros.find(o=>o.id===activeOutroId); if(active){setBroadcastPlaying(active); if(active.type==='video'&&broadcastVideoRef.current){ const v=broadcastVideoRef.current as any; v.src=active.data; ensureLiveAudio(); try{ if(liveAudioCtxRef.current) liveAudioCtxRef.current.resume() }catch{}; connectBroadcastVideoToMixer(); playBroadcastVideoMutedFirst(v) } setTimeout(async()=>{setBroadcastPlaying(null); await new Promise(r=>setTimeout(r,1000)); stopYtLive()},(active.duration||5)*1000)} else {stopYtLive()}}} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Stop YT + Outro</button></div></div>
-{/* === UPDATE ONLY: RESTORED TikTok Box - was missing in Part 2 UI, logic still in Part 1 === */}
 <div style={{marginTop:14,border:'2px solid #000',borderRadius:14,padding:12}}><b>Connect TikTok Live</b>
 <input value={tiktokUsername} onChange={e=>setTiktokUsername(e.target.value)} placeholder="@your TikTok username" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/>
 <div style={{display:'flex',gap:8,marginTop:8}}>
