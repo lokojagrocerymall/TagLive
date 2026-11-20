@@ -29,11 +29,10 @@ const [showComments,setShowComments]=useState(true)
 // === FIX ONLY: Reactions + comments error - Part 2 go show ❤️ count + permission error ===
 const [fbReactionCount,setFbReactionCount]=useState(0)
 const [fbCommentsError,setFbCommentsError]=useState('')
-// === FIX ONLY: FB cutting - pushStatus shows real push, not timer. Local preview can be complete while push is dead. ===
+// === SINGLE-CONNECTION FIX: One live = one RTMP connection. Any disconnect finalizes FB VOD, reconnect never appends. ===
 const [pushStatus,setPushStatus]=useState<'Idle'|'Sending'|'Stalled'>('Idle')
 const lastFbChunkAtRef=useRef<number>(0)
 const pushWatchdogRef=useRef<any>(null)
-const pushRestartingRef=useRef(false)
 const fbCommentsTimerRef=useRef<any>(null)
 const fbCommentsSeenRef=useRef<Set<string>>(new Set())
 const addLiveComment=(c:any)=>{
@@ -227,7 +226,7 @@ const playBroadcastVideoMutedFirst=async(v:any)=>{
     try{ v.muted=true; v.volume=0; await v.play() }catch{}
   }
 }
-// === FIX ONLY: Skipping - push bitrate 2.5 Mbps -> 800kbps (600kbps Data Saver), chunk 500ms -> 250ms ===
+// === SINGLE-CONNECTION FIX: Never close WS to "save" it. If buffer is full, drop that one chunk, keep socket open. ===
 const startPushRecorderOnReady=(ws:any, recorderRef:any, onStarted?:()=>void, isFbPush?:boolean)=>{
   let started=false
   const doStart=()=>{
@@ -242,9 +241,10 @@ const startPushRecorderOnReady=(ws:any, recorderRef:any, onStarted?:()=>void, is
       recorderRef.current=rec
       rec.ondataavailable=(e)=>{
         if(e.data.size>0 && ws.readyState===WebSocket.OPEN){
+          // SINGLE-CONNECTION: Do NOT close on bufferedAmount. Drop this chunk, keep the one RTMP connection alive.
+          try{ if(ws.bufferedAmount>4000000) return }catch{}
           try{ ws.send(e.data) }catch{}
           if(isFbPush){ lastFbChunkAtRef.current=Date.now(); setPushStatus('Sending') }
-          try{ if(ws.bufferedAmount>4000000){ try{ ws.close() }catch{} } }catch{}
         }
       }
       rec.start(250)
@@ -326,88 +326,34 @@ useEffect(()=>{ return ()=>{ try{ tiktokPushRecorderRef.current?.stop() }catch{}
 const fbPushWsRef=useRef<WebSocket|null>(null)
 const fbPushRecorderRef=useRef<MediaRecorder|null>(null)
 const fbPushingRef=useRef(false)
+const fbStartingRef=useRef(false)
 const lastFbPushRef=useRef<string|null>(null)
 const stoppingFbRef=useRef(false)
 const fbLiveIdRef=useRef<string>('')
 const fbPageRef=useRef<any>(null)
-// === FIX ONLY: Facebook post cutting - guarded resume, no ping, no restart if already OPEN ===
+// === SINGLE-CONNECTION FIX: No auto-resume, no watchdog restart, no graceful-restart helper. Only intentional Stop disconnects. ===
 const fbStopIntentionalRef=useRef(false)
-const fbResumeTimerRef=useRef<any>(null)
 const fbKeepaliveRef=useRef<any>(null)
 const fbPushStoppedResolverRef=useRef<any>(null)
-const fbResumeAttemptsRef=useRef(0)
 const clearFbKeepalive=()=>{ try{ if(fbKeepaliveRef.current) clearInterval(fbKeepaliveRef.current) }catch{}; fbKeepaliveRef.current=null }
-const clearFbResumeTimer=()=>{ try{ if(fbResumeTimerRef.current) clearTimeout(fbResumeTimerRef.current) }catch{}; fbResumeTimerRef.current=null }
-// === FIX ONLY: FB cutting - graceful stop. Old code closed WS without stop_push, orphan ffmpeg held RTMP, restart could never take over. ===
-const gracefulStopFbConnection=async()=>{
-  try{ fbPushRecorderRef.current?.stop() }catch{}
-  fbPushRecorderRef.current=null
-  const ws=fbPushWsRef.current
-  if(!ws) return
-  try{
-    if(ws.readyState===WebSocket.OPEN){
-      const ack=new Promise<void>((resolve)=>{
-        const prevResolver=fbPushStoppedResolverRef.current
-        fbPushStoppedResolverRef.current=()=>{ try{ if(prevResolver) prevResolver() }catch{}; resolve() }
-        setTimeout(()=>{ if(fbPushStoppedResolverRef.current){ fbPushStoppedResolverRef.current=null; resolve() } },800)
-      })
-      try{ ws.send(JSON.stringify({ type:'stop_push' })) }catch{}
-      await ack
-    }
-  }catch{}
-  try{ ws.close() }catch{}
-  fbPushWsRef.current=null
-}
-const stopPushWatchdog=()=>{ try{ if(pushWatchdogRef.current) clearInterval(pushWatchdogRef.current) }catch{}; pushWatchdogRef.current=null; pushRestartingRef.current=false }
+const stopPushWatchdog=()=>{ try{ if(pushWatchdogRef.current) clearInterval(pushWatchdogRef.current) }catch{}; pushWatchdogRef.current=null }
 const startPushWatchdog=()=>{
   stopPushWatchdog()
   lastFbChunkAtRef.current=Date.now()
-  pushWatchdogRef.current=setInterval(async()=>{
+  pushWatchdogRef.current=setInterval(()=>{
     try{
       if(fbStopIntentionalRef.current) return
       if(!lastFbPushRef.current) return
       if(!fbPushingRef.current) return
-      if(pushRestartingRef.current) return
       const idleMs=Date.now()-lastFbChunkAtRef.current
-      // FIX ONLY: FB cutting - was 3s idle + 2s check. Facebook finalizes after ~10s no data. Now 2s idle + 1s check.
       if(idleMs<2000) return
+      // SINGLE-CONNECTION: Monitor ONLY. Do NOT close, do NOT restart. Restart = Facebook finalizes VOD at that second.
       setPushStatus('Stalled')
-      pushRestartingRef.current=true
-      fbPushingRef.current=false
-      const url=lastFbPushRef.current
-      // FIX ONLY: FB cutting - graceful stop first, so old ffmpeg releases RTMP before new one starts.
-      await gracefulStopFbConnection()
-      pushRestartingRef.current=false
-      if(!fbStopIntentionalRef.current && url) startFbPush(url)
     }catch{}
   },1000)
 }
-const scheduleFbPushResume=()=>{
-  if(fbStopIntentionalRef.current) return
-  if(!lastFbPushRef.current) return
-  if(fbResumeTimerRef.current) return
-  if(fbResumeAttemptsRef.current>=30) return
-  const delay=Math.min(1500+fbResumeAttemptsRef.current*500, 4000)
-  fbResumeTimerRef.current=setTimeout(()=>{
-    fbResumeTimerRef.current=null
-    if(fbStopIntentionalRef.current) return
-    if(!lastFbPushRef.current) return
-    if(fbPushingRef.current) return
-    fbResumeAttemptsRef.current+=1
-    startFbPush(lastFbPushRef.current)
-  },delay)
-}
-const resumeFbPushNow=async()=>{
-  if(fbStopIntentionalRef.current) return
-  if(!lastFbPushRef.current) return
-  if(fbPushingRef.current && Date.now()-lastFbChunkAtRef.current<2000) return
-  clearFbResumeTimer()
-  fbPushingRef.current=false
-  setPushStatus('Stalled')
-  const url=lastFbPushRef.current
-  await gracefulStopFbConnection()
-  if(!fbStopIntentionalRef.current && url) startFbPush(url)
-}
+// SINGLE-CONNECTION: Kept only so Part 2 still compiles. Intentionally does NOTHING - restarting to same URL would cut the post.
+const resumeFbPushNow=()=>{ return }
 const endFbLiveVideo=async()=>{
   const id=fbLiveIdRef.current
   const page=fbPageRef.current
@@ -442,7 +388,6 @@ const fetchFbComments=async()=>{
       const res=await fetch('https://graph.facebook.com/v19.0/'+id+'/comments?fields=id,from{name},message,created_time&limit=25&order=reverse_chronological&access_token='+encodeURIComponent(page.access_token))
       data=await res.json()
     }
-    // FIX ONLY: Removed /live_comments fallback - Facebook returns "Unknown path components: /live_comments" and it overwrote good results with a fake error.
     if(data?.error){ setFbCommentsError(data.error?.message||'Facebook comments blocked - re-login Facebook'); return }
     setFbCommentsError('')
     if(data?.data?.length){
@@ -472,19 +417,27 @@ const stopFbCommentsPolling=()=>{ try{ if(fbCommentsTimerRef.current) clearInter
 const startFbPush=async(fbRtmpUrl:string)=>{
   if(!fbRtmpUrl) return
   if(!canvasRef.current){ alert('Start Camera first'); return }
-  if(fbPushingRef.current && fbPushWsRef.current && fbPushWsRef.current.readyState===WebSocket.OPEN) return
+  // SINGLE-CONNECTION: One live = one push. Second call while starting/running is ignored, so timer never resets to 00:00:00 mid-live.
+  if(fbStartingRef.current) return
+  if(fbPushingRef.current) return
+  if(fbPushWsRef.current && fbPushWsRef.current.readyState!==WebSocket.CLOSED) return
+  fbStartingRef.current=true
   stoppingFbRef.current=false
   fbStopIntentionalRef.current=false
-  clearFbResumeTimer()
   clearFbKeepalive()
   lastFbPushRef.current=fbRtmpUrl
-  // FIX ONLY: FB cutting - never close old WS without stop_push. Old ffmpeg would keep holding RTMP.
-  if(fbPushWsRef.current){ try{ fbPushWsRef.current.send(JSON.stringify({ type:'stop_push' })) }catch{}; await new Promise(r=>setTimeout(r,300)); try{ fbPushWsRef.current.close() }catch{}; fbPushWsRef.current=null }
-  try{ fbPushRecorderRef.current?.stop() }catch{}
-  fbPushRecorderRef.current=null
   const ws=new WebSocket(WS_URL)
   fbPushWsRef.current=ws
-  const starter=startPushRecorderOnReady(ws, fbPushRecorderRef, ()=>{ fbPushingRef.current=true; fbResumeAttemptsRef.current=0; lastFbChunkAtRef.current=Date.now(); setPushStatus('Sending'); startPushWatchdog(); startTimer(); startLocalRecording() }, true)
+  const starter=startPushRecorderOnReady(ws, fbPushRecorderRef, ()=>{
+    fbPushingRef.current=true
+    fbStartingRef.current=false
+    lastFbChunkAtRef.current=Date.now()
+    setPushStatus('Sending')
+    startPushWatchdog()
+    // SINGLE-CONNECTION: Do NOT reset timer if already running. Old startTimer() reset liveSeconds to 0 mid-live.
+    if(!timerRef.current) startTimer()
+    startLocalRecording()
+  }, true)
   ws.onopen=()=>{
     let rtmpUrl=fbRtmpUrl
     let streamKey=''
@@ -499,22 +452,28 @@ const startFbPush=async(fbRtmpUrl:string)=>{
       if(d.type==='push_started'){ starter.clearFallback(); starter.doStart() }
       if(d.type==='push_stopped'){
         if(fbPushStoppedResolverRef.current){ const r=fbPushStoppedResolverRef.current; fbPushStoppedResolverRef.current=null; try{ r() }catch{} }
-        fbPushingRef.current=false; clearFbKeepalive(); scheduleFbPushResume()
+        // SINGLE-CONNECTION: No auto-resume. Show Stalled, keep lastFbPushRef so intentional Stop can still end the live cleanly.
+        fbPushingRef.current=false; fbStartingRef.current=false; clearFbKeepalive(); setPushStatus('Stalled')
       }
-      if(d.type==='error'){ fbPushingRef.current=false; if(d.message) alert('Facebook Push: '+d.message); scheduleFbPushResume() }
+      // SINGLE-CONNECTION: No auto-resume on error. Alert once, do NOT start a second push to same URL.
+      if(d.type==='error'){ fbPushingRef.current=false; fbStartingRef.current=false; setPushStatus('Stalled'); if(d.message) alert('Facebook Push: '+d.message) }
     }catch{}
   }
-  ws.onerror=()=>{ fbPushingRef.current=false; clearFbKeepalive(); scheduleFbPushResume() }
+  ws.onerror=()=>{
+    // SINGLE-CONNECTION: No auto-resume. Keep socket as-is, show Stalled.
+    fbPushingRef.current=false; fbStartingRef.current=false; clearFbKeepalive(); setPushStatus('Stalled')
+  }
   ws.onclose=()=>{
     if(fbPushStoppedResolverRef.current){ const r=fbPushStoppedResolverRef.current; fbPushStoppedResolverRef.current=null; try{ r() }catch{} }
-    fbPushingRef.current=false; clearFbKeepalive(); scheduleFbPushResume()
+    // SINGLE-CONNECTION: No auto-resume on close.
+    fbPushingRef.current=false; fbStartingRef.current=false; clearFbKeepalive()
+    if(!fbStopIntentionalRef.current) setPushStatus('Stalled')
   }
 }
 const stopFbPush=async()=>{
   if(stoppingFbRef.current) return
   stoppingFbRef.current=true
   fbStopIntentionalRef.current=true
-  clearFbResumeTimer()
   clearFbKeepalive()
   stopPushWatchdog()
   setPushStatus('Idle')
@@ -532,12 +491,12 @@ const stopFbPush=async()=>{
     try{ fbPushWsRef.current?.close() }catch{}
     fbPushWsRef.current=null
     fbPushingRef.current=false
+    fbStartingRef.current=false
     lastFbPushRef.current=null
-    fbResumeAttemptsRef.current=0
     await endFbLiveVideo()
   } finally { stoppingFbRef.current=false; fbPushStoppedResolverRef.current=null }
 }
-useEffect(()=>{ return ()=>{ fbStopIntentionalRef.current=true; clearFbResumeTimer(); clearFbKeepalive(); stopPushWatchdog(); stopFbCommentsPolling(); try{ fbPushRecorderRef.current?.stop() }catch{}; try{ fbPushWsRef.current?.close() }catch{} } },[])
+useEffect(()=>{ return ()=>{ fbStopIntentionalRef.current=true; clearFbKeepalive(); stopPushWatchdog(); stopFbCommentsPolling(); try{ fbPushRecorderRef.current?.stop() }catch{}; try{ fbPushWsRef.current?.close() }catch{} } },[])
 // === END OF PART 1A - CONTINUE WITH PART 1B BELOW ===
 // === UPDATE ONLY: YouTube RTMP Push - FIX 3+5+7: YouTube was only timer before, now real push ===
 const ytPushWsRef=useRef<WebSocket|null>(null)
