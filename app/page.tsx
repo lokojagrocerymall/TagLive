@@ -243,9 +243,7 @@ const startPushRecorderOnReady=(ws:any, recorderRef:any, onStarted?:()=>void, is
       rec.ondataavailable=(e)=>{
         if(e.data.size>0 && ws.readyState===WebSocket.OPEN){
           try{ ws.send(e.data) }catch{}
-          // FIX ONLY: FB cutting - heartbeat for watchdog. Only FB chunks count, so YT/TikTok cannot mask an FB stall.
           if(isFbPush){ lastFbChunkAtRef.current=Date.now(); setPushStatus('Sending') }
-          // FIX ONLY: FB cutting - stale socket, buffer full means bridge is not draining. Close it so resume can run.
           try{ if(ws.bufferedAmount>4000000){ try{ ws.close() }catch{} } }catch{}
         }
       }
@@ -340,36 +338,54 @@ const fbPushStoppedResolverRef=useRef<any>(null)
 const fbResumeAttemptsRef=useRef(0)
 const clearFbKeepalive=()=>{ try{ if(fbKeepaliveRef.current) clearInterval(fbKeepaliveRef.current) }catch{}; fbKeepaliveRef.current=null }
 const clearFbResumeTimer=()=>{ try{ if(fbResumeTimerRef.current) clearTimeout(fbResumeTimerRef.current) }catch{}; fbResumeTimerRef.current=null }
-// === FIX ONLY: FB cutting - watchdog. Old code only resumed on WS close. Push can die while WS stays OPEN, local preview still complete. ===
+// === FIX ONLY: FB cutting - graceful stop. Old code closed WS without stop_push, orphan ffmpeg held RTMP, restart could never take over. ===
+const gracefulStopFbConnection=async()=>{
+  try{ fbPushRecorderRef.current?.stop() }catch{}
+  fbPushRecorderRef.current=null
+  const ws=fbPushWsRef.current
+  if(!ws) return
+  try{
+    if(ws.readyState===WebSocket.OPEN){
+      const ack=new Promise<void>((resolve)=>{
+        const prevResolver=fbPushStoppedResolverRef.current
+        fbPushStoppedResolverRef.current=()=>{ try{ if(prevResolver) prevResolver() }catch{}; resolve() }
+        setTimeout(()=>{ if(fbPushStoppedResolverRef.current){ fbPushStoppedResolverRef.current=null; resolve() } },800)
+      })
+      try{ ws.send(JSON.stringify({ type:'stop_push' })) }catch{}
+      await ack
+    }
+  }catch{}
+  try{ ws.close() }catch{}
+  fbPushWsRef.current=null
+}
 const stopPushWatchdog=()=>{ try{ if(pushWatchdogRef.current) clearInterval(pushWatchdogRef.current) }catch{}; pushWatchdogRef.current=null; pushRestartingRef.current=false }
 const startPushWatchdog=()=>{
   stopPushWatchdog()
   lastFbChunkAtRef.current=Date.now()
-  pushWatchdogRef.current=setInterval(()=>{
+  pushWatchdogRef.current=setInterval(async()=>{
     try{
       if(fbStopIntentionalRef.current) return
       if(!lastFbPushRef.current) return
       if(!fbPushingRef.current) return
       if(pushRestartingRef.current) return
       const idleMs=Date.now()-lastFbChunkAtRef.current
-      if(idleMs<3000) return
+      // FIX ONLY: FB cutting - was 3s idle + 2s check. Facebook finalizes after ~10s no data. Now 2s idle + 1s check.
+      if(idleMs<2000) return
       setPushStatus('Stalled')
       pushRestartingRef.current=true
       fbPushingRef.current=false
-      try{ fbPushRecorderRef.current?.stop() }catch{}
-      fbPushRecorderRef.current=null
-      try{ fbPushWsRef.current?.close() }catch{}
-      fbPushWsRef.current=null
       const url=lastFbPushRef.current
-      setTimeout(()=>{ pushRestartingRef.current=false; if(!fbStopIntentionalRef.current && url) startFbPush(url) },300)
+      // FIX ONLY: FB cutting - graceful stop first, so old ffmpeg releases RTMP before new one starts.
+      await gracefulStopFbConnection()
+      pushRestartingRef.current=false
+      if(!fbStopIntentionalRef.current && url) startFbPush(url)
     }catch{}
-  },2000)
+  },1000)
 }
 const scheduleFbPushResume=()=>{
   if(fbStopIntentionalRef.current) return
   if(!lastFbPushRef.current) return
   if(fbResumeTimerRef.current) return
-  // FIX ONLY: FB cutting - was 5 attempts, so a push that died at 0:50 never resumed for a long live. Now 30.
   if(fbResumeAttemptsRef.current>=30) return
   const delay=Math.min(1500+fbResumeAttemptsRef.current*500, 4000)
   fbResumeTimerRef.current=setTimeout(()=>{
@@ -381,18 +397,16 @@ const scheduleFbPushResume=()=>{
     startFbPush(lastFbPushRef.current)
   },delay)
 }
-// FIX ONLY: FB cutting - manual resume for Part 2 button. Use before Facebook finalizes the post.
-const resumeFbPushNow=()=>{
+const resumeFbPushNow=async()=>{
   if(fbStopIntentionalRef.current) return
   if(!lastFbPushRef.current) return
-  if(fbPushingRef.current && Date.now()-lastFbChunkAtRef.current<3000) return
+  if(fbPushingRef.current && Date.now()-lastFbChunkAtRef.current<2000) return
   clearFbResumeTimer()
   fbPushingRef.current=false
-  try{ fbPushRecorderRef.current?.stop() }catch{}
-  fbPushRecorderRef.current=null
-  try{ fbPushWsRef.current?.close() }catch{}
-  fbPushWsRef.current=null
-  startFbPush(lastFbPushRef.current)
+  setPushStatus('Stalled')
+  const url=lastFbPushRef.current
+  await gracefulStopFbConnection()
+  if(!fbStopIntentionalRef.current && url) startFbPush(url)
 }
 const endFbLiveVideo=async()=>{
   const id=fbLiveIdRef.current
@@ -405,12 +419,11 @@ const endFbLiveVideo=async()=>{
     ])
   }catch{}
 }
-// === FIX ONLY: Comments + Reactions - FB.api with Page token, fetch fallback, live_comments fallback ===
+// === FIX ONLY: Comments + Reactions - FB.api with Page token, fetch fallback. NO /live_comments - that path does not exist. ===
 const fbApiGet=(path:string, accessToken?:string)=>{
   return new Promise<any>((resolve)=>{
     try{
       if(window.FB && window.FB.api){
-        // FIX ONLY: Chats - old code called FB.api(path) with no token, so Page live comments returned empty.
         if(accessToken){ window.FB.api(path, { access_token: accessToken }, (res:any)=>{ resolve(res||{}) }); return }
         window.FB.api(path,(res:any)=>{ resolve(res||{}) }); return
       }
@@ -429,15 +442,7 @@ const fetchFbComments=async()=>{
       const res=await fetch('https://graph.facebook.com/v19.0/'+id+'/comments?fields=id,from{name},message,created_time&limit=25&order=reverse_chronological&access_token='+encodeURIComponent(page.access_token))
       data=await res.json()
     }
-    // FIX ONLY: Chats - Facebook live videos also expose live_comments. If /comments is empty, try that before giving up.
-    if(!data?.data?.length){
-      try{
-        const res2=await fetch('https://graph.facebook.com/v19.0/'+id+'/live_comments?fields=id,from{name},message,created_time&limit=25&access_token='+encodeURIComponent(page.access_token))
-        const data2=await res2.json()
-        if(data2?.data?.length) data=data2
-        else if(data2?.error && !data?.error) data=data2
-      }catch{}
-    }
+    // FIX ONLY: Removed /live_comments fallback - Facebook returns "Unknown path components: /live_comments" and it overwrote good results with a fake error.
     if(data?.error){ setFbCommentsError(data.error?.message||'Facebook comments blocked - re-login Facebook'); return }
     setFbCommentsError('')
     if(data?.data?.length){
@@ -445,7 +450,6 @@ const fetchFbComments=async()=>{
         addLiveComment({ id:c.id, source:'Facebook', name:c.from?.name||'Facebook', text:c.message||'', time:c.created_time?new Date(c.created_time).toLocaleTimeString():new Date().toLocaleTimeString() })
       })
     }
-    // Reactions - separate endpoint, never fetched before, that is why ❤️ never show
     try{
       let r:any={}
       try{ r=await fbApiGet('/'+id+'/reactions?summary=true&limit=0', page.access_token) }catch{}
@@ -474,7 +478,8 @@ const startFbPush=async(fbRtmpUrl:string)=>{
   clearFbResumeTimer()
   clearFbKeepalive()
   lastFbPushRef.current=fbRtmpUrl
-  if(fbPushWsRef.current){ try{ fbPushWsRef.current.close() }catch{} }
+  // FIX ONLY: FB cutting - never close old WS without stop_push. Old ffmpeg would keep holding RTMP.
+  if(fbPushWsRef.current){ try{ fbPushWsRef.current.send(JSON.stringify({ type:'stop_push' })) }catch{}; await new Promise(r=>setTimeout(r,300)); try{ fbPushWsRef.current.close() }catch{}; fbPushWsRef.current=null }
   try{ fbPushRecorderRef.current?.stop() }catch{}
   fbPushRecorderRef.current=null
   const ws=new WebSocket(WS_URL)
