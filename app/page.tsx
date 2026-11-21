@@ -61,7 +61,7 @@ const [selected,setSelected]=useState<'text'|'logo'>('text')
 const [showText,setShowText]=useState(true)
 const [showLogo,setShowLogo]=useState(true)
 const [isAdmin,setIsAdmin]=useState(false)
-const [stats,setStats]=useState({ live: 0, daily: 0, weekly: 0, monthly: 0, total: 0 })
+const [stats,setStats,setStats]=useState({ live: 0, daily: 0, weekly: 0, monthly: 0, total: 0 })
 const [countries,setCountries]=useState<any[]>([])
 const [intros,setIntros]=useState<any[]>([])
 const [outros,setOutros]=useState<any[]>([])
@@ -232,6 +232,7 @@ const startPushRecorderOnReady=(ws:any, recorderRef:any, onStarted?:()=>void, is
       const canvasStream=getPushStream()
       let mime='video/webm;codecs=vp8,opus'
       if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm'
+      // FIX ONLY - FB SKIPPING: Bitrate UNCHANGED. Quality kept. Only chunk interval 250 -> 500ms so Facebook gets fewer, steadier pieces.
       const pushBits=lowData?600000:800000
       const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: pushBits })
       recorderRef.current=rec
@@ -242,7 +243,7 @@ const startPushRecorderOnReady=(ws:any, recorderRef:any, onStarted?:()=>void, is
           if(isFbPush){ lastFbChunkAtRef.current=Date.now(); setPushStatus('Sending') }
         }
       }
-      rec.start(250)
+      rec.start(500)
       if(onStarted) onStarted()
     }catch{}
   }
@@ -258,6 +259,8 @@ const waitForFbPushReady=async()=>{
   return fbPushingRef.current
 }
 const startLocalRecording=async()=>{
+  // FIX ONLY - FB SKIPPING: Do NOT run a 2nd encoder while any live push is running. That 2nd encoder was stealing CPU and making FB skip. Manual recording still works when NO live push is on.
+  try{ if((fbPushingRef as any)?.current || (ytPushingRef as any)?.current || (tiktokPushRecorderRef as any)?.current) return }catch{}
   if(isRecording) return
   const canvas=canvasRef.current; if(!canvas) return
   try{
@@ -290,7 +293,8 @@ const startTikTokPush=async(rtmpUrlOverride?:string,streamKeyOverride?:string)=>
   try{ tiktokPushRecorderRef.current?.stop() }catch{}
   const ws=new WebSocket(WS_URL)
   tiktokPushWsRef.current=ws
-  const starter=startPushRecorderOnReady(ws, tiktokPushRecorderRef, ()=>{ setTiktokPushing(true); setTiktokStatus('Connected'); startLocalRecording() })
+  // FIX ONLY - FB SKIPPING: Removed startLocalRecording() here. No 2nd encoder during push.
+  const starter=startPushRecorderOnReady(ws, tiktokPushRecorderRef, ()=>{ setTiktokPushing(true); setTiktokStatus('Connected') })
   ws.onopen=()=>{ ws.send(JSON.stringify({ type:'start_push', rtmpUrl, streamKey })) }
   ws.onmessage=(e)=>{
     try{
@@ -420,7 +424,7 @@ const startFbPush=async(fbRtmpUrl:string)=>{
     setPushStatus('Sending')
     startPushWatchdog()
     if(!timerRef.current) startTimer()
-    startLocalRecording()
+    // FIX ONLY - FB SKIPPING: Removed startLocalRecording() here. No 2nd encoder during FB push. FB keeps full quality + full CPU.
   }, true)
   ws.onopen=()=>{
     let rtmpUrl=fbRtmpUrl
@@ -500,7 +504,8 @@ const startYtPush=async(ytKeyOverride?:string)=>{
   try{ ytPushRecorderRef.current?.stop() }catch{}
   const ws=new WebSocket(WS_URL)
   ytPushWsRef.current=ws
-  const starter=startPushRecorderOnReady(ws, ytPushRecorderRef, ()=>{ ytPushingRef.current=true; setYtLive(true); setIsLive(true); if(!timerRef.current) startTimer(); startLocalRecording() })
+  // FIX ONLY - FB SKIPPING: Removed startLocalRecording() here. No 2nd encoder during push.
+  const starter=startPushRecorderOnReady(ws, ytPushRecorderRef, ()=>{ ytPushingRef.current=true; setYtLive(true); setIsLive(true); if(!timerRef.current) startTimer() })
   ws.onopen=()=>{
     ws.send(JSON.stringify({ type:'start_push', rtmpUrl:'rtmp://a.rtmp.youtube.com/live2', streamKey:key }))
   }
@@ -1253,7 +1258,7 @@ return (
 {(isLive||ytLive||isRecording)&&<div style={{marginLeft:'auto',color:'#FF0000',fontWeight:900,border:'2px solid red',borderRadius:20,padding:'6px 12px',fontSize:11}}>● LIVE {formatTime(liveSeconds)}</div>}
 </div>
 {isAdmin&&(<div style={{margin:12,background:'#000',border:'2px solid #00ff00',borderRadius:16,padding:12}}>
-<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:12,color:'#00ff00'}}>ADMIN DASHBOARD</b><button onClick={()=>setShowAdmin(!showAdmin)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:showAdmin?'#00ff00':'#111',color:showAdmin?'#000':'#00ff00',fontWeight:800,fontSize:11}}>Open</button></div>
+<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:12,color:'#00ff00'}}>ADMIN DASHBOARD</b><button onClick={()=>setShowAdmin(!showAdmin)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:showAdmin?'#00ff00':'#111',color:showAdmin?'#00ff00':showAdmin?'#000':'#00ff00',fontWeight:800,fontSize:11}}>Open</button></div>
 {showAdmin&&(<div style={{marginTop:10}}>
 <div style={{display:'grid',gridTemplateColumns:'repeat(5, 1fr)',gap:6,textAlign:'center'}}>
 <div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>LIVE</div><div style={{fontSize:18,fontWeight:900,color:'#00ff00'}}>{stats.live}</div></div>
@@ -1357,7 +1362,8 @@ monthCount!==null?
 {(isLive||pushStatus!=='Idle')&&(<div style={{marginTop:10,padding:'10px 12px',borderRadius:12,background:pushStatus==='Stalled'?'#fef2f2':pushStatus==='Sending'?'#f0fdf4':'#f5f5f7',border:pushStatus==='Stalled'?'2px solid #ff0000':'1px solid #ddd',display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><span style={{fontWeight:900,fontSize:12,color:pushStatus==='Stalled'?'#b91c1c':'#111'}}>{pushStatus==='Sending'?'🟢 PUSH: Sending — Facebook is receiving video':pushStatus==='Stalled'?'🔴 PUSH: Stalled — Keep going, do NOT tap Stop yet':`⚪ PUSH: ${pushStatus}`}</span></div>)}
 <div style={{display:'flex',gap:8,marginTop:12}}>{!isCam?<button onClick={()=>startCamera()} style={{flex:1,background:'#111',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Start Camera {lowData?'(480p)':''}</button>:<><button onClick={toggleCamera} style={{flex:1,background:'#7c3aed',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Switch Camera</button><button onClick={stopCamera} style={{flex:1,background:'#444',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Stop</button></>}</div>
 <div style={{display:'flex',gap:6,marginTop:10}}>
-{!isRecording?<button onClick={startRecording} disabled={!isCam} style={{flex:1,background:isCam?'#a21caf':'#ccc',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>{(isLive||ytLive)?'● LIVE + Recording':'Record'}</button>
+{/* === FIX ONLY: Facebook Skipping - Do NOT start 2nd encoder (Local Recording) while FB Live is ON. FB VOD is your recording. === */}
+{!isRecording?<button onClick={()=>{ if(isLive){ alert('Facebook Live is ON - Facebook VOD is your recording. No 2nd recorder, to stop Facebook skipping.'); return } startRecording() }} disabled={!isCam} style={{flex:1,background:isCam?'#a21caf':'#ccc',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>{isLive?'● FB LIVE - VOD is Recording':(ytLive?'● LIVE + Recording':'Record')}</button>
 :<><button onClick={stopRecording} style={{flex:1,background:'#111',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Stop + Outro ({formatTime(liveSeconds)})</button>{broadcastPlaying&&<button onClick={stopIntroOnly} style={{background:'#ff0000',color:'#fff',padding:12,borderRadius:10,fontWeight:900,border:'none',fontSize:11}}>STOP INTRO</button>}</>}
 {recordedUrl&&<a href={recordedUrl} download={'TagLive-'+Date.now()+'.mp4'} style={{flex:1,background:'#16a34a',color:'#fff',padding:12,borderRadius:10,fontWeight:800,textAlign:'center',textDecoration:'none',fontSize:12}}>Download</a>}
 </div>
