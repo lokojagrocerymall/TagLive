@@ -166,8 +166,9 @@ const getPushAudioTrack=()=>{
   }catch{}
   return streamRef.current?.getAudioTracks()[0]||null
 }
+// === FIX ONLY: Skipping - 15fps -> 24fps to match new Bridge (24fps, 1200k). 15fps made every dropped frame obvious. ===
 const getPushStream=()=>{
-  const canvasStream=(canvasRef.current as any).captureStream(15) as MediaStream
+  const canvasStream=(canvasRef.current as any).captureStream(24) as MediaStream
   const audioTrack=getPushAudioTrack()
   if(audioTrack) canvasStream.addTrack(audioTrack)
   return canvasStream
@@ -232,12 +233,14 @@ const startPushRecorderOnReady=(ws:any, recorderRef:any, onStarted?:()=>void, is
       const canvasStream=getPushStream()
       let mime='video/webm;codecs=vp8,opus'
       if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm'
-      const pushBits=lowData?600000:800000
+      // FIX ONLY: Skipping - 800k -> 1200k to match new Bridge (1200k). 800k starved the bridge and caused compression jumps.
+      const pushBits=lowData?800000:1200000
       const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: pushBits })
       recorderRef.current=rec
       rec.ondataavailable=(e)=>{
         if(e.data.size>0 && ws.readyState===WebSocket.OPEN){
-          try{ if(ws.bufferedAmount>4000000) return }catch{}
+          // FIX ONLY: Skipping - 4M -> 8M drop limit. Old limit dropped too many chunks = visible skips.
+          try{ if(ws.bufferedAmount>8000000) return }catch{}
           try{ ws.send(e.data) }catch{}
           if(isFbPush){ lastFbChunkAtRef.current=Date.now(); setPushStatus('Sending') }
         }
