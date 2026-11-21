@@ -166,9 +166,9 @@ const getPushAudioTrack=()=>{
   }catch{}
   return streamRef.current?.getAudioTracks()[0]||null
 }
-// === FIX ONLY: Skipping - 15fps -> 24fps to match new Bridge (24fps, 1200k). 15fps made every dropped frame obvious. ===
+// === FIX ONLY: Intro hang + Skipping - 24fps -> 15fps. Phone sends light, Bridge upscales to 24fps. 24fps on phone starved Intro and made MediaRecorder drop frames. ===
 const getPushStream=()=>{
-  const canvasStream=(canvasRef.current as any).captureStream(24) as MediaStream
+  const canvasStream=(canvasRef.current as any).captureStream(15) as MediaStream
   const audioTrack=getPushAudioTrack()
   if(audioTrack) canvasStream.addTrack(audioTrack)
   return canvasStream
@@ -204,21 +204,18 @@ const playIntroAudioForLive=(active:any)=>{
     setTimeout(()=>{ try{ if(liveMicGainRef.current) liveMicGainRef.current.gain.value=1 }catch{} }, (active.duration||5)*1000)
   }catch{}
 }
+// === FIX ONLY: Intro hang - old muted-first waited 600ms and gave up if play() was blocked once, Intro stayed on frame 0 and Facebook hung on it. New: retry every 300ms until frame actually moves. ===
 const playBroadcastVideoMutedFirst=async(v:any)=>{
   try{
-    v.muted=true; v.volume=0
+    v.muted=false; v.volume=1
     try{ v.preload='auto' }catch{}
     try{ v.currentTime=0 }catch{}
-    await v.play()
-    await new Promise(r=>setTimeout(r,100))
-    v.muted=false; v.volume=1
-    await new Promise(r=>setTimeout(r,500))
-    try{
-      if(v.paused || (v.currentTime||0)<0.05){
-        try{ v.currentTime=0.1 }catch{}
-        try{ await v.play() }catch{}
-      }
-    }catch{}
+    for(let i=0;i<10;i++){
+      try{ await v.play() }catch{}
+      await new Promise(r=>setTimeout(r,300))
+      if(!v.paused && (v.currentTime||0)>0.05) break
+      try{ v.currentTime=0.1 }catch{}
+    }
   }catch{
     try{ v.muted=true; v.volume=0; await v.play() }catch{}
   }
@@ -233,13 +230,13 @@ const startPushRecorderOnReady=(ws:any, recorderRef:any, onStarted?:()=>void, is
       const canvasStream=getPushStream()
       let mime='video/webm;codecs=vp8,opus'
       if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm'
-      // FIX ONLY: Skipping - 800k -> 1200k to match new Bridge (1200k). 800k starved the bridge and caused compression jumps.
-      const pushBits=lowData?800000:1200000
+      // FIX ONLY: Skipping - 1200k -> 800k. 1200k on phone + 4G made MediaRecorder drop frames = skipping.
+      const pushBits=lowData?600000:800000
       const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: pushBits })
       recorderRef.current=rec
       rec.ondataavailable=(e)=>{
         if(e.data.size>0 && ws.readyState===WebSocket.OPEN){
-          // FIX ONLY: Skipping - 4M -> 8M drop limit. Old limit dropped too many chunks = visible skips.
+          // FIX ONLY: Skipping - keep 8M drop limit. Old 4M dropped too many chunks = visible skips.
           try{ if(ws.bufferedAmount>8000000) return }catch{}
           try{ ws.send(e.data) }catch{}
           if(isFbPush){ lastFbChunkAtRef.current=Date.now(); setPushStatus('Sending') }
