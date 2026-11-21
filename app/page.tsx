@@ -166,11 +166,18 @@ const getPushAudioTrack=()=>{
   }catch{}
   return streamRef.current?.getAudioTracks()[0]||null
 }
-const getPushStream=()=>{
-  const canvasStream=(canvasRef.current as any).captureStream(15) as MediaStream
+// === FIX ONLY: FB skipping - ONE shared canvas stream for push + local. Was 2x captureStream + 2x MediaRecorder, phone starved push encoder, FB dropped frames. ===
+const sharedCanvasStreamRef=useRef<MediaStream|null>(null)
+const getSharedCanvasStream=()=>{
+  if(sharedCanvasStreamRef.current) return sharedCanvasStreamRef.current
+  const s=(canvasRef.current as any).captureStream(15) as MediaStream
   const audioTrack=getPushAudioTrack()
-  if(audioTrack) canvasStream.addTrack(audioTrack)
-  return canvasStream
+  if(audioTrack && s.getAudioTracks().length===0) s.addTrack(audioTrack)
+  sharedCanvasStreamRef.current=s
+  return s
+}
+const getPushStream=()=>{
+  return getSharedCanvasStream()
 }
 const connectBroadcastVideoToMixer=()=>{
   try{
@@ -240,10 +247,12 @@ const startPushRecorderOnReady=(ws:any, recorderRef:any, onStarted?:()=>void, is
         if(e.data.size>0 && ws.readyState===WebSocket.OPEN){
           try{ if(ws.bufferedAmount>4000000) return }catch{}
           try{ ws.send(e.data) }catch{}
-          if(isFbPush){ lastFbChunkAtRef.current=Date.now(); setPushStatus('Sending') }
+          // FIX ONLY: Stuck Sending - do NOT set Sending after intentional stop, recorder still flushes for 2s after stopFbPush.
+          if(isFbPush && !fbStopIntentionalRef.current){ lastFbChunkAtRef.current=Date.now(); setPushStatus('Sending') }
         }
       }
-      rec.start(250)
+      // FIX ONLY: FB skipping - 250ms chunks too chatty, more skip points at ffmpeg. 500ms = fewer, bigger chunks.
+      rec.start(500)
       if(onStarted) onStarted()
     }catch{}
   }
@@ -262,9 +271,8 @@ const startLocalRecording=async()=>{
   if(isRecording) return
   const canvas=canvasRef.current; if(!canvas) return
   try{
-    const canvasStream=(canvas as any).captureStream(24) as MediaStream
-    const audioTrack=getPushAudioTrack()
-    if(audioTrack) canvasStream.addTrack(audioTrack)
+    // FIX ONLY: FB skipping - reuse ONE shared stream, do NOT call captureStream(24) again and start a 2nd encoder.
+    const canvasStream=getSharedCanvasStream()
     chunksRef.current=[]
     let mime='video/webm;codecs=vp9,opus'
     if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm;codecs=vp8,opus'
@@ -462,7 +470,7 @@ const stopFbPush=async()=>{
   fbStopIntentionalRef.current=true
   clearFbKeepalive()
   stopPushWatchdog()
-  setPushStatus('Idle')
+  // FIX ONLY: Stuck Sending - do NOT set Idle here. Recorder still flushes for 2s and ondataavailable would set Sending again. Idle is set after recorder stops below.
   stopFbCommentsPolling()
   try{
     await new Promise(r=>setTimeout(r,2000))
@@ -479,6 +487,7 @@ const stopFbPush=async()=>{
     fbPushingRef.current=false
     fbStartingRef.current=false
     lastFbPushRef.current=null
+    setPushStatus('Idle')
     await endFbLiveVideo()
   } finally { stoppingFbRef.current=false; fbPushStoppedResolverRef.current=null }
 }
@@ -843,7 +852,8 @@ const removeChurchLogo=()=>{ localStorage.removeItem('taglive_church_logo'); set
 const startRecording=async()=>{
   const canvas=canvasRef.current; if(!canvas) return
   canvas.width=480; canvas.height=854
-  const canvasStream=(canvas as any).captureStream(24) as MediaStream
+  // FIX ONLY: FB skipping - reuse shared stream if it exists, do NOT start a 3rd captureStream. Only add dest audio if shared has no audio yet.
+  const canvasStream=getSharedCanvasStream()
   try{ if(audioCtxRef.current) audioCtxRef.current.close() }catch{}
   audioCtxRef.current=null; setBroadcastPlaying(null); broadcastImageRef.current=null
   if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.removeAttribute('src'); broadcastVideoRef.current.load() }catch{} }
@@ -876,7 +886,7 @@ const startRecording=async()=>{
       }catch{}
     }
   }
-  dest.stream.getAudioTracks().forEach(t=>canvasStream.addTrack(t))
+  if(canvasStream.getAudioTracks().length===0) dest.stream.getAudioTracks().forEach(t=>canvasStream.addTrack(t))
   chunksRef.current=[]
   let mime='video/webm;codecs=vp9,opus'
   if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm;codecs=vp8,opus'
@@ -1342,7 +1352,7 @@ monthCount!==null?
 </div>
 </div>
 <div>
-<div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{background:'#000',borderRadius:18,overflow:'hidden',position:'relative',aspectRatio:'9/16',touchAction: editStateRef.current.locked ? 'none' : 'pan-y'}}><video ref={videoRef} muted playsInline autoPlay style={{width:'100%',height:'100%',objectFit:'cover',display:isCam&&bgMode==='face'?'block':'none'}}/>{!isCam&&<div style={{color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',height:420}}>Camera off - {lowData?'480p ON':'720p'}</div>}<canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%'}}/>
+<div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{background:'#000',borderRadius:18,overflow:'hidden',position:'relative',aspectRatio:'9/16',touchAction: editStateRef.current.locked ? 'none' : 'pan-y'}}><video ref={videoRef} muted playsInline autoPlay style={{width:'100%',height:'100%',objectFit:'cover',display:isCam&&bgMode==='face'&&!broadcastPlaying?'block':'none'}}/>{!isCam&&<div style={{color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',height:420}}>Camera off - {lowData?'480p ON':'720p'}</div>}<canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',zIndex:2}}/>
 <video ref={broadcastVideoRef} playsInline crossOrigin="anonymous" style={{position:'absolute',left:0,top:0,width:'480px',height:'854px',opacity:0,pointerEvents:'none'}}/>
 {broadcastPlaying&&(
   <div style={{position:'absolute',top:12,left:12,right:12,display:'flex',justifyContent:'flex-end',zIndex:100}}>
