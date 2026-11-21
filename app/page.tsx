@@ -30,7 +30,8 @@ const [showComments,setShowComments]=useState(true)
 const [fbReactionCount,setFbReactionCount]=useState(0)
 const [fbCommentsError,setFbCommentsError]=useState('')
 // === SINGLE-CONNECTION FIX: One live = one RTMP connection. Any disconnect finalizes FB VOD, reconnect never appends. ===
-const [pushStatus,setPushStatus]=useState<'Idle'|'Sending'|'Stalled'>('Idle')
+// === FIX ONLY: Delivery check - Waiting until bridge confirms push_started. No more fake Sending. ===
+const [pushStatus,setPushStatus]=useState<'Idle'|'Waiting'|'Sending'|'Stalled'|'Bridge Failed'>('Idle')
 const lastFbChunkAtRef=useRef<number>(0)
 const pushWatchdogRef=useRef<any>(null)
 const fbCommentsTimerRef=useRef<any>(null)
@@ -223,6 +224,7 @@ const playBroadcastVideoMutedFirst=async(v:any)=>{
   }
 }
 // === SINGLE-CONNECTION FIX: Never close WS to "save" it. If buffer is full, drop that one chunk, keep socket open. ===
+// === FIX ONLY: Delivery check - NO fallback auto-start. Recorder starts ONLY on bridge push_started. ===
 const startPushRecorderOnReady=(ws:any, recorderRef:any, onStarted?:()=>void, isFbPush?:boolean)=>{
   let started=false
   const doStart=()=>{
@@ -232,7 +234,7 @@ const startPushRecorderOnReady=(ws:any, recorderRef:any, onStarted?:()=>void, is
       const canvasStream=getPushStream()
       let mime='video/webm;codecs=vp8,opus'
       if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm'
-      // FIX ONLY - FB SKIPPING: Bitrate UNCHANGED. Quality kept. Only chunk interval 250 -> 500ms so Facebook gets fewer, steadier pieces.
+      // FIX ONLY - FB SKIPPING: Bitrate UNCHANGED. Chunk back to ORIGINAL 250ms.
       const pushBits=lowData?600000:800000
       const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: pushBits })
       recorderRef.current=rec
@@ -243,12 +245,11 @@ const startPushRecorderOnReady=(ws:any, recorderRef:any, onStarted?:()=>void, is
           if(isFbPush){ lastFbChunkAtRef.current=Date.now(); setPushStatus('Sending') }
         }
       }
-      rec.start(500)
+      rec.start(250)
       if(onStarted) onStarted()
     }catch{}
   }
-  const fallback=setTimeout(()=>{ doStart() }, 2500)
-  return { doStart, clearFallback:()=>{ try{ clearTimeout(fallback) }catch{} } }
+  return { doStart, clearFallback:()=>{} }
 }
 const waitForFbPushReady=async()=>{
   const start=Date.now()
@@ -415,6 +416,8 @@ const startFbPush=async(fbRtmpUrl:string)=>{
   fbStopIntentionalRef.current=false
   clearFbKeepalive()
   lastFbPushRef.current=fbRtmpUrl
+  // FIX ONLY: Delivery check - show Waiting until bridge confirms.
+  setPushStatus('Waiting')
   const ws=new WebSocket(WS_URL)
   fbPushWsRef.current=ws
   const starter=startPushRecorderOnReady(ws, fbPushRecorderRef, ()=>{
@@ -446,20 +449,20 @@ const startFbPush=async(fbRtmpUrl:string)=>{
       }
       if(d.type==='error'){
         fbPushingRef.current=false; fbStartingRef.current=false; clearFbKeepalive()
-        // FIX ONLY: Stalled after Stop - error after intentional Stop is expected, do NOT show Stalled / alert.
-        if(!fbStopIntentionalRef.current){ setPushStatus('Stalled'); if(d.message) alert('Facebook Push: '+d.message) }
+        // FIX ONLY: Delivery check - error before push_started = bridge never started. Show Bridge Failed.
+        if(!fbStopIntentionalRef.current){ if(!fbPushingRef.current && lastFbChunkAtRef.current===0) setPushStatus('Bridge Failed'); else setPushStatus('Stalled'); if(d.message) alert('Facebook Push: '+d.message) }
       }
     }catch{}
   }
   ws.onerror=()=>{
     fbPushingRef.current=false; fbStartingRef.current=false; clearFbKeepalive()
-    // FIX ONLY: Stalled after Stop - onerror after intentional Stop, do NOT show Stalled.
-    if(!fbStopIntentionalRef.current) setPushStatus('Stalled')
+    // FIX ONLY: Stalled after Stop - onerror after intentional Stop, do NOT show Stalled. If never started, show Bridge Failed.
+    if(!fbStopIntentionalRef.current){ if(lastFbChunkAtRef.current===0) setPushStatus('Bridge Failed'); else setPushStatus('Stalled') }
   }
   ws.onclose=()=>{
     if(fbPushStoppedResolverRef.current){ const r=fbPushStoppedResolverRef.current; fbPushStoppedResolverRef.current=null; try{ r() }catch{} }
     fbPushingRef.current=false; fbStartingRef.current=false; clearFbKeepalive()
-    if(!fbStopIntentionalRef.current) setPushStatus('Stalled')
+    if(!fbStopIntentionalRef.current){ if(lastFbChunkAtRef.current===0) setPushStatus('Bridge Failed'); else setPushStatus('Stalled') }
   }
 }
 const stopFbPush=async()=>{
@@ -552,6 +555,30 @@ const introTimeoutRef=useRef<any>(null)
 const fbPendingRef=useRef<any>(null)
 const creatingFbRef=useRef(false)
 const heartbeatRef=useRef<any>(null)
+// === FIX ONLY: Outro on End - decoupled from isRecording. End button must call endFbLiveWithOutro() in Part 2. ===
+const outroEndingRef=useRef(false)
+const endFbLiveWithOutro=async()=>{
+  if(outroEndingRef.current) return
+  if(!fbPushingRef.current && !isLive){ await stopFbPush(); return }
+  const active=outros.find((o:any)=>o.id===activeOutroId)
+  if(!active){ await stopFbPush(); return }
+  outroEndingRef.current=true
+  try{
+    ensureLiveAudio()
+    try{ if(liveAudioCtxRef.current && liveAudioCtxRef.current.state==='suspended') await liveAudioCtxRef.current.resume() }catch{}
+    playIntroAudioForLive(active)
+    setBroadcastPlaying(active)
+    if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
+    else if(active.type==='video' && broadcastVideoRef.current){
+      try{ const v=broadcastVideoRef.current as any; v.crossOrigin="anonymous"; v.playsInline=true; v.src=active.data; v.currentTime=0; connectBroadcastVideoToMixer(); await playBroadcastVideoMutedFirst(v) }catch{}
+    }
+    await new Promise(r=>setTimeout(r,(active.duration||5)*1000))
+    setBroadcastPlaying(null); broadcastImageRef.current=null
+    if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause() }catch{} }
+  }catch{}
+  outroEndingRef.current=false
+  await stopFbPush()
+}
 useEffect(()=>{
 if(typeof window==='undefined') return
 if(window.FB) return
@@ -946,7 +973,8 @@ const stopRecording=async()=>{
         await new Promise(r=>setTimeout(r,1000))
         stopRecordingFinal()
         // FIX: Outro don finish inside live - NOW stop pushes, so Facebook VOD gets full outro, not 9s cut
-        if(wasFbLive) await stopFbLive()
+        // FIX ONLY: Outro already played here, so skip Outro in stopFbLive(true) - no double Outro.
+        if(wasFbLive) await stopFbLive(true)
         if(wasYtLive) stopYtLive()
         if(wasTikTokLive) stopTikTokLive()
       }, (active.duration||5)*1000)
@@ -971,7 +999,8 @@ const stopRecording=async()=>{
         await new Promise(r=>setTimeout(r,1000))
         stopRecordingFinal()
         // FIX: Outro don finish inside live - NOW stop pushes, so Facebook VOD gets full outro, not 9s cut
-        if(wasFbLive) await stopFbLive()
+        // FIX ONLY: Outro already played here, so skip Outro in stopFbLive(true) - no double Outro.
+        if(wasFbLive) await stopFbLive(true)
         if(wasYtLive) stopYtLive()
         if(wasTikTokLive) stopTikTokLive()
       }, (active.duration||5)*1000)
@@ -982,16 +1011,21 @@ const stopRecording=async()=>{
 }
 // FIX 2: Stop Live = Stop Push + Stop Recording + Download. Before, Stop Live left Recording running separately.
 // FIX 2+3: Real Stop for FB + YT - stops push, not just timer
-const stopFbLive=async()=>{
+const stopFbLive=async(skipOutro?:boolean)=>{
   // FIX ONLY: 2nd tap while stopping dey run must NOT clear liveId / stop recording early and cut FB VOD
   if(stoppingFbLiveRef.current) return
   stoppingFbLiveRef.current=true
   try{
-    // FIX ONLY: Timer + LIVE must end together with Outro - clear UI + stop timer BEFORE await stopFbPush flush
-    // Before: stopTimer() dey after await stopFbPush() (2s flush + end_live_video) -> timer count 10s-15s extra
+    // FIX ONLY: Outro on End - play Outro FIRST while isLive still true, then clear UI + stop. Do NOT clear isLive before Outro, endFbLiveWithOutro() checks it.
     const wasRecording=isRecording
-    setFbStreamUrl(''); setLiveId(''); setIsLive(false); setSelectedPage(null); stopTimer()
-    await stopFbPush(); if(wasRecording) stopRecordingFinal()
+    if(skipOutro){
+      setFbStreamUrl(''); setLiveId(''); setIsLive(false); setSelectedPage(null); stopTimer()
+      await stopFbPush(); if(wasRecording) stopRecordingFinal()
+    } else {
+      await endFbLiveWithOutro()
+      setFbStreamUrl(''); setLiveId(''); setIsLive(false); setSelectedPage(null); stopTimer()
+      if(wasRecording) stopRecordingFinal()
+    }
   } finally { stoppingFbLiveRef.current=false }
 }
 const stopYtLive=()=>{ stopYtPush(); if(isRecording) stopRecordingFinal(); setYtLive(false); if(!fbStreamUrl){ setIsLive(false); stopTimer() } }
@@ -1258,7 +1292,7 @@ return (
 {(isLive||ytLive||isRecording)&&<div style={{marginLeft:'auto',color:'#FF0000',fontWeight:900,border:'2px solid red',borderRadius:20,padding:'6px 12px',fontSize:11}}>● LIVE {formatTime(liveSeconds)}</div>}
 </div>
 {isAdmin&&(<div style={{margin:12,background:'#000',border:'2px solid #00ff00',borderRadius:16,padding:12}}>
-<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:12,color:'#00ff00'}}>ADMIN DASHBOARD</b><button onClick={()=>setShowAdmin(!showAdmin)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:showAdmin?'#00ff00':'#111',color:showAdmin?'#00ff00':showAdmin?'#000':'#00ff00',fontWeight:800,fontSize:11}}>Open</button></div>
+<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:12,color:'#00ff00'}}>ADMIN DASHBOARD</b><button onClick={()=>setShowAdmin(!showAdmin)} style={{padding:'6px 12px',borderRadius:20,border:'none',background:showAdmin?'#00ff00':'#111',color:showAdmin?'#000':'#00ff00',fontWeight:800,fontSize:11}}>Open</button></div>
 {showAdmin&&(<div style={{marginTop:10}}>
 <div style={{display:'grid',gridTemplateColumns:'repeat(5, 1fr)',gap:6,textAlign:'center'}}>
 <div style={{background:'#111',borderRadius:10,padding:8}}><div style={{fontSize:10,color:'#fff'}}>LIVE</div><div style={{fontSize:18,fontWeight:900,color:'#00ff00'}}>{stats.live}</div></div>
@@ -1359,11 +1393,11 @@ monthCount!==null?
 {isCam&&!broadcastPlaying&&(<div style={{position:'absolute',top: bgMode==='split'?'auto':'12px',bottom: bgMode==='split'?'50px':'auto',right:12,display:'flex',gap:8,zIndex:50}}><button onClick={toggleCamera} style={{background:'rgba(0,0,0,0.85)',color:'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>Flip</button><button onClick={toggleTorch} style={{background:torch?'#fbbf24':'rgba(0,0,0,0.85)',color:torch?'#000':'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>{torch?'Flash On':'Flash'}</button></div>)}
 </div>
 {/* === SINGLE-CONNECTION FIX: No Resume button. Restarting to same URL finalizes FB VOD. Stalled = keep going, do NOT tap Stop. === */}
-{(isLive||pushStatus!=='Idle')&&(<div style={{marginTop:10,padding:'10px 12px',borderRadius:12,background:pushStatus==='Stalled'?'#fef2f2':pushStatus==='Sending'?'#f0fdf4':'#f5f5f7',border:pushStatus==='Stalled'?'2px solid #ff0000':'1px solid #ddd',display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><span style={{fontWeight:900,fontSize:12,color:pushStatus==='Stalled'?'#b91c1c':'#111'}}>{pushStatus==='Sending'?'🟢 PUSH: Sending — Facebook is receiving video':pushStatus==='Stalled'?'🔴 PUSH: Stalled — Keep going, do NOT tap Stop yet':`⚪ PUSH: ${pushStatus}`}</span></div>)}
+{/* === FIX ONLY: Show real delivery status - Waiting / Bridge Failed, not fake Sending. === */}
+{(isLive||pushStatus!=='Idle')&&(<div style={{marginTop:10,padding:'10px 12px',borderRadius:12,background:pushStatus==='Stalled'||pushStatus==='Bridge Failed'?'#fef2f2':pushStatus==='Sending'?'#f0fdf4':'#f5f5f7',border:pushStatus==='Stalled'||pushStatus==='Bridge Failed'?'2px solid #ff0000':'1px solid #ddd',display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><span style={{fontWeight:900,fontSize:12,color:pushStatus==='Stalled'||pushStatus==='Bridge Failed'?'#b91c1c':'#111'}}>{pushStatus==='Sending'?'🟢 PUSH: Sending — Facebook is receiving video':pushStatus==='Stalled'?'🔴 PUSH: Stalled — Keep going, do NOT tap Stop yet':pushStatus==='Waiting'?'🟡 PUSH: Waiting — Bridge has not confirmed, Facebook NOT receiving yet':pushStatus==='Bridge Failed'?'🔴 PUSH: Bridge Failed — Facebook NOT receiving, stop and retry':`⚪ PUSH: ${pushStatus}`}</span></div>)}
 <div style={{display:'flex',gap:8,marginTop:12}}>{!isCam?<button onClick={()=>startCamera()} style={{flex:1,background:'#111',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Start Camera {lowData?'(480p)':''}</button>:<><button onClick={toggleCamera} style={{flex:1,background:'#7c3aed',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Switch Camera</button><button onClick={stopCamera} style={{flex:1,background:'#444',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Stop</button></>}</div>
 <div style={{display:'flex',gap:6,marginTop:10}}>
-{/* === FIX ONLY: Facebook Skipping - Do NOT start 2nd encoder (Local Recording) while FB Live is ON. FB VOD is your recording. === */}
-{!isRecording?<button onClick={()=>{ if(isLive){ alert('Facebook Live is ON - Facebook VOD is your recording. No 2nd recorder, to stop Facebook skipping.'); return } startRecording() }} disabled={!isCam} style={{flex:1,background:isCam?'#a21caf':'#ccc',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>{isLive?'● FB LIVE - VOD is Recording':(ytLive?'● LIVE + Recording':'Record')}</button>
+{!isRecording?<button onClick={startRecording} disabled={!isCam} style={{flex:1,background:isCam?'#a21caf':'#ccc',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>{(isLive||ytLive)?'● LIVE + Recording':'Record'}</button>
 :<><button onClick={stopRecording} style={{flex:1,background:'#111',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Stop + Outro ({formatTime(liveSeconds)})</button>{broadcastPlaying&&<button onClick={stopIntroOnly} style={{background:'#ff0000',color:'#fff',padding:12,borderRadius:10,fontWeight:900,border:'none',fontSize:11}}>STOP INTRO</button>}</>}
 {recordedUrl&&<a href={recordedUrl} download={'TagLive-'+Date.now()+'.mp4'} style={{flex:1,background:'#16a34a',color:'#fff',padding:12,borderRadius:10,fontWeight:800,textAlign:'center',textDecoration:'none',fontSize:12}}>Download</a>}
 </div>
@@ -1392,7 +1426,7 @@ monthCount!==null?
 <input value={liveTitle} onChange={e=>setLiveTitle(e.target.value)} placeholder="Live Title - e.g. Sunday Service Live" style={{width:'100%',padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12,fontWeight:700,boxSizing:'border-box'}} />
 <textarea value={liveDescription} onChange={e=>setLiveDescription(e.target.value)} placeholder="Live Description - this shows on Facebook, NOT your verse" style={{width:'100%',padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12,boxSizing:'border-box',height:60}} />
 </div>
-{pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6,padding:10,background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff',color:selectedPage?.id===p.id?'#fff':'#000',borderRadius:8,fontSize:13,fontWeight:700,cursor:'pointer'}}>{p.name} {selectedPage?.id===p.id?'LIVE '+formatTime(liveSeconds):'(Go Live)'}</div>)} {fbStreamUrl&&<div style={{marginTop:10,padding:10,background:'#dcfce7',borderRadius:8,fontSize:11,wordBreak:'break-all'}}>FB: {fbStreamUrl.substring(0,70)}...</div>}{isLive&&<button onClick={stopFbLive} style={{marginTop:10,width:'100%',background:'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>■ Stop Facebook Live</button>}</div>
+{pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6,padding:10,background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff',color:selectedPage?.id===p.id?'#fff':'#000',borderRadius:8,fontSize:13,fontWeight:700,cursor:'pointer'}}>{p.name} {selectedPage?.id===p.id?'LIVE '+formatTime(liveSeconds):'(Go Live)'}</div>)} {fbStreamUrl&&<div style={{marginTop:10,padding:10,background:'#dcfce7',borderRadius:8,fontSize:11,wordBreak:'break-all'}}>FB: {fbStreamUrl.substring(0,70)}...</div>}{isLive&&<button onClick={()=>stopFbLive()} style={{marginTop:10,width:'100%',background:'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>■ Stop Facebook Live</button>}</div>
 <div style={{marginTop:14,border:'2px solid #ff0000',borderRadius:14,padding:12}}><b>Connect YouTube Live</b><input value={ytKey} onChange={e=>{setYtKey(e.target.value);localStorage.setItem('taglive_ytkey',e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={startYtLiveWithIntro} style={{flex:1,background:ytLive?'#16a34a':'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{ytLive?'YouTube LIVE '+formatTime(liveSeconds):'Go Live YouTube + Intro FULL'}</button><button onClick={()=>{if(broadcastPlaying) return; const active=outros.find(o=>o.id===activeOutroId); if(active){setBroadcastPlaying(active); if(active.type==='video'&&broadcastVideoRef.current){ const v=broadcastVideoRef.current as any; v.src=active.data; ensureLiveAudio(); try{ if(liveAudioCtxRef.current) liveAudioCtxRef.current.resume() }catch{}; connectBroadcastVideoToMixer(); playBroadcastVideoMutedFirst(v) } setTimeout(async()=>{setBroadcastPlaying(null); await new Promise(r=>setTimeout(r,1000)); stopYtLive()},(active.duration||5)*1000)} else {stopYtLive()}}} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Stop YT + Outro</button></div></div>
 <div style={{marginTop:14,border:'2px solid #000',borderRadius:14,padding:12}}><b>Connect TikTok Live</b>
 <input value={tiktokUsername} onChange={e=>setTiktokUsername(e.target.value)} placeholder="@your TikTok username" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/>
