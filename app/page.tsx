@@ -790,24 +790,35 @@ const createFbLiveAuto=async(page:any)=>{
   if(isLive && selectedPage?.id===page.id) return
   creatingFbRef.current=true
   try{
-    await createFbLiveForPage(page)
+    // FIX ONLY: FB Intro overshadow - Intro FIRST, push SECOND. Before: push started with camera, FB buffered camera keyframe, Intro audio played over camera video.
     const active=intros.find(i=>i.id===activeIntroId)
-    if(!active) return
-    ensureLiveAudio()
-    try{ if(liveAudioCtxRef.current && liveAudioCtxRef.current.state==='suspended') await liveAudioCtxRef.current.resume() }catch{}
-    playIntroAudioForLive(active)
-    setBroadcastPlaying(active)
-    if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
-    else if(active.type==='video' && broadcastVideoRef.current){
-      try{
-        const v=broadcastVideoRef.current as any
-        v.crossOrigin="anonymous"; v.playsInline=true; v.src=active.data; v.currentTime=0
-        connectBroadcastVideoToMixer()
-        await playBroadcastVideoMutedFirst(v)
-      }catch{}
+    if(active){
+      ensureLiveAudio()
+      try{ if(liveAudioCtxRef.current && liveAudioCtxRef.current.state==='suspended') await liveAudioCtxRef.current.resume() }catch{}
+      playIntroAudioForLive(active)
+      setBroadcastPlaying(active)
+      if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
+      else if(active.type==='video' && broadcastVideoRef.current){
+        try{
+          const v=broadcastVideoRef.current as any
+          v.crossOrigin="anonymous"; v.playsInline=true; v.src=active.data; v.currentTime=0
+          connectBroadcastVideoToMixer()
+          await playBroadcastVideoMutedFirst(v)
+        }catch{}
+      }
+      // Give canvas 300ms to draw the first Intro frame before any push frame is encoded
+      await new Promise(r=>setTimeout(r,300))
+      fbPendingRef.current=null
+      introTimeoutRef.current=setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause() }catch{} } }, (active.duration||5)*1000)
     }
-    fbPendingRef.current=null
-    introTimeoutRef.current=setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause() }catch{} } }, (active.duration||5)*1000)
+    try{
+      await createFbLiveForPage(page)
+    }catch(e:any){
+      // If FB fails, do not leave Intro playing alone - clear it
+      try{ if(introTimeoutRef.current) clearTimeout(introTimeoutRef.current) }catch{}
+      introTimeoutRef.current=null; setBroadcastPlaying(null); broadcastImageRef.current=null
+      throw e
+    }
   } finally { creatingFbRef.current=false }
 }
 const openBibleApp=()=>{ setShowBible(true) }
@@ -1009,7 +1020,7 @@ const waitForYtPushReady=async()=>{
   }
   return ytPushingRef.current
 }
-// FIX 1+3+5: YouTube Go Live with Intro - PUSH FIRST, Intro SECOND, so Intro shows on YouTube too + Intro AUDIO + recording
+// FIX 1+3+5: YouTube Go Live with Intro - INTRO FIRST, Push SECOND, so Intro shows on YouTube too + Intro AUDIO + recording
 const startYtLiveWithIntro=async()=>{
   if(!ytKey.trim()) return alert('Paste YouTube Stream Key first')
   if(!isCam) return alert('Start Camera first')
@@ -1020,25 +1031,28 @@ const startYtLiveWithIntro=async()=>{
   creatingYtRef.current=true
   try{
     const active=intros.find(i=>i.id===activeIntroId)
-    // FIX: Push FIRST, even if no Intro, so live starts at second 0
-    await startYtPush(ytKey)
-    if(!active) return
-    // FIX ONLY: No waitForYtPushReady() - same as FB Part 1. That wait waste up to 3s, push dey send black frames while Intro wait. Intro start immediately after push WS open.
-    // FIX: ONE VIDEO ONLY for YT Intro too - broadcastVideoRef picture + sound, no second audioEl
-    // FIX: Monitor sound via connectBroadcastVideoToMixer() in Part 1 - dest (FB/recording) + ctx.destination (your speaker)
-    ensureLiveAudio()
-    try{ if(liveAudioCtxRef.current && liveAudioCtxRef.current.state==='suspended') await liveAudioCtxRef.current.resume() }catch{}
-    playIntroAudioForLive(active)
-    setBroadcastPlaying(active)
-    if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
-    if(active.type==='video'&&broadcastVideoRef.current){
-      const v=broadcastVideoRef.current as any
-      v.crossOrigin="anonymous"; v.playsInline=true; v.src=active.data; v.currentTime=0
-      connectBroadcastVideoToMixer()
-      // FIX ONLY: muted-first play, same autoplay block as FB Intro
-      try{ await playBroadcastVideoMutedFirst(v) }catch{}
+    // FIX ONLY: YT Intro overshadow - Intro FIRST, push SECOND. Before: push started with camera, YT buffered camera keyframe, Intro audio played over camera video.
+    if(active){
+      // FIX: ONE VIDEO ONLY for YT Intro too - broadcastVideoRef picture + sound, no second audioEl
+      // FIX: Monitor sound via connectBroadcastVideoToMixer() in Part 1 - dest (FB/recording) + ctx.destination (your speaker)
+      ensureLiveAudio()
+      try{ if(liveAudioCtxRef.current && liveAudioCtxRef.current.state==='suspended') await liveAudioCtxRef.current.resume() }catch{}
+      playIntroAudioForLive(active)
+      setBroadcastPlaying(active)
+      if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
+      if(active.type==='video'&&broadcastVideoRef.current){
+        const v=broadcastVideoRef.current as any
+        v.crossOrigin="anonymous"; v.playsInline=true; v.src=active.data; v.currentTime=0
+        connectBroadcastVideoToMixer()
+        // FIX ONLY: muted-first play, same autoplay block as FB Intro
+        try{ await playBroadcastVideoMutedFirst(v) }catch{}
+      }
+      // Give canvas 300ms to draw the first Intro frame before any push frame is encoded
+      await new Promise(r=>setTimeout(r,300))
+      introTimeoutRef.current=setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null }, (active.duration||5)*1000)
     }
-    introTimeoutRef.current=setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null }, (active.duration||5)*1000)
+    // FIX: Push SECOND, even if no Intro, so live starts with Intro already on canvas
+    await startYtPush(ytKey)
   } finally { creatingYtRef.current=false }
 }
   const editStateRef=useRef({ locked:false, target:null as any, lastTap:0, lastX:0, lastY:0 })
