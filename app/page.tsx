@@ -168,7 +168,8 @@ const getPushAudioTrack=()=>{
   return streamRef.current?.getAudioTracks()[0]||null
 }
 const getPushStream=()=>{
-  const canvasStream=(canvasRef.current as any).captureStream(15) as MediaStream
+  // FIX ONLY - SKIPPING: 480p = 12fps, 720p = 15fps. Less data on slow upload.
+  const canvasStream=(canvasRef.current as any).captureStream(lowData?12:15) as MediaStream
   const audioTrack=getPushAudioTrack()
   if(audioTrack) canvasStream.addTrack(audioTrack)
   return canvasStream
@@ -223,6 +224,14 @@ const playBroadcastVideoMutedFirst=async(v:any)=>{
     try{ v.muted=true; v.volume=0; await v.play() }catch{}
   }
 }
+// === FIX ONLY - INTRO VIDEO: crossOrigin="anonymous" on a data: (base64) URL blocks video decode on Android. Only set it for http URLs. ===
+const setBroadcastVideoSrc=(v:any, src:string)=>{
+  try{
+    if(typeof src==='string' && src.startsWith('data:')){ try{ v.removeAttribute('crossOrigin') }catch{}; try{ v.crossOrigin=null }catch{} }
+    else { try{ v.crossOrigin="anonymous" }catch{} }
+    v.playsInline=true; v.src=src; v.currentTime=0
+  }catch{ try{ v.playsInline=true; v.src=src; v.currentTime=0 }catch{} }
+}
 // === SINGLE-CONNECTION FIX: Never close WS to "save" it. If buffer is full, drop that one chunk, keep socket open. ===
 // === FIX ONLY: Delivery check - NO fallback auto-start. Recorder starts ONLY on bridge push_started. ===
 const startPushRecorderOnReady=(ws:any, recorderRef:any, onStarted?:()=>void, isFbPush?:boolean)=>{
@@ -234,8 +243,8 @@ const startPushRecorderOnReady=(ws:any, recorderRef:any, onStarted?:()=>void, is
       const canvasStream=getPushStream()
       let mime='video/webm;codecs=vp8,opus'
       if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm'
-      // FIX ONLY - FB SKIPPING: Bitrate UNCHANGED. Chunk back to ORIGINAL 250ms.
-      const pushBits=lowData?600000:800000
+      // FIX ONLY - SKIPPING: 480p = 500kbps, 720p = 800kbps. Chunk back to ORIGINAL 250ms.
+      const pushBits=lowData?500000:800000
       const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: pushBits })
       recorderRef.current=rec
       rec.ondataavailable=(e)=>{
@@ -570,7 +579,8 @@ const endFbLiveWithOutro=async()=>{
     setBroadcastPlaying(active)
     if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
     else if(active.type==='video' && broadcastVideoRef.current){
-      try{ const v=broadcastVideoRef.current as any; v.crossOrigin="anonymous"; v.playsInline=true; v.src=active.data; v.currentTime=0; connectBroadcastVideoToMixer(); await playBroadcastVideoMutedFirst(v) }catch{}
+      // FIX ONLY - INTRO VIDEO: use setBroadcastVideoSrc so data: videos do not get crossOrigin.
+      try{ const v=broadcastVideoRef.current as any; setBroadcastVideoSrc(v, active.data); connectBroadcastVideoToMixer(); await playBroadcastVideoMutedFirst(v) }catch{}
     }
     await new Promise(r=>setTimeout(r,(active.duration||5)*1000))
     setBroadcastPlaying(null); broadcastImageRef.current=null
@@ -826,7 +836,8 @@ const createFbLiveAuto=async(page:any)=>{
     else if(active.type==='video' && broadcastVideoRef.current){
       try{
         const v=broadcastVideoRef.current as any
-        v.crossOrigin="anonymous"; v.playsInline=true; v.src=active.data; v.currentTime=0
+        // FIX ONLY - INTRO VIDEO: use setBroadcastVideoSrc so data: videos do not get crossOrigin.
+        setBroadcastVideoSrc(v, active.data)
         connectBroadcastVideoToMixer()
         await playBroadcastVideoMutedFirst(v)
       }catch{}
@@ -898,7 +909,7 @@ const startRecording=async()=>{
     try{ micGain.gain.value=0 }catch{}
     if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
     else if(active.type==='video'){
-      if(broadcastVideoRef.current){ const v=broadcastVideoRef.current as any; v.crossOrigin="anonymous"; v.playsInline=true; v.src=active.data; v.currentTime=0; try{ await playBroadcastVideoMutedFirst(v) }catch{} }
+      if(broadcastVideoRef.current){ const v=broadcastVideoRef.current as any; setBroadcastVideoSrc(v, active.data); try{ await playBroadcastVideoMutedFirst(v) }catch{} }
       try{
         if(!broadcastConnectedRef.current && broadcastVideoRef.current){
           const v2=broadcastVideoRef.current as any
