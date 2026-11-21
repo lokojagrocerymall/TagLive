@@ -232,7 +232,8 @@ const startPushRecorderOnReady=(ws:any, recorderRef:any, onStarted?:()=>void, is
       const canvasStream=getPushStream()
       let mime='video/webm;codecs=vp8,opus'
       if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm'
-      const pushBits=lowData?600000:800000
+      // FIX ONLY: Slow-network bitrate - match bridge 500k. Was 600k/800k, phone queued, dropped, skipped, FB cut.
+      const pushBits=lowData?400000:600000
       const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: pushBits })
       recorderRef.current=rec
       rec.ondataavailable=(e)=>{
@@ -437,19 +438,16 @@ const startFbPush=async(fbRtmpUrl:string)=>{
       if(d.type==='push_stopped'){
         if(fbPushStoppedResolverRef.current){ const r=fbPushStoppedResolverRef.current; fbPushStoppedResolverRef.current=null; try{ r() }catch{} }
         fbPushingRef.current=false; fbStartingRef.current=false; clearFbKeepalive()
-        // FIX ONLY: Stalled after Stop - push_stopped after intentional Stop is expected, do NOT overwrite Idle with Stalled.
         if(!fbStopIntentionalRef.current) setPushStatus('Stalled')
       }
       if(d.type==='error'){
         fbPushingRef.current=false; fbStartingRef.current=false; clearFbKeepalive()
-        // FIX ONLY: Stalled after Stop - error after intentional Stop is expected, do NOT show Stalled / alert.
         if(!fbStopIntentionalRef.current){ setPushStatus('Stalled'); if(d.message) alert('Facebook Push: '+d.message) }
       }
     }catch{}
   }
   ws.onerror=()=>{
     fbPushingRef.current=false; fbStartingRef.current=false; clearFbKeepalive()
-    // FIX ONLY: Stalled after Stop - onerror after intentional Stop, do NOT show Stalled.
     if(!fbStopIntentionalRef.current) setPushStatus('Stalled')
   }
   ws.onclose=()=>{
