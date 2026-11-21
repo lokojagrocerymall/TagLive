@@ -166,18 +166,11 @@ const getPushAudioTrack=()=>{
   }catch{}
   return streamRef.current?.getAudioTracks()[0]||null
 }
-// === FIX ONLY: FB skipping - ONE shared canvas stream for push + local. Was 2x captureStream + 2x MediaRecorder, phone starved push encoder, FB dropped frames. ===
-const sharedCanvasStreamRef=useRef<MediaStream|null>(null)
-const getSharedCanvasStream=()=>{
-  if(sharedCanvasStreamRef.current) return sharedCanvasStreamRef.current
-  const s=(canvasRef.current as any).captureStream(15) as MediaStream
-  const audioTrack=getPushAudioTrack()
-  if(audioTrack && s.getAudioTracks().length===0) s.addTrack(audioTrack)
-  sharedCanvasStreamRef.current=s
-  return s
-}
 const getPushStream=()=>{
-  return getSharedCanvasStream()
+  const canvasStream=(canvasRef.current as any).captureStream(15) as MediaStream
+  const audioTrack=getPushAudioTrack()
+  if(audioTrack) canvasStream.addTrack(audioTrack)
+  return canvasStream
 }
 const connectBroadcastVideoToMixer=()=>{
   try{
@@ -239,20 +232,17 @@ const startPushRecorderOnReady=(ws:any, recorderRef:any, onStarted?:()=>void, is
       const canvasStream=getPushStream()
       let mime='video/webm;codecs=vp8,opus'
       if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm'
-      // FIX ONLY: Slow-network bitrate - match bridge 500k. Was 600k/800k, phone queued, dropped, skipped, FB cut.
-      const pushBits=lowData?400000:600000
+      const pushBits=lowData?600000:800000
       const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: pushBits })
       recorderRef.current=rec
       rec.ondataavailable=(e)=>{
         if(e.data.size>0 && ws.readyState===WebSocket.OPEN){
           try{ if(ws.bufferedAmount>4000000) return }catch{}
           try{ ws.send(e.data) }catch{}
-          // FIX ONLY: Stuck Sending - do NOT set Sending after intentional stop, recorder still flushes for 2s after stopFbPush.
-          if(isFbPush && !fbStopIntentionalRef.current){ lastFbChunkAtRef.current=Date.now(); setPushStatus('Sending') }
+          if(isFbPush){ lastFbChunkAtRef.current=Date.now(); setPushStatus('Sending') }
         }
       }
-      // FIX ONLY: FB skipping - 250ms chunks too chatty, more skip points at ffmpeg. 500ms = fewer, bigger chunks.
-      rec.start(500)
+      rec.start(250)
       if(onStarted) onStarted()
     }catch{}
   }
@@ -271,8 +261,9 @@ const startLocalRecording=async()=>{
   if(isRecording) return
   const canvas=canvasRef.current; if(!canvas) return
   try{
-    // FIX ONLY: FB skipping - reuse ONE shared stream, do NOT call captureStream(24) again and start a 2nd encoder.
-    const canvasStream=getSharedCanvasStream()
+    const canvasStream=(canvas as any).captureStream(24) as MediaStream
+    const audioTrack=getPushAudioTrack()
+    if(audioTrack) canvasStream.addTrack(audioTrack)
     chunksRef.current=[]
     let mime='video/webm;codecs=vp9,opus'
     if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm;codecs=vp8,opus'
@@ -446,16 +437,19 @@ const startFbPush=async(fbRtmpUrl:string)=>{
       if(d.type==='push_stopped'){
         if(fbPushStoppedResolverRef.current){ const r=fbPushStoppedResolverRef.current; fbPushStoppedResolverRef.current=null; try{ r() }catch{} }
         fbPushingRef.current=false; fbStartingRef.current=false; clearFbKeepalive()
+        // FIX ONLY: Stalled after Stop - push_stopped after intentional Stop is expected, do NOT overwrite Idle with Stalled.
         if(!fbStopIntentionalRef.current) setPushStatus('Stalled')
       }
       if(d.type==='error'){
         fbPushingRef.current=false; fbStartingRef.current=false; clearFbKeepalive()
+        // FIX ONLY: Stalled after Stop - error after intentional Stop is expected, do NOT show Stalled / alert.
         if(!fbStopIntentionalRef.current){ setPushStatus('Stalled'); if(d.message) alert('Facebook Push: '+d.message) }
       }
     }catch{}
   }
   ws.onerror=()=>{
     fbPushingRef.current=false; fbStartingRef.current=false; clearFbKeepalive()
+    // FIX ONLY: Stalled after Stop - onerror after intentional Stop, do NOT show Stalled.
     if(!fbStopIntentionalRef.current) setPushStatus('Stalled')
   }
   ws.onclose=()=>{
@@ -470,7 +464,7 @@ const stopFbPush=async()=>{
   fbStopIntentionalRef.current=true
   clearFbKeepalive()
   stopPushWatchdog()
-  // FIX ONLY: Stuck Sending - do NOT set Idle here. Recorder still flushes for 2s and ondataavailable would set Sending again. Idle is set after recorder stops below.
+  setPushStatus('Idle')
   stopFbCommentsPolling()
   try{
     await new Promise(r=>setTimeout(r,2000))
@@ -487,7 +481,6 @@ const stopFbPush=async()=>{
     fbPushingRef.current=false
     fbStartingRef.current=false
     lastFbPushRef.current=null
-    setPushStatus('Idle')
     await endFbLiveVideo()
   } finally { stoppingFbRef.current=false; fbPushStoppedResolverRef.current=null }
 }
@@ -790,35 +783,24 @@ const createFbLiveAuto=async(page:any)=>{
   if(isLive && selectedPage?.id===page.id) return
   creatingFbRef.current=true
   try{
-    // FIX ONLY: FB Intro overshadow - Intro FIRST, push SECOND. Before: push started with camera, FB buffered camera keyframe, Intro audio played over camera video.
+    await createFbLiveForPage(page)
     const active=intros.find(i=>i.id===activeIntroId)
-    if(active){
-      ensureLiveAudio()
-      try{ if(liveAudioCtxRef.current && liveAudioCtxRef.current.state==='suspended') await liveAudioCtxRef.current.resume() }catch{}
-      playIntroAudioForLive(active)
-      setBroadcastPlaying(active)
-      if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
-      else if(active.type==='video' && broadcastVideoRef.current){
-        try{
-          const v=broadcastVideoRef.current as any
-          v.crossOrigin="anonymous"; v.playsInline=true; v.src=active.data; v.currentTime=0
-          connectBroadcastVideoToMixer()
-          await playBroadcastVideoMutedFirst(v)
-        }catch{}
-      }
-      // Give canvas 300ms to draw the first Intro frame before any push frame is encoded
-      await new Promise(r=>setTimeout(r,300))
-      fbPendingRef.current=null
-      introTimeoutRef.current=setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause() }catch{} } }, (active.duration||5)*1000)
+    if(!active) return
+    ensureLiveAudio()
+    try{ if(liveAudioCtxRef.current && liveAudioCtxRef.current.state==='suspended') await liveAudioCtxRef.current.resume() }catch{}
+    playIntroAudioForLive(active)
+    setBroadcastPlaying(active)
+    if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
+    else if(active.type==='video' && broadcastVideoRef.current){
+      try{
+        const v=broadcastVideoRef.current as any
+        v.crossOrigin="anonymous"; v.playsInline=true; v.src=active.data; v.currentTime=0
+        connectBroadcastVideoToMixer()
+        await playBroadcastVideoMutedFirst(v)
+      }catch{}
     }
-    try{
-      await createFbLiveForPage(page)
-    }catch(e:any){
-      // If FB fails, do not leave Intro playing alone - clear it
-      try{ if(introTimeoutRef.current) clearTimeout(introTimeoutRef.current) }catch{}
-      introTimeoutRef.current=null; setBroadcastPlaying(null); broadcastImageRef.current=null
-      throw e
-    }
+    fbPendingRef.current=null
+    introTimeoutRef.current=setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null; if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause() }catch{} } }, (active.duration||5)*1000)
   } finally { creatingFbRef.current=false }
 }
 const openBibleApp=()=>{ setShowBible(true) }
@@ -863,8 +845,7 @@ const removeChurchLogo=()=>{ localStorage.removeItem('taglive_church_logo'); set
 const startRecording=async()=>{
   const canvas=canvasRef.current; if(!canvas) return
   canvas.width=480; canvas.height=854
-  // FIX ONLY: FB skipping - reuse shared stream if it exists, do NOT start a 3rd captureStream. Only add dest audio if shared has no audio yet.
-  const canvasStream=getSharedCanvasStream()
+  const canvasStream=(canvas as any).captureStream(24) as MediaStream
   try{ if(audioCtxRef.current) audioCtxRef.current.close() }catch{}
   audioCtxRef.current=null; setBroadcastPlaying(null); broadcastImageRef.current=null
   if(broadcastVideoRef.current){ try{ broadcastVideoRef.current.pause(); broadcastVideoRef.current.removeAttribute('src'); broadcastVideoRef.current.load() }catch{} }
@@ -897,7 +878,7 @@ const startRecording=async()=>{
       }catch{}
     }
   }
-  if(canvasStream.getAudioTracks().length===0) dest.stream.getAudioTracks().forEach(t=>canvasStream.addTrack(t))
+  dest.stream.getAudioTracks().forEach(t=>canvasStream.addTrack(t))
   chunksRef.current=[]
   let mime='video/webm;codecs=vp9,opus'
   if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm;codecs=vp8,opus'
@@ -1020,7 +1001,7 @@ const waitForYtPushReady=async()=>{
   }
   return ytPushingRef.current
 }
-// FIX 1+3+5: YouTube Go Live with Intro - INTRO FIRST, Push SECOND, so Intro shows on YouTube too + Intro AUDIO + recording
+// FIX 1+3+5: YouTube Go Live with Intro - PUSH FIRST, Intro SECOND, so Intro shows on YouTube too + Intro AUDIO + recording
 const startYtLiveWithIntro=async()=>{
   if(!ytKey.trim()) return alert('Paste YouTube Stream Key first')
   if(!isCam) return alert('Start Camera first')
@@ -1031,28 +1012,25 @@ const startYtLiveWithIntro=async()=>{
   creatingYtRef.current=true
   try{
     const active=intros.find(i=>i.id===activeIntroId)
-    // FIX ONLY: YT Intro overshadow - Intro FIRST, push SECOND. Before: push started with camera, YT buffered camera keyframe, Intro audio played over camera video.
-    if(active){
-      // FIX: ONE VIDEO ONLY for YT Intro too - broadcastVideoRef picture + sound, no second audioEl
-      // FIX: Monitor sound via connectBroadcastVideoToMixer() in Part 1 - dest (FB/recording) + ctx.destination (your speaker)
-      ensureLiveAudio()
-      try{ if(liveAudioCtxRef.current && liveAudioCtxRef.current.state==='suspended') await liveAudioCtxRef.current.resume() }catch{}
-      playIntroAudioForLive(active)
-      setBroadcastPlaying(active)
-      if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
-      if(active.type==='video'&&broadcastVideoRef.current){
-        const v=broadcastVideoRef.current as any
-        v.crossOrigin="anonymous"; v.playsInline=true; v.src=active.data; v.currentTime=0
-        connectBroadcastVideoToMixer()
-        // FIX ONLY: muted-first play, same autoplay block as FB Intro
-        try{ await playBroadcastVideoMutedFirst(v) }catch{}
-      }
-      // Give canvas 300ms to draw the first Intro frame before any push frame is encoded
-      await new Promise(r=>setTimeout(r,300))
-      introTimeoutRef.current=setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null }, (active.duration||5)*1000)
-    }
-    // FIX: Push SECOND, even if no Intro, so live starts with Intro already on canvas
+    // FIX: Push FIRST, even if no Intro, so live starts at second 0
     await startYtPush(ytKey)
+    if(!active) return
+    // FIX ONLY: No waitForYtPushReady() - same as FB Part 1. That wait waste up to 3s, push dey send black frames while Intro wait. Intro start immediately after push WS open.
+    // FIX: ONE VIDEO ONLY for YT Intro too - broadcastVideoRef picture + sound, no second audioEl
+    // FIX: Monitor sound via connectBroadcastVideoToMixer() in Part 1 - dest (FB/recording) + ctx.destination (your speaker)
+    ensureLiveAudio()
+    try{ if(liveAudioCtxRef.current && liveAudioCtxRef.current.state==='suspended') await liveAudioCtxRef.current.resume() }catch{}
+    playIntroAudioForLive(active)
+    setBroadcastPlaying(active)
+    if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
+    if(active.type==='video'&&broadcastVideoRef.current){
+      const v=broadcastVideoRef.current as any
+      v.crossOrigin="anonymous"; v.playsInline=true; v.src=active.data; v.currentTime=0
+      connectBroadcastVideoToMixer()
+      // FIX ONLY: muted-first play, same autoplay block as FB Intro
+      try{ await playBroadcastVideoMutedFirst(v) }catch{}
+    }
+    introTimeoutRef.current=setTimeout(()=>{ setBroadcastPlaying(null); broadcastImageRef.current=null }, (active.duration||5)*1000)
   } finally { creatingYtRef.current=false }
 }
   const editStateRef=useRef({ locked:false, target:null as any, lastTap:0, lastX:0, lastY:0 })
@@ -1366,7 +1344,7 @@ monthCount!==null?
 </div>
 </div>
 <div>
-<div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{background:'#000',borderRadius:18,overflow:'hidden',position:'relative',aspectRatio:'9/16',touchAction: editStateRef.current.locked ? 'none' : 'pan-y'}}><video ref={videoRef} muted playsInline autoPlay style={{width:'100%',height:'100%',objectFit:'cover',display:isCam&&bgMode==='face'&&!broadcastPlaying?'block':'none'}}/>{!isCam&&<div style={{color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',height:420}}>Camera off - {lowData?'480p ON':'720p'}</div>}<canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',zIndex:2}}/>
+<div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{background:'#000',borderRadius:18,overflow:'hidden',position:'relative',aspectRatio:'9/16',touchAction: editStateRef.current.locked ? 'none' : 'pan-y'}}><video ref={videoRef} muted playsInline autoPlay style={{width:'100%',height:'100%',objectFit:'cover',display:isCam&&bgMode==='face'?'block':'none'}}/>{!isCam&&<div style={{color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',height:420}}>Camera off - {lowData?'480p ON':'720p'}</div>}<canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%'}}/>
 <video ref={broadcastVideoRef} playsInline crossOrigin="anonymous" style={{position:'absolute',left:0,top:0,width:'480px',height:'854px',opacity:0,pointerEvents:'none'}}/>
 {broadcastPlaying&&(
   <div style={{position:'absolute',top:12,left:12,right:12,display:'flex',justifyContent:'flex-end',zIndex:100}}>
