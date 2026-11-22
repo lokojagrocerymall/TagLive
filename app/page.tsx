@@ -828,8 +828,7 @@ const createFbLiveAuto=async(page:any)=>{
     await createFbLiveForPage(page)
     const active=intros.find(i=>i.id===activeIntroId)
     if(!active) return
-    // FIX ONLY - INTRO SYNC: Camera already ON, no TagLive recording. Wait for bridge push_started (max 3s) BEFORE playing Intro, so Facebook recorder is already running when Intro starts. Camera keeps running during this wait, no restart.
-    await waitForFbPushReady()
+    // REVERTED - NO WAIT: Intro plays immediately as before, while encoder is still starting. Waiting caused hang + worse skipping. Camera already ON, no TagLive recording.
     ensureLiveAudio()
     try{ if(liveAudioCtxRef.current && liveAudioCtxRef.current.state==='suspended') await liveAudioCtxRef.current.resume() }catch{}
     playIntroAudioForLive(active)
