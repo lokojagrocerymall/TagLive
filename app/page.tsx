@@ -1105,7 +1105,8 @@ const stopRecording=async()=>{
         const v=broadcastVideoRef.current as any
         // FIX ONLY - INTRO BACKGROUND AUDIO + data: crossOrigin: use Part 1B helper, stop on ended.
         setBroadcastVideoSrc(v, active.data)
-        v.onended=()=>{ try{ stopBroadcastVideoNow() }catch{} }
+        // FIX ONLY - Outro cut at 2s: onended guard, same as Intro. Only stop when video really reached the end.
+        v.onended=()=>{ try{ if(v.currentTime>=(v.duration||0)-0.3) stopBroadcastVideoNow() }catch{ stopBroadcastVideoNow() } }
         // FIX ONLY: muted-first play (Part 1 helper) - unmuted play after awaits was blocked, same as Intro
         try{ await playBroadcastVideoMutedFirst(v) }catch{}
       }
@@ -1122,7 +1123,7 @@ const stopRecording=async()=>{
         if(wasFbLive) await stopFbLive(true)
         if(wasYtLive) stopYtLive()
         if(wasTikTokLive) stopTikTokLive()
-      }, (active.duration||5)*1000)
+      }, (()=>{ try{ const v=broadcastVideoRef.current as any; return getRealBroadcastMs(active, v) + 1000 }catch{ return (active.duration||5)*1000 + 1000 } })())
     } else {
       outroPlayingRef.current=false
     }
@@ -1180,17 +1181,20 @@ const startYtLiveWithIntro=async()=>{
     try{ if(liveAudioCtxRef.current && liveAudioCtxRef.current.state==='suspended') await liveAudioCtxRef.current.resume() }catch{}
     playIntroAudioForLive(active)
     setBroadcastPlaying(active)
-    if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
+    if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img; clearIntroTimeout(); introTimeoutRef.current=setTimeout(()=>{ try{ stopBroadcastVideoNow() }catch{ setBroadcastPlaying(null); broadcastImageRef.current=null } }, (active.duration||5)*1000 + 500) }
     if(active.type==='video'&&broadcastVideoRef.current){
       const v=broadcastVideoRef.current as any
       // FIX ONLY - INTRO BACKGROUND AUDIO + data: crossOrigin: use Part 1B helper, stop on ended.
       setBroadcastVideoSrc(v, active.data)
-      v.onended=()=>{ try{ stopBroadcastVideoNow() }catch{} }
+      // FIX ONLY - Intro cut at 2s: onended guard + real duration. Old code: v.onended = stop unconditionally + timer on saved duration.
+      v.onended=()=>{ try{ if(v.currentTime>=(v.duration||0)-0.3) stopBroadcastVideoNow() }catch{ stopBroadcastVideoNow() } }
       connectBroadcastVideoToMixer()
       // FIX ONLY: muted-first play, same autoplay block as FB Intro
       try{ await playBroadcastVideoMutedFirst(v) }catch{}
+      // FIX ONLY - Intro FULL duration: timer = REAL video duration + 1s safety, not saved duration. onended above is the boss.
+      clearIntroTimeout()
+      introTimeoutRef.current=setTimeout(()=>{ try{ stopBroadcastVideoNow() }catch{ setBroadcastPlaying(null); broadcastImageRef.current=null } }, getRealBroadcastMs(active, v) + 1000)
     }
-    introTimeoutRef.current=setTimeout(()=>{ try{ stopBroadcastVideoNow() }catch{ setBroadcastPlaying(null); broadcastImageRef.current=null } }, (active.duration||5)*1000 + 500)
   } finally { creatingYtRef.current=false }
 }
   const editStateRef=useRef({ locked:false, target:null as any, lastTap:0, lastX:0, lastY:0 })
@@ -1559,7 +1563,8 @@ monthCount!==null?
 </div>
 <div>
 <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{background:'#000',borderRadius:18,overflow:'hidden',position:'relative',aspectRatio:'9/16',touchAction: editStateRef.current.locked ? 'none' : 'pan-y'}}><video ref={videoRef} muted playsInline autoPlay style={{width:'100%',height:'100%',objectFit:'cover',display:isCam&&bgMode==='face'?'block':'none'}}/>{!isCam&&<div style={{color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',height:420}}>Camera off - {lowData?'480p ON':'720p'}</div>}<canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%'}}/>
-<video ref={broadcastVideoRef} playsInline crossOrigin="anonymous" style={{position:'absolute',left:0,top:0,width:'480px',height:'854px',opacity:0,pointerEvents:'none'}}/>
+{/* FIX ONLY - Intro/Outro GENERAL: NO hardcoded crossOrigin here. Part 1A setBroadcastVideoSrc() controls it (none for data: URLs, anonymous only for http). Old hardcoded crossOrigin="anonymous" was re-applied by React on every liveSeconds tick and cut base64 intro at ~2s on ALL platforms. */}
+<video ref={broadcastVideoRef} playsInline style={{position:'absolute',left:0,top:0,width:'480px',height:'854px',opacity:0,pointerEvents:'none'}}/>
 {/* FIX ONLY - MEDIA INSIDE VERSE BOX: hidden video element that feeds frames into scripture box. */}
 <video ref={verseMediaVideoRef} playsInline loop style={{position:'absolute',left:0,top:0,width:'480px',height:'854px',opacity:0,pointerEvents:'none'}}/>
 {broadcastPlaying&&(
@@ -1597,7 +1602,7 @@ monthCount!==null?
 <textarea value={liveDescription} onChange={e=>setLiveDescription(e.target.value)} placeholder="Live Description - this shows on Facebook, NOT your verse" style={{width:'100%',padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12,boxSizing:'border-box',height:60}} />
 </div>
 {pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6,padding:10,background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff',color:selectedPage?.id===p.id?'#fff':'#000',borderRadius:8,fontSize:13,fontWeight:700,cursor:'pointer'}}>{p.name} {selectedPage?.id===p.id?'LIVE '+formatTime(liveSeconds):'(Go Live)'}</div>)} {fbStreamUrl&&<div style={{marginTop:10,padding:10,background:'#dcfce7',borderRadius:8,fontSize:11,wordBreak:'break-all'}}>FB: {fbStreamUrl.substring(0,70)}...</div>}{isLive&&<button onClick={()=>stopFbLive()} style={{marginTop:10,width:'100%',background:'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>■ Stop Facebook Live</button>}</div>
-<div style={{marginTop:14,border:'2px solid #ff0000',borderRadius:14,padding:12}}><b>Connect YouTube Live</b><input value={ytKey} onChange={e=>{setYtKey(e.target.value);localStorage.setItem('taglive_ytkey',e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={startYtLiveWithIntro} style={{flex:1,background:ytLive?'#16a34a':'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{ytLive?'YouTube LIVE '+formatTime(liveSeconds):'Go Live YouTube + Intro FULL'}</button><button onClick={()=>{if(broadcastPlaying) return; const active=outros.find(o=>o.id===activeOutroId); if(active){setBroadcastPlaying(active); if(active.type==='video'&&broadcastVideoRef.current){ const v=broadcastVideoRef.current as any; setBroadcastVideoSrc(v, active.data); v.onended=()=>{ try{ stopBroadcastVideoNow() }catch{} }; ensureLiveAudio(); try{ if(liveAudioCtxRef.current) liveAudioCtxRef.current.resume() }catch{}; connectBroadcastVideoToMixer(); playBroadcastVideoMutedFirst(v) } setTimeout(async()=>{ try{ stopBroadcastVideoNow() }catch{ setBroadcastPlaying(null) }; await new Promise(r=>setTimeout(r,1000)); stopYtLive()},(active.duration||5)*1000)} else {stopYtLive()}}} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Stop YT + Outro</button></div></div>
+<div style={{marginTop:14,border:'2px solid #ff0000',borderRadius:14,padding:12}}><b>Connect YouTube Live</b><input value={ytKey} onChange={e=>{setYtKey(e.target.value);localStorage.setItem('taglive_ytkey',e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={startYtLiveWithIntro} style={{flex:1,background:ytLive?'#16a34a':'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{ytLive?'YouTube LIVE '+formatTime(liveSeconds):'Go Live YouTube + Intro FULL'}</button><button onClick={()=>{if(broadcastPlaying) return; const active=outros.find(o=>o.id===activeOutroId); if(active){setBroadcastPlaying(active); if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img; clearIntroTimeout(); introTimeoutRef.current=setTimeout(async()=>{ try{ stopBroadcastVideoNow() }catch{ setBroadcastPlaying(null) }; await new Promise(r=>setTimeout(r,1000)); stopYtLive()},(active.duration||5)*1000) } else if(active.type==='video'&&broadcastVideoRef.current){ const v=broadcastVideoRef.current as any; setBroadcastVideoSrc(v, active.data); v.onended=()=>{ try{ if(v.currentTime>=(v.duration||0)-0.3) stopBroadcastVideoNow() }catch{ stopBroadcastVideoNow() } }; ensureLiveAudio(); try{ if(liveAudioCtxRef.current) liveAudioCtxRef.current.resume() }catch{}; connectBroadcastVideoToMixer(); playBroadcastVideoMutedFirst(v).then(()=>{ clearIntroTimeout(); introTimeoutRef.current=setTimeout(async()=>{ try{ stopBroadcastVideoNow() }catch{ setBroadcastPlaying(null) }; await new Promise(r=>setTimeout(r,1000)); stopYtLive()}, getRealBroadcastMs(active, v) + 1000) }).catch(()=>{ clearIntroTimeout(); introTimeoutRef.current=setTimeout(async()=>{ try{ stopBroadcastVideoNow() }catch{ setBroadcastPlaying(null) }; await new Promise(r=>setTimeout(r,1000)); stopYtLive()}, getRealBroadcastMs(active, v) + 1000) }) } else { stopYtLive() } } else {stopYtLive()}}} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Stop YT + Outro</button></div></div>
 <div style={{marginTop:14,border:'2px solid #000',borderRadius:14,padding:12}}><b>Connect TikTok Live</b>
 <input value={tiktokUsername} onChange={e=>setTiktokUsername(e.target.value)} placeholder="@your TikTok username" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/>
 <div style={{display:'flex',gap:8,marginTop:8}}>
