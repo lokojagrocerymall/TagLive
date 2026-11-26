@@ -1519,8 +1519,8 @@ monthCount!==null?
   </div>
 )}
 {isCam&&!broadcastPlaying&&(<div style={{position:'absolute',top: bgMode==='split'?'auto':'12px',bottom: bgMode==='split'?'50px':'auto',right:12,display:'flex',gap:8,zIndex:50}}><button onClick={toggleCamera} style={{background:'rgba(0,0,0,0.85)',color:'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>Flip</button><button onClick={toggleTorch} style={{background:torch?'#fbbf24':'rgba(0,0,0,0.85)',color:torch?'#000':'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>{torch?'Flash On':'Flash'}</button></div>)}
-{/* FIX ONLY - BIBLE BUTTON: Floating Bible button ON preview. No scroll down to find Bible. */}
-{!broadcastPlaying&&(<button onClick={openBibleApp} style={{position:'absolute',left:12,bottom:12,zIndex:50,background:'#2563eb',color:'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12,boxShadow:'0 4px 12px rgba(0,0,0,0.5)'}}>📖 Bible</button>)}
+{/* FIX ONLY - ONE floating button, two lines inside: Bible on top, 📸 Media under it. HTML overlay only - NEVER drawn on canvas, so it NEVER shows in Livestream. */}
+{!broadcastPlaying&&(<button onClick={openBibleApp} style={{position:'absolute',left:12,bottom:12,zIndex:50,background:'#2563eb',color:'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12,boxShadow:'0 4px 12px rgba(0,0,0,0.5)',display:'flex',flexDirection:'column',alignItems:'flex-start',gap:2,lineHeight:1.1,textAlign:'left'}}><span>📖 Bible</span><span>📸 Media</span></button>)}
 </div>
 {/* === SINGLE-CONNECTION FIX: No Resume button. Restarting to same URL finalizes FB VOD. Stalled = keep going, do NOT tap Stop. === */}
 {/* === FIX ONLY: Show real delivery status - Waiting / Bridge Failed, not fake Sending. === */}
