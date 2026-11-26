@@ -1296,24 +1296,24 @@ let _allLines:{text:string,isLastInPara:boolean,paraIdx:number}[]=[]
 _paragraphs.forEach((para,pIdx)=>{ if(!para.trim()){ _allLines.push({text:'',isLastInPara:true,paraIdx:pIdx}); return } const _wrapped=wrapText(ctx,para.trim(),maxW); _wrapped.forEach((l,i)=>_allLines.push({text:l,isLastInPara:i===_wrapped.length-1,paraIdx:pIdx})) })
 const _realCount=_allLines.filter(l=>l.text!=='').length
 const _lineH=fontSize*1.32
-// FIX ONLY - Media: NO border / NO padding / NO box background. Media fills edge-to-edge for clear complete view.
-const _mediaOnlyH=verseMedia?Math.min(380,Math.max(120, verseMedia.type==='image'&&verseMedia.w>0&&verseMedia.h>0?maxW*verseMedia.h/verseMedia.w : verseMedia.type==='video'&&verseMediaVideoRef.current&&verseMediaVideoRef.current.videoWidth>0?maxW*verseMediaVideoRef.current.videoHeight/verseMediaVideoRef.current.videoWidth : 213)):0
+// FIX ONLY - Media complete image: NO cover-crop, NO 380 clamp. Contain-fit, height up to 560 so tall flyers show fully.
+const _mediaOnlyH=verseMedia?Math.min(560,Math.max(120, verseMedia.type==='image'&&verseMedia.w>0&&verseMedia.h>0?maxW*verseMedia.h/verseMedia.w : verseMedia.type==='video'&&verseMediaVideoRef.current&&verseMediaVideoRef.current.videoWidth>0?maxW*verseMediaVideoRef.current.videoHeight/verseMediaVideoRef.current.videoWidth : 213)):0
 const _boxH=verseMedia?_mediaOnlyH:(_realCount*_lineH+(_paragraphs.length-1)*8+_pad*2)
 const _tickerH=(tickerOn&&tickerText)?(tickerSize+24):0
 const _anchorBottom=isSplit?0:(c.height-_tickerH)
 const drawX=isSplit?c.width*0.5:pos.x
 const drawY=isSplit?c.height*0.24:(_anchorBottom-_boxH/2)
-ctx.translate(drawX,drawY); ctx.scale(pos.scale,pos.scale); ctx.font='bold '+fontSize+'px sans-serif'; const pad=18; const boxW=verseMedia?maxW:(maxW+pad*2); const paragraphs=verse.split('\n'); let allLines:{text:string,isLastInPara:boolean,paraIdx:number}[]=[]; paragraphs.forEach((para,pIdx)=>{ if(!para.trim()){ allLines.push({text:'',isLastInPara:true,paraIdx:pIdx}); return } const wrapped=wrapText(ctx,para.trim(),maxW); wrapped.forEach((l,i)=>allLines.push({text:l,isLastInPara:i===wrapped.length-1,paraIdx:pIdx})) }); const realCount=allLines.filter(l=>l.text!=='').length; const lineH=fontSize*1.32; const mediaOnlyH=verseMedia?Math.min(380,Math.max(120, verseMedia.type==='image'&&verseMedia.w>0&&verseMedia.h>0?maxW*verseMedia.h/verseMedia.w : verseMedia.type==='video'&&verseMediaVideoRef.current&&verseMediaVideoRef.current.videoWidth>0?maxW*verseMediaVideoRef.current.videoHeight/verseMediaVideoRef.current.videoWidth : 213)):0; const boxH=verseMedia?mediaOnlyH:(realCount*lineH+(paragraphs.length-1)*8+pad*2); ctx.fillStyle=hexToRgba(boxColor,boxOpacity); if(!verseMedia) ctx.fillRect(-boxW/2,-boxH/2,boxW,boxH); ctx.fillStyle=textColor;
-// FIX ONLY - EasyWorship: MEDIA REPLACES SCRIPTURE. If media on, draw media filling whole box, skip all verse text.
+ctx.translate(drawX,drawY); ctx.scale(pos.scale,pos.scale); ctx.font='bold '+fontSize+'px sans-serif'; const pad=18; const boxW=verseMedia?maxW:(maxW+pad*2); const paragraphs=verse.split('\n'); let allLines:{text:string,isLastInPara:boolean,paraIdx:number}[]=[]; paragraphs.forEach((para,pIdx)=>{ if(!para.trim()){ allLines.push({text:'',isLastInPara:true,paraIdx:pIdx}); return } const wrapped=wrapText(ctx,para.trim(),maxW); wrapped.forEach((l,i)=>allLines.push({text:l,isLastInPara:i===wrapped.length-1,paraIdx:pIdx})) }); const realCount=allLines.filter(l=>l.text!=='').length; const lineH=fontSize*1.32; const mediaOnlyH=verseMedia?Math.min(560,Math.max(120, verseMedia.type==='image'&&verseMedia.w>0&&verseMedia.h>0?maxW*verseMedia.h/verseMedia.w : verseMedia.type==='video'&&verseMediaVideoRef.current&&verseMediaVideoRef.current.videoWidth>0?maxW*verseMediaVideoRef.current.videoHeight/verseMediaVideoRef.current.videoWidth : 213)):0; const boxH=verseMedia?mediaOnlyH:(realCount*lineH+(paragraphs.length-1)*8+pad*2); ctx.fillStyle=hexToRgba(boxColor,boxOpacity); if(!verseMedia) ctx.fillRect(-boxW/2,-boxH/2,boxW,boxH); ctx.fillStyle=textColor;
+// FIX ONLY - EasyWorship: MEDIA REPLACES SCRIPTURE. Contain-fit = complete image, no cut.
 if(verseMedia){
   const mX=-boxW/2; const mY=-boxH/2; const mW=boxW; const mH=boxH
   try{
     if(verseMedia.type==='image' && verseMediaImgRef.current){
-      const im=verseMediaImgRef.current; const iw=im.width||mW; const ih=im.height||mH; const r=Math.max(mW/iw, mH/ih); const dw=iw*r; const dh=ih*r; const sx=(dw-mW)/2; const sy=(dh-mH)/2
-      ctx.save(); ctx.beginPath(); ctx.rect(mX,mY,mW,mH); ctx.clip(); ctx.drawImage(im,mX-sx,mY-sy,dw,dh); ctx.restore()
+      const im=verseMediaImgRef.current; const iw=im.width||mW; const ih=im.height||mH; const r=Math.min(mW/iw, mH/ih); const dw=iw*r; const dh=ih*r; const dx=mX+(mW-dw)/2; const dy=mY+(mH-dh)/2
+      ctx.save(); ctx.fillStyle='#000'; ctx.fillRect(mX,mY,mW,mH); ctx.drawImage(im,dx,dy,dw,dh); ctx.restore()
     } else if(verseMedia.type==='video' && verseMediaVideoRef.current && verseMediaVideoRef.current.readyState>=2){
-      const vv=verseMediaVideoRef.current; const vw2=vv.videoWidth||mW; const vh2=vv.videoHeight||mH; const r2=Math.max(mW/vw2, mH/vh2); const dw2=vw2*r2; const dh2=vh2*r2; const sx2=(dw2-mW)/2; const sy2=(dh2-mH)/2
-      ctx.save(); ctx.beginPath(); ctx.rect(mX,mY,mW,mH); ctx.clip(); ctx.drawImage(vv,mX-sx2,mY-sy2,dw2,dh2); ctx.restore()
+      const vv=verseMediaVideoRef.current; const vw2=vv.videoWidth||mW; const vh2=vv.videoHeight||mH; const r2=Math.min(mW/vw2, mH/vh2); const dw2=vw2*r2; const dh2=vh2*r2; const dx2=mX+(mW-dw2)/2; const dy2=mY+(mH-dh2)/2
+      ctx.save(); ctx.fillStyle='#000'; ctx.fillRect(mX,mY,mW,mH); ctx.drawImage(vv,dx2,dy2,dw2,dh2); ctx.restore()
     } else {
       ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(mX,mY,mW,mH); ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('Loading media...',0,mY+mH/2); ctx.fillStyle=textColor
     }
@@ -1377,12 +1377,12 @@ return (
 {showBible&&(
 <div style={{position:'fixed',inset:0,zIndex:9998,background:'rgba(0,0,0,0.92)',padding:12,display:'flex'}}>
 <div style={{background:'#fff',borderRadius:16,padding:12,flex:1,display:'flex',flexDirection:'column',maxWidth:480,margin:'0 auto',width:'100%',overflow:'hidden'}}>
-<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:13}}>📖 Bible {isCam&&<span style={{color:'#FF0000'}}>● LIVE {formatTime(liveSeconds)}</span>}</b><button onClick={()=>setShowBible(false)} style={{background:'#111',color:'#fff',border:'none',borderRadius:20,padding:'8px 12px',fontWeight:800}}>✕ Close</button></div>
+<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:13}}>📖 Bible {isCam&&<span style={{color:'#FF0000'}}>● LIVE {formatTime(liveSeconds)}</span>}</b><div style={{display:'flex',gap:6}}><button onClick={()=>{ setShowBible(false); setTimeout(()=>{ try{ canvasRef.current?.scrollIntoView({behavior:'smooth',block:'center'}) }catch{} },100) }} style={{background:'#2563eb',color:'#fff',border:'none',borderRadius:20,padding:'8px 12px',fontWeight:800}}>📷 Camera</button><button onClick={()=>setShowBible(false)} style={{background:'#111',color:'#fff',border:'none',borderRadius:20,padding:'8px 12px',fontWeight:800}}>✕ Close</button></div></div>
 <div style={{display:'flex',gap:6,marginTop:10,flexWrap:'wrap'}}>{BIBLE_VERSIONS.map(v=>(<button key={v.id} onClick={()=>setBibleVer(v.id)} style={{padding:'6px 10px',borderRadius:20,border:'none',background:bibleVer===v.id?'#111':'#eee',color:bibleVer===v.id?'#fff':'#000',fontWeight:800,fontSize:10}}>{v.label}</button>))}</div>
 <div style={{display:'flex',gap:6,marginTop:10}}><input value={bibleQuery} onChange={e=>setBibleQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')fetchBible()}} placeholder="Type 1 Thes, John, Romans..." style={{flex:1,padding:12,borderRadius:10,border:'2px solid #7c3aed',fontSize:13,fontWeight:700}}/><button onClick={()=>fetchBible()} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:10,padding:'0 16px',fontWeight:800}}>{bibleLoading?'...':'Search'}</button></div>
-{/* FIX ONLY - NEW MEDIA BOX: Only the box, title is Image/video. No explanations, no extra button text. Tap box to pick. Old settings untouched. */}
-<div style={{marginTop:10,border:'2px dashed #2563eb',borderRadius:12,padding:12,background:'#eff6ff',textAlign:'center'}}>
-<label style={{display:'block',cursor:'pointer',fontWeight:800,fontSize:13,color:'#111'}}>Image/video<input ref={verseMediaFileRef} type="file" accept="image/*,video/*" onChange={handleVerseMediaPick} style={{display:'none'}}/></label>
+{/* FIX ONLY - NEW MEDIA BOX: Reduced - smaller padding, smaller title. Only the box, title is Image/video. */}
+<div style={{marginTop:8,border:'2px dashed #2563eb',borderRadius:10,padding:7,background:'#eff6ff',textAlign:'center'}}>
+<label style={{display:'block',cursor:'pointer',fontWeight:800,fontSize:12,color:'#111'}}>Image/video<input ref={verseMediaFileRef} type="file" accept="image/*,video/*" onChange={handleVerseMediaPick} style={{display:'none'}}/></label>
 </div>
 <div style={{maxHeight:200,overflowY:'auto',marginTop:8,display:'flex',flexDirection:'column',gap:6}}>
 {!detectedBook&&filteredBooks.length>0&&(<div style={{background:'#f9f5ff',borderRadius:10,padding:8,border:'1px solid #ddd'}}><div style={{fontSize:11,fontWeight:900}}>Books matching "{bibleQuery}":</div>{filteredBooks.map(b=>(<div key={b.name} onClick={()=>setBibleQuery(b.name+' ')} style={{padding:'8px 10px',borderRadius:8,background:'#fff',border:'1px solid #eee',marginTop:4,fontSize:13,fontWeight:700,cursor:'pointer'}}>{b.name} ({b.chapters} ch)</div>))}</div>)}
@@ -1390,6 +1390,13 @@ return (
 {detectedBook&&parsed.ch&&!parsed.vs&&(<div style={{background:'#f0fdf4',borderRadius:10,padding:8,border:'1px solid #bbf7d0'}}><div style={{fontSize:11,fontWeight:900}}>{detectedBook.name} {parsed.ch} — Select Verse:{chapterVerseCount?` (${chapterVerseCount} verses)`:''}</div><div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:6}}><button onClick={()=>fetchBible(detectedBook.name+' '+parsed.ch)} style={{padding:'8px 12px',borderRadius:8,border:'none',background:'#16a34a',color:'#fff',fontWeight:800,fontSize:12}}>All Chapter</button>{chapterVerseLoading?<div style={{fontSize:12,opacity:.6,padding:8}}>Loading verses...</div>:chapterVerseCount?Array.from({length:chapterVerseCount},(_,i)=>i+1).map(v=>(<button key={v} onClick={()=>{const q=detectedBook.name+' '+parsed.ch+':'+v;setBibleQuery(q);fetchBible(q)}} style={{padding:'8px 12px',borderRadius:8,border:'1px solid #ddd',background:'#fff',fontWeight:800,fontSize:12}}>{v}</button>)):<div style={{fontSize:12,opacity:.7,padding:8}}>Could not load verse list — type verse e.g. {detectedBook.name} {parsed.ch}:172 and tap Search</div>}</div></div>)}
 </div>
 <div style={{marginTop:8,background:'#f9f5ff',borderRadius:12,padding:12,flex:1,overflowY:'auto',border:'1px solid #ddd'}}>{bibleLoading?<div style={{opacity:.6,fontSize:12}}>Searching...</div>:bibleResult?<div style={{fontSize:14,lineHeight:1.5,fontWeight:600,whiteSpace:'pre-wrap'}}>{bibleResult}</div>:<div style={{opacity:.6,fontSize:12}}>Type 1 Thes → pick book → chapter → verse.</div>}</div>
+{/* FIX ONLY - Saved Folder INSIDE Bible box: same function as Bible - tap saved verse, it shows on screen + closes Bible. */}
+{saved.length>0&&<div style={{marginTop:8,border:'1px solid #eee',borderRadius:12,padding:8,background:'#fff',maxHeight:180,overflowY:'auto'}}>
+<div style={{fontSize:12,fontWeight:900,padding:4}}>📁 Saved Folder ({saved.length})</div>
+<div style={{marginTop:4,display:'flex',flexDirection:'column',gap:6}}>
+{saved.map((s,i)=><div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'#f3f0ff',border:'1px solid #e5e7eb',padding:'8px 10px',borderRadius:20}}><span onClick={()=>{ clearVerseMedia(); setVerse(s); setShowBible(false); setTimeout(()=>{ try{ canvasRef.current?.scrollIntoView({behavior:'smooth',block:'center'}) }catch{} },100) }} style={{fontSize:11,flex:1,cursor:'pointer',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',fontWeight:600}}>{s.substring(0,40)}...</span><button onClick={()=>deleteSaved(i)} style={{marginLeft:8,background:'#ff0000',color:'#fff',border:'none',borderRadius:50,width:22,height:22,fontWeight:900,fontSize:12,lineHeight:'22px'}}>×</button></div>)}
+</div>
+</div>}
 {/* FIX ONLY - EasyWorship: Use This Verse clears media, so scripture comes back. */}
 <button onClick={()=>{ clearVerseMedia(); useBibleVerse(); setTimeout(()=>{ try{ canvasRef.current?.scrollIntoView({behavior:'smooth',block:'center'}) }catch{} },100) }} disabled={!bibleResult} style={{marginTop:10,background:bibleResult?'#16a34a':'#ccc',color:'#fff',padding:14,borderRadius:12,fontWeight:900,border:'none'}}>Use This Verse On Screen</button>
 </div>
@@ -1528,14 +1535,6 @@ monthCount!==null?
 </div>
 <div style={{display:'flex',gap:6,marginTop:10}}><button onClick={openBibleApp} style={{flex:1,background:'#2563eb',color:'#fff',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Open Bible</button><button onClick={pasteClipboard} style={{flex:1,background:'#059669',color:'#fff',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Paste</button><button onClick={saveVerse} style={{flex:1,background:'#f59e0b',color:'#000',padding:10,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Save</button></div>
 <textarea value={verse} onChange={e=>setVerse(e.target.value)} style={{width:'100%',height:90,marginTop:10,padding:12,borderRadius:12,border:'1px solid #ddd'}} placeholder={"Ministering:\nNAME OF PRESENTER"}/>
-{saved.length>0&&<div style={{marginTop:8,border:'1px solid #eee',borderRadius:12,padding:8,background:'#fff'}}>
-<details open>
-<summary style={{fontSize:12,fontWeight:900,cursor:'pointer',padding:4}}>📁 Saved Folder ({saved.length})</summary>
-<div style={{marginTop:8,display:'flex',flexDirection:'column',gap:6}}>
-{saved.map((s,i)=><div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'#f3f0ff',border:'1px solid #e5e7eb',padding:'8px 10px',borderRadius:20}}><span onClick={()=>setVerse(s)} style={{fontSize:11,flex:1,cursor:'pointer',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',fontWeight:600}}>{s.substring(0,40)}...</span><button onClick={()=>deleteSaved(i)} style={{marginLeft:8,background:'#ff0000',color:'#fff',border:'none',borderRadius:50,width:22,height:22,fontWeight:900,fontSize:12,lineHeight:'22px'}}>×</button></div>)}
-</div>
-</details>
-</div>}
 </div>
 <div style={{display:'flex',flexDirection:'column',gap:12}}>
 <div style={{border:'2px solid #111',borderRadius:14,padding:12}}><b>Connect Facebook</b><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={loginFacebook} style={{flex:1,background:fbUser?'#16a34a':'#1877F2',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{fbUser?'✓ '+fbUser.name:'Login Facebook'}</button><button onClick={()=>loadPages()} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Load My Pages</button></div>
