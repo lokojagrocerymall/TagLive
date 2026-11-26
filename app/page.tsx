@@ -964,6 +964,28 @@ const creatingYtRef=useRef(false)
 const outroPlayingRef=useRef(false)
 // === FIX ONLY: Facebook duration cut - guard stopFbLive double-tap so 2nd Stop no kill Part 1 auto-resume / flush ===
 const stoppingFbLiveRef=useRef(false)
+// === FIX ONLY: Verse picker - load REAL verse count for that chapter from bible-api, not hardcoded 30. Psalm 119 = 176. NO fallback to 30. ===
+const [chapterVerseCount,setChapterVerseCount]=useState<number|null>(null)
+const [chapterVerseLoading,setChapterVerseLoading]=useState(false)
+useEffect(()=>{
+  let cancelled=false
+  if(!detectedBook || !parsed.ch || parsed.vs){ setChapterVerseCount(null); setChapterVerseLoading(false); return }
+  const bookName=detectedBook.name
+  const ch=parsed.ch
+  setChapterVerseLoading(true)
+  setChapterVerseCount(null)
+  fetch('https://bible-api.com/'+encodeURIComponent(bookName+' '+ch)+'?translation='+bibleVer)
+    .then(r=>r.json())
+    .then(data=>{
+      if(cancelled) return
+      const n=data?.verses?.length || (Array.isArray(data?.verses) ? data.verses.length : 0)
+      if(n && n>0) setChapterVerseCount(n)
+      else setChapterVerseCount(null)
+      setChapterVerseLoading(false)
+    })
+    .catch(()=>{ if(!cancelled){ setChapterVerseCount(null); setChapterVerseLoading(false) } })
+  return()=>{ cancelled=true }
+},[detectedBook?.name, parsed.ch, parsed.vs, bibleVer])
 const stopRecording=async()=>{
   // FIX: Guard - 2nd tap on Stop + Outro was creating 2 timeouts and killing live early
   if(outroPlayingRef.current) return
@@ -1297,7 +1319,7 @@ return (
 <div style={{maxHeight:200,overflowY:'auto',marginTop:8,display:'flex',flexDirection:'column',gap:6}}>
 {!detectedBook&&filteredBooks.length>0&&(<div style={{background:'#f9f5ff',borderRadius:10,padding:8,border:'1px solid #ddd'}}><div style={{fontSize:11,fontWeight:900}}>Books matching "{bibleQuery}":</div>{filteredBooks.map(b=>(<div key={b.name} onClick={()=>setBibleQuery(b.name+' ')} style={{padding:'8px 10px',borderRadius:8,background:'#fff',border:'1px solid #eee',marginTop:4,fontSize:13,fontWeight:700,cursor:'pointer'}}>{b.name} ({b.chapters} ch)</div>))}</div>)}
 {detectedBook&&!parsed.ch&&(<div style={{background:'#f9f5ff',borderRadius:10,padding:8,border:'1px solid #ddd'}}><div style={{fontSize:11,fontWeight:900}}>{detectedBook.name} — Select Chapter:</div><div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:6}}>{Array.from({length:detectedBook.chapters},(_,i)=>i+1).map(ch=>(<button key={ch} onClick={()=>setBibleQuery(detectedBook.name+' '+ch)} style={{padding:'8px 12px',borderRadius:8,border:'1px solid #ddd',background:'#fff',fontWeight:800,fontSize:12}}>{ch}</button>))}</div></div>)}
-{detectedBook&&parsed.ch&&!parsed.vs&&(<div style={{background:'#f0fdf4',borderRadius:10,padding:8,border:'1px solid #bbf7d0'}}><div style={{fontSize:11,fontWeight:900}}>{detectedBook.name} {parsed.ch} — Select Verse:</div><div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:6}}><button onClick={()=>fetchBible(detectedBook.name+' '+parsed.ch)} style={{padding:'8px 12px',borderRadius:8,border:'none',background:'#16a34a',color:'#fff',fontWeight:800,fontSize:12}}>All Chapter</button>{Array.from({length:30},(_,i)=>i+1).map(v=>(<button key={v} onClick={()=>{const q=detectedBook.name+' '+parsed.ch+':'+v;setBibleQuery(q);fetchBible(q)}} style={{padding:'8px 12px',borderRadius:8,border:'1px solid #ddd',background:'#fff',fontWeight:800,fontSize:12}}>{v}</button>))}</div></div>)}
+{detectedBook&&parsed.ch&&!parsed.vs&&(<div style={{background:'#f0fdf4',borderRadius:10,padding:8,border:'1px solid #bbf7d0'}}><div style={{fontSize:11,fontWeight:900}}>{detectedBook.name} {parsed.ch} — Select Verse:{chapterVerseCount?` (${chapterVerseCount} verses)`:''}</div><div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:6}}><button onClick={()=>fetchBible(detectedBook.name+' '+parsed.ch)} style={{padding:'8px 12px',borderRadius:8,border:'none',background:'#16a34a',color:'#fff',fontWeight:800,fontSize:12}}>All Chapter</button>{chapterVerseLoading?<div style={{fontSize:12,opacity:.6,padding:8}}>Loading verses...</div>:chapterVerseCount?Array.from({length:chapterVerseCount},(_,i)=>i+1).map(v=>(<button key={v} onClick={()=>{const q=detectedBook.name+' '+parsed.ch+':'+v;setBibleQuery(q);fetchBible(q)}} style={{padding:'8px 12px',borderRadius:8,border:'1px solid #ddd',background:'#fff',fontWeight:800,fontSize:12}}>{v}</button>)):<div style={{fontSize:12,opacity:.7,padding:8}}>Could not load verse list — type verse e.g. {detectedBook.name} {parsed.ch}:172 and tap Search</div>}</div></div>)}
 </div>
 <div style={{marginTop:8,background:'#f9f5ff',borderRadius:12,padding:12,flex:1,overflowY:'auto',border:'1px solid #ddd'}}>{bibleLoading?<div style={{opacity:.6,fontSize:12}}>Searching...</div>:bibleResult?<div style={{fontSize:14,lineHeight:1.5,fontWeight:600,whiteSpace:'pre-wrap'}}>{bibleResult}</div>:<div style={{opacity:.6,fontSize:12}}>Type 1 Thes → pick book → chapter → verse.</div>}</div>
 <button onClick={useBibleVerse} disabled={!bibleResult} style={{marginTop:10,background:bibleResult?'#16a34a':'#ccc',color:'#fff',padding:14,borderRadius:12,fontWeight:900,border:'none'}}>Use This Verse On Screen</button>
