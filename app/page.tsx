@@ -1296,17 +1296,17 @@ let _allLines:{text:string,isLastInPara:boolean,paraIdx:number}[]=[]
 _paragraphs.forEach((para,pIdx)=>{ if(!para.trim()){ _allLines.push({text:'',isLastInPara:true,paraIdx:pIdx}); return } const _wrapped=wrapText(ctx,para.trim(),maxW); _wrapped.forEach((l,i)=>_allLines.push({text:l,isLastInPara:i===_wrapped.length-1,paraIdx:pIdx})) })
 const _realCount=_allLines.filter(l=>l.text!=='').length
 const _lineH=fontSize*1.32
-// FIX ONLY - EasyWorship: if media is on, box is MEDIA ONLY. No text height. Media height from aspect, clamped.
+// FIX ONLY - Media: NO border / NO padding / NO box background. Media fills edge-to-edge for clear complete view.
 const _mediaOnlyH=verseMedia?Math.min(380,Math.max(120, verseMedia.type==='image'&&verseMedia.w>0&&verseMedia.h>0?maxW*verseMedia.h/verseMedia.w : verseMedia.type==='video'&&verseMediaVideoRef.current&&verseMediaVideoRef.current.videoWidth>0?maxW*verseMediaVideoRef.current.videoHeight/verseMediaVideoRef.current.videoWidth : 213)):0
-const _boxH=verseMedia?(_mediaOnlyH+_pad*2):(_realCount*_lineH+(_paragraphs.length-1)*8+_pad*2)
+const _boxH=verseMedia?_mediaOnlyH:(_realCount*_lineH+(_paragraphs.length-1)*8+_pad*2)
 const _tickerH=(tickerOn&&tickerText)?(tickerSize+24):0
 const _anchorBottom=isSplit?0:(c.height-_tickerH)
 const drawX=isSplit?c.width*0.5:pos.x
 const drawY=isSplit?c.height*0.24:(_anchorBottom-_boxH/2)
-ctx.translate(drawX,drawY); ctx.scale(pos.scale,pos.scale); ctx.font='bold '+fontSize+'px sans-serif'; const pad=18; const boxW=maxW+pad*2; const paragraphs=verse.split('\n'); let allLines:{text:string,isLastInPara:boolean,paraIdx:number}[]=[]; paragraphs.forEach((para,pIdx)=>{ if(!para.trim()){ allLines.push({text:'',isLastInPara:true,paraIdx:pIdx}); return } const wrapped=wrapText(ctx,para.trim(),maxW); wrapped.forEach((l,i)=>allLines.push({text:l,isLastInPara:i===wrapped.length-1,paraIdx:pIdx})) }); const realCount=allLines.filter(l=>l.text!=='').length; const lineH=fontSize*1.32; const mediaOnlyH=verseMedia?Math.min(380,Math.max(120, verseMedia.type==='image'&&verseMedia.w>0&&verseMedia.h>0?maxW*verseMedia.h/verseMedia.w : verseMedia.type==='video'&&verseMediaVideoRef.current&&verseMediaVideoRef.current.videoWidth>0?maxW*verseMediaVideoRef.current.videoHeight/verseMediaVideoRef.current.videoWidth : 213)):0; const boxH=verseMedia?(mediaOnlyH+pad*2):(realCount*lineH+(paragraphs.length-1)*8+pad*2); ctx.fillStyle=hexToRgba(boxColor,boxOpacity); ctx.fillRect(-boxW/2,-boxH/2,boxW,boxH); ctx.fillStyle=textColor;
+ctx.translate(drawX,drawY); ctx.scale(pos.scale,pos.scale); ctx.font='bold '+fontSize+'px sans-serif'; const pad=18; const boxW=verseMedia?maxW:(maxW+pad*2); const paragraphs=verse.split('\n'); let allLines:{text:string,isLastInPara:boolean,paraIdx:number}[]=[]; paragraphs.forEach((para,pIdx)=>{ if(!para.trim()){ allLines.push({text:'',isLastInPara:true,paraIdx:pIdx}); return } const wrapped=wrapText(ctx,para.trim(),maxW); wrapped.forEach((l,i)=>allLines.push({text:l,isLastInPara:i===wrapped.length-1,paraIdx:pIdx})) }); const realCount=allLines.filter(l=>l.text!=='').length; const lineH=fontSize*1.32; const mediaOnlyH=verseMedia?Math.min(380,Math.max(120, verseMedia.type==='image'&&verseMedia.w>0&&verseMedia.h>0?maxW*verseMedia.h/verseMedia.w : verseMedia.type==='video'&&verseMediaVideoRef.current&&verseMediaVideoRef.current.videoWidth>0?maxW*verseMediaVideoRef.current.videoHeight/verseMediaVideoRef.current.videoWidth : 213)):0; const boxH=verseMedia?mediaOnlyH:(realCount*lineH+(paragraphs.length-1)*8+pad*2); ctx.fillStyle=hexToRgba(boxColor,boxOpacity); if(!verseMedia) ctx.fillRect(-boxW/2,-boxH/2,boxW,boxH); ctx.fillStyle=textColor;
 // FIX ONLY - EasyWorship: MEDIA REPLACES SCRIPTURE. If media on, draw media filling whole box, skip all verse text.
 if(verseMedia){
-  const mX=-maxW/2; const mY=-boxH/2+pad; const mW=maxW; const mH=mediaOnlyH
+  const mX=-boxW/2; const mY=-boxH/2; const mW=boxW; const mH=boxH
   try{
     if(verseMedia.type==='image' && verseMediaImgRef.current){
       const im=verseMediaImgRef.current; const iw=im.width||mW; const ih=im.height||mH; const r=Math.max(mW/iw, mH/ih); const dw=iw*r; const dh=ih*r; const sx=(dw-mW)/2; const sy=(dh-mH)/2
@@ -1315,7 +1315,7 @@ if(verseMedia){
       const vv=verseMediaVideoRef.current; const vw2=vv.videoWidth||mW; const vh2=vv.videoHeight||mH; const r2=Math.max(mW/vw2, mH/vh2); const dw2=vw2*r2; const dh2=vh2*r2; const sx2=(dw2-mW)/2; const sy2=(dh2-mH)/2
       ctx.save(); ctx.beginPath(); ctx.rect(mX,mY,mW,mH); ctx.clip(); ctx.drawImage(vv,mX-sx2,mY-sy2,dw2,dh2); ctx.restore()
     } else {
-      ctx.fillStyle='rgba(255,255,255,0.15)'; ctx.fillRect(mX,mY,mW,mH); ctx.fillStyle=textColor; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('Loading media...',0,mY+mH/2); ctx.fillStyle=textColor
+      ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(mX,mY,mW,mH); ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('Loading media...',0,mY+mH/2); ctx.fillStyle=textColor
     }
   }catch{}
 } else {
@@ -1380,11 +1380,9 @@ return (
 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:13}}>📖 Bible {isCam&&<span style={{color:'#FF0000'}}>● LIVE {formatTime(liveSeconds)}</span>}</b><button onClick={()=>setShowBible(false)} style={{background:'#111',color:'#fff',border:'none',borderRadius:20,padding:'8px 12px',fontWeight:800}}>✕ Close</button></div>
 <div style={{display:'flex',gap:6,marginTop:10,flexWrap:'wrap'}}>{BIBLE_VERSIONS.map(v=>(<button key={v.id} onClick={()=>setBibleVer(v.id)} style={{padding:'6px 10px',borderRadius:20,border:'none',background:bibleVer===v.id?'#111':'#eee',color:bibleVer===v.id?'#fff':'#000',fontWeight:800,fontSize:10}}>{v.label}</button>))}</div>
 <div style={{display:'flex',gap:6,marginTop:10}}><input value={bibleQuery} onChange={e=>setBibleQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')fetchBible()}} placeholder="Type 1 Thes, John, Romans..." style={{flex:1,padding:12,borderRadius:10,border:'2px solid #7c3aed',fontSize:13,fontWeight:700}}/><button onClick={()=>fetchBible()} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:10,padding:'0 16px',fontWeight:800}}>{bibleLoading?'...':'Search'}</button></div>
-{/* FIX ONLY - MEDIA PICKER INSIDE BIBLE BOX: pick image/video here, it REPLACES scripture in same box (EasyWorship). */}
-<div style={{marginTop:10,border:'2px dashed #2563eb',borderRadius:12,padding:10,background:'#eff6ff'}}>
-<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:6}}><b style={{fontSize:12}}>📷 Media — Replaces Scripture</b>{verseMedia&&<button onClick={clearVerseMedia} style={{padding:'6px 10px',borderRadius:8,border:'none',background:'#ff0000',color:'#fff',fontWeight:800,fontSize:11}}>✕ Remove Media</button>}</div>
-{verseMedia?<div style={{marginTop:6,fontSize:11,fontWeight:700,wordBreak:'break-all'}}>✓ {verseMedia.type==='video'?'🎬 Video':'🖼️ Image'}: {verseMedia.name} — now showing INSTEAD of scripture</div>:<div style={{marginTop:4,fontSize:11,opacity:.7}}>Pick an image or video — it will automatically replace the scripture in the same box.</div>}
-<label style={{display:'block',marginTop:8,background:'#2563eb',color:'#fff',padding:12,borderRadius:10,fontWeight:800,fontSize:12,textAlign:'center',cursor:'pointer'}}>📷 Pick Image / Video — Replace Scripture<input ref={verseMediaFileRef} type="file" accept="image/*,video/*" onChange={handleVerseMediaPick} style={{display:'none'}}/></label>
+{/* FIX ONLY - NEW MEDIA BOX: Only the box, title is Image/video. No explanations, no extra button text. Tap box to pick. Old settings untouched. */}
+<div style={{marginTop:10,border:'2px dashed #2563eb',borderRadius:12,padding:12,background:'#eff6ff',textAlign:'center'}}>
+<label style={{display:'block',cursor:'pointer',fontWeight:800,fontSize:13,color:'#111'}}>Image/video<input ref={verseMediaFileRef} type="file" accept="image/*,video/*" onChange={handleVerseMediaPick} style={{display:'none'}}/></label>
 </div>
 <div style={{maxHeight:200,overflowY:'auto',marginTop:8,display:'flex',flexDirection:'column',gap:6}}>
 {!detectedBook&&filteredBooks.length>0&&(<div style={{background:'#f9f5ff',borderRadius:10,padding:8,border:'1px solid #ddd'}}><div style={{fontSize:11,fontWeight:900}}>Books matching "{bibleQuery}":</div>{filteredBooks.map(b=>(<div key={b.name} onClick={()=>setBibleQuery(b.name+' ')} style={{padding:'8px 10px',borderRadius:8,background:'#fff',border:'1px solid #eee',marginTop:4,fontSize:13,fontWeight:700,cursor:'pointer'}}>{b.name} ({b.chapters} ch)</div>))}</div>)}
