@@ -563,6 +563,10 @@ const introTimeoutRef=useRef<any>(null)
 const fbPendingRef=useRef<any>(null)
 const creatingFbRef=useRef(false)
 const heartbeatRef=useRef<any>(null)
+// === FIX ONLY - Outro playing twice: Intro + Outro share ONE broadcastVideoRef. Mode + clear + once-per-live guard. ===
+const broadcastModeRef=useRef<'idle'|'intro'|'outro'>('idle')
+const outroPlayedRef=useRef(false)
+const clearBroadcastOnEnded=()=>{ try{ const v=broadcastVideoRef.current as any; if(v) v.onended=null }catch{} }
 // === FIX ONLY - Intro plays FULL duration: onended / STOP INTRO is the boss. NO timer for video. Kept for image only. ===
 const getRealBroadcastMs=(active:any, v:any)=>{
   if(active?.type==='video' && v && v.duration && isFinite(v.duration) && v.duration>0) return Math.ceil(v.duration*1000)
@@ -571,6 +575,9 @@ const getRealBroadcastMs=(active:any, v:any)=>{
 const clearIntroTimeout=()=>{ try{ if(introTimeoutRef.current) clearTimeout(introTimeoutRef.current) }catch{}; introTimeoutRef.current=null }
 // === FIX ONLY: Intro background audio - stop video element itself, not just canvas. Old code cleared broadcastPlaying after 5s but video kept playing audio into mixer. ===
 const stopBroadcastVideoNow=()=>{
+  // FIX ONLY - Outro twice: set mode idle + clear onended FIRST, before pause/remove/load. Old order let load() re-fire a stale ended event.
+  broadcastModeRef.current='idle'
+  clearBroadcastOnEnded()
   try{ if(introTimeoutRef.current) clearTimeout(introTimeoutRef.current) }catch{}
   introTimeoutRef.current=null
   setBroadcastPlaying(null); broadcastImageRef.current=null
@@ -590,7 +597,10 @@ const endFbLiveWithOutro=async()=>{
   if(!fbPushingRef.current && !isLive){ await stopFbPush(); return }
   const active=outros.find((o:any)=>o.id===activeOutroId)
   if(!active){ await stopFbPush(); return }
+  // FIX ONLY - Outro twice: if Outro already played this live (e.g. stale handler fired it after Intro), do NOT play it again. Skip straight to stop.
+  if(outroPlayedRef.current){ await stopFbPush(); return }
   outroEndingRef.current=true
+  outroPlayedRef.current=true
   try{
     ensureLiveAudio()
     try{ if(liveAudioCtxRef.current && liveAudioCtxRef.current.state==='suspended') await liveAudioCtxRef.current.resume() }catch{}
@@ -606,7 +616,10 @@ const endFbLiveWithOutro=async()=>{
         await new Promise<void>((resolve)=>{
           let done=false
           const finish=()=>{ if(!done){ done=true; resolve() } }
-          v.onended=()=>{ try{ if(v.ended || !isFinite(v.duration||0) || v.currentTime>=(v.duration||0)-0.3) finish() }catch{ finish() } }
+          // FIX ONLY - Outro twice: mode must still be 'outro'. If Intro started / stop cleared it, ignore this stale ended event.
+          broadcastModeRef.current='outro'
+          clearBroadcastOnEnded()
+          v.onended=()=>{ try{ if(broadcastModeRef.current!=='outro') return; if(v.ended || !isFinite(v.duration||0) || v.currentTime>=(v.duration||0)-0.3) finish() }catch{ if(broadcastModeRef.current==='outro') finish() } }
           playBroadcastVideoMutedFirst(v).catch(()=>{})
         })
       }catch{}
@@ -867,6 +880,8 @@ const createFbLiveAuto=async(page:any)=>{
   if(isLive && selectedPage?.id===page.id) return
   creatingFbRef.current=true
   try{
+    // FIX ONLY - Outro twice: fresh live = Outro has NOT played yet. Reset here, not after Intro.
+    outroPlayedRef.current=false
     await createFbLiveForPage(page)
     const active=intros.find(i=>i.id===activeIntroId)
     if(!active) return
@@ -882,7 +897,10 @@ const createFbLiveAuto=async(page:any)=>{
         connectBroadcastVideoToMixer()
         // FIX ONLY - Video Intro FULL duration: NO timer. onended OR STOP INTRO button stops it, even 10 hours. Old timer used saved duration and cut long intro at 2-3s.
         clearIntroTimeout()
-        v.onended=()=>{ try{ if(v.ended || !isFinite(v.duration||0) || v.currentTime>=(v.duration||0)-0.3) stopBroadcastVideoNow() }catch{ stopBroadcastVideoNow() } }
+        // FIX ONLY - Outro twice: mark as Intro + clear stale Outro onended BEFORE assigning Intro handler.
+        broadcastModeRef.current='intro'
+        clearBroadcastOnEnded()
+        v.onended=()=>{ try{ if(broadcastModeRef.current!=='intro') return; if(v.ended || !isFinite(v.duration||0) || v.currentTime>=(v.duration||0)-0.3) stopBroadcastVideoNow() }catch{ if(broadcastModeRef.current==='intro') stopBroadcastVideoNow() } }
         await playBroadcastVideoMutedFirst(v)
       }catch{}
     }
@@ -954,7 +972,8 @@ const startRecording=async()=>{
     try{ micGain.gain.value=0 }catch{}
     if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
     else if(active.type==='video'){
-      if(broadcastVideoRef.current){ const v=broadcastVideoRef.current as any; setBroadcastVideoSrc(v, active.data); v.onended=()=>{ try{ if(v.ended || !isFinite(v.duration||0) || v.currentTime>=(v.duration||0)-0.3) stopBroadcastVideoNow() }catch{ stopBroadcastVideoNow() } }; try{ await playBroadcastVideoMutedFirst(v) }catch{} }
+      if(broadcastVideoRef.current){ const v=broadcastVideoRef.current as any; setBroadcastVideoSrc(v, active.data); // FIX ONLY - Outro twice: mark as Intro + clear stale Outro onended BEFORE assigning Intro handler.
+        broadcastModeRef.current='intro'; clearBroadcastOnEnded(); v.onended=()=>{ try{ if(broadcastModeRef.current!=='intro') return; if(v.ended || !isFinite(v.duration||0) || v.currentTime>=(v.duration||0)-0.3) stopBroadcastVideoNow() }catch{ if(broadcastModeRef.current==='intro') stopBroadcastVideoNow() } }; try{ await playBroadcastVideoMutedFirst(v) }catch{} }
       try{
         if(!broadcastConnectedRef.current && broadcastVideoRef.current){
           const v2=broadcastVideoRef.current as any
@@ -1068,7 +1087,10 @@ const stopRecording=async()=>{
   if(outroPlayingRef.current) return
   const active=outros.find(o=>o.id===activeOutroId)
   if(active && isRecording){
+    // FIX ONLY - Outro twice: if Outro already played this live, do NOT play it again. Finish straight away.
+    if(outroPlayedRef.current){ stopRecordingFinal(); if(isLive) await stopFbLive(true); if(ytLive) stopYtLive(); if(tiktokPushing) stopTikTokLive(); return }
     outroPlayingRef.current=true
+    outroPlayedRef.current=true
     // FIX: Capture live state BEFORE outro, so we can auto-stop pushes AFTER outro fully plays in FB/YT/TikTok
     const wasFbLive=isLive
     const wasYtLive=ytLive
@@ -1078,6 +1100,7 @@ const stopRecording=async()=>{
     const micGain=((audioCtxRef.current as any)?._micGain) || liveMicGainRef.current
     if(micGain){ try{ micGain.gain.value=0 }catch{} }
     if(active.type==='image'){
+      broadcastModeRef.current='outro'
       const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }
       broadcastImageRef.current=img
       setTimeout(async()=>{
@@ -1101,7 +1124,12 @@ const stopRecording=async()=>{
       try{ if(liveAudioCtxRef.current) liveAudioCtxRef.current.resume() }catch{}
       connectBroadcastVideoToMixer()
       // FIX ONLY - Video Outro FULL duration: NO timer. Wait for REAL onended ONLY, even 10 hours. STOP INTRO button is the manual stop.
+      let outroDone=false
       const finishVideoOutro=async()=>{
+        // FIX ONLY - Outro twice: mode + done guard. A re-fired ended event from load() cannot finish twice.
+        if(outroDone) return
+        if(broadcastModeRef.current!=='outro') return
+        outroDone=true
         if(micGain){ try{ micGain.gain.value=1 }catch{} }
         outroPlayingRef.current=false
         // FIX ONLY: Timer + LIVE must end together with Outro - stop timer NOW, before flush / stopFbPush
@@ -1118,9 +1146,11 @@ const stopRecording=async()=>{
       if(broadcastVideoRef.current){
         const v=broadcastVideoRef.current as any
         // FIX ONLY - INTRO BACKGROUND AUDIO + data: crossOrigin: use Part 1B helper, stop on ended.
+        broadcastModeRef.current='outro'
+        clearBroadcastOnEnded()
         setBroadcastVideoSrc(v, active.data)
-        // FIX ONLY - Outro cut at 2s: onended guard handles Infinity duration. Only finish when video really ended.
-        v.onended=()=>{ try{ if(v.ended || !isFinite(v.duration||0) || v.currentTime>=(v.duration||0)-0.3) finishVideoOutro() }catch{ finishVideoOutro() } }
+        // FIX ONLY - Outro cut at 2s: onended guard handles Infinity duration. Only finish when video really ended + mode still outro.
+        v.onended=()=>{ try{ if(broadcastModeRef.current!=='outro') return; if(v.ended || !isFinite(v.duration||0) || v.currentTime>=(v.duration||0)-0.3) finishVideoOutro() }catch{ if(broadcastModeRef.current==='outro') finishVideoOutro() } }
         // FIX ONLY: muted-first play (Part 1 helper) - unmuted play after awaits was blocked, same as Intro
         try{ await playBroadcastVideoMutedFirst(v) }catch{}
       }
@@ -1171,6 +1201,8 @@ const startYtLiveWithIntro=async()=>{
   if(ytPushingRef.current) return
   creatingYtRef.current=true
   try{
+    // FIX ONLY - Outro twice: fresh live = Outro has NOT played yet. Reset here, not after Intro.
+    outroPlayedRef.current=false
     const active=intros.find(i=>i.id===activeIntroId)
     // FIX: Push FIRST, even if no Intro, so live starts at second 0
     await startYtPush(ytKey)
@@ -1188,7 +1220,10 @@ const startYtLiveWithIntro=async()=>{
       // FIX ONLY - INTRO BACKGROUND AUDIO + data: crossOrigin: use Part 1B helper, stop on ended.
       setBroadcastVideoSrc(v, active.data)
       // FIX ONLY - Video Intro FULL duration: NO timer. onended OR STOP INTRO button stops it, even 10 hours. Old timer used saved duration and cut long intro at 2-3s.
-      v.onended=()=>{ try{ if(v.ended || !isFinite(v.duration||0) || v.currentTime>=(v.duration||0)-0.3) stopBroadcastVideoNow() }catch{ stopBroadcastVideoNow() } }
+      // FIX ONLY - Outro twice: mark as Intro + clear stale Outro onended BEFORE assigning Intro handler.
+      broadcastModeRef.current='intro'
+      clearBroadcastOnEnded()
+      v.onended=()=>{ try{ if(broadcastModeRef.current!=='intro') return; if(v.ended || !isFinite(v.duration||0) || v.currentTime>=(v.duration||0)-0.3) stopBroadcastVideoNow() }catch{ if(broadcastModeRef.current==='intro') stopBroadcastVideoNow() } }
       connectBroadcastVideoToMixer()
       // FIX ONLY: muted-first play, same autoplay block as FB Intro
       try{ await playBroadcastVideoMutedFirst(v) }catch{}
@@ -1601,7 +1636,7 @@ monthCount!==null?
 <textarea value={liveDescription} onChange={e=>setLiveDescription(e.target.value)} placeholder="Live Description - this shows on Facebook, NOT your verse" style={{width:'100%',padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12,boxSizing:'border-box',height:60}} />
 </div>
 {pages.map((p:any)=><div key={p.id} onClick={()=>createFbLiveAuto(p)} style={{marginTop:6,padding:10,background:selectedPage?.id===p.id?'#7c3aed':'#f3f0ff',color:selectedPage?.id===p.id?'#fff':'#000',borderRadius:8,fontSize:13,fontWeight:700,cursor:'pointer'}}>{p.name} {selectedPage?.id===p.id?'LIVE '+formatTime(liveSeconds):'(Go Live)'}</div>)} {fbStreamUrl&&<div style={{marginTop:10,padding:10,background:'#dcfce7',borderRadius:8,fontSize:11,wordBreak:'break-all'}}>FB: {fbStreamUrl.substring(0,70)}...</div>}{isLive&&<button onClick={()=>stopFbLive()} style={{marginTop:10,width:'100%',background:'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>■ Stop Facebook Live</button>}</div>
-<div style={{marginTop:14,border:'2px solid #ff0000',borderRadius:14,padding:12}}><b>Connect YouTube Live</b><input value={ytKey} onChange={e=>{setYtKey(e.target.value);localStorage.setItem('taglive_ytkey',e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={startYtLiveWithIntro} style={{flex:1,background:ytLive?'#16a34a':'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{ytLive?'YouTube LIVE '+formatTime(liveSeconds):'Go Live YouTube + Intro FULL'}</button><button onClick={()=>{if(broadcastPlaying) return; const active=outros.find(o=>o.id===activeOutroId); if(active){setBroadcastPlaying(active); if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img; clearIntroTimeout(); introTimeoutRef.current=setTimeout(async()=>{ try{ stopBroadcastVideoNow() }catch{ setBroadcastPlaying(null) }; await new Promise(r=>setTimeout(r,1000)); stopYtLive()},(active.duration||5)*1000) } else if(active.type==='video'&&broadcastVideoRef.current){ const v=broadcastVideoRef.current as any; setBroadcastVideoSrc(v, active.data); v.onended=async()=>{ try{ if(v.ended || !isFinite(v.duration||0) || v.currentTime>=(v.duration||0)-0.3){ try{ stopBroadcastVideoNow() }catch{ setBroadcastPlaying(null) }; await new Promise(r=>setTimeout(r,1000)); stopYtLive() } }catch{ try{ stopBroadcastVideoNow() }catch{}; await new Promise(r=>setTimeout(r,1000)); stopYtLive() } }; ensureLiveAudio(); try{ if(liveAudioCtxRef.current) liveAudioCtxRef.current.resume() }catch{}; connectBroadcastVideoToMixer(); playBroadcastVideoMutedFirst(v).catch(()=>{}) } else { stopYtLive() } } else {stopYtLive()}}} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Stop YT + Outro</button></div></div>
+<div style={{marginTop:14,border:'2px solid #ff0000',borderRadius:14,padding:12}}><b>Connect YouTube Live</b><input value={ytKey} onChange={e=>{setYtKey(e.target.value);localStorage.setItem('taglive_ytkey',e.target.value)}} placeholder="Paste YouTube Stream Key here" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/><div style={{display:'flex',gap:8,marginTop:8}}><button onClick={startYtLiveWithIntro} style={{flex:1,background:ytLive?'#16a34a':'#ff0000',color:'#fff',padding:12,borderRadius:8,fontWeight:800,border:'none'}}>{ytLive?'YouTube LIVE '+formatTime(liveSeconds):'Go Live YouTube + Intro FULL'}</button><button onClick={()=>{if(broadcastPlaying) return; if(outroPlayedRef.current){ stopYtLive(); return; } const active=outros.find(o=>o.id===activeOutroId); if(active){ outroPlayedRef.current=true; setBroadcastPlaying(active); if(active.type==='image'){ broadcastModeRef.current='outro'; const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img; clearIntroTimeout(); introTimeoutRef.current=setTimeout(async()=>{ try{ stopBroadcastVideoNow() }catch{ setBroadcastPlaying(null) }; await new Promise(r=>setTimeout(r,1000)); stopYtLive()},(active.duration||5)*1000) } else if(active.type==='video'&&broadcastVideoRef.current){ const v=broadcastVideoRef.current as any; broadcastModeRef.current='outro'; clearBroadcastOnEnded(); setBroadcastVideoSrc(v, active.data); let ytOutroDone=false; v.onended=async()=>{ if(ytOutroDone) return; if(broadcastModeRef.current!=='outro') return; try{ if(v.ended || !isFinite(v.duration||0) || v.currentTime>=(v.duration||0)-0.3){ ytOutroDone=true; try{ stopBroadcastVideoNow() }catch{ setBroadcastPlaying(null) }; await new Promise(r=>setTimeout(r,1000)); stopYtLive() } }catch{ if(!ytOutroDone){ ytOutroDone=true; try{ stopBroadcastVideoNow() }catch{}; await new Promise(r=>setTimeout(r,1000)); stopYtLive() } } }; ensureLiveAudio(); try{ if(liveAudioCtxRef.current) liveAudioCtxRef.current.resume() }catch{}; connectBroadcastVideoToMixer(); playBroadcastVideoMutedFirst(v).catch(()=>{}) } else { stopYtLive() } } else {stopYtLive()}}} style={{flex:1,border:'1px solid #000',padding:12,borderRadius:8,fontWeight:800,background:'#fff'}}>Stop YT + Outro</button></div></div>
 <div style={{marginTop:14,border:'2px solid #000',borderRadius:14,padding:12}}><b>Connect TikTok Live</b>
 <input value={tiktokUsername} onChange={e=>setTiktokUsername(e.target.value)} placeholder="@your TikTok username" style={{width:'100%',marginTop:8,padding:10,borderRadius:8,border:'1px solid #ddd',fontSize:12}}/>
 <div style={{display:'flex',gap:8,marginTop:8}}>
