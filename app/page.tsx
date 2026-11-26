@@ -1221,7 +1221,7 @@ const onTouchEnd=(e:any)=>{
     lastTouch.current.dist=0
   }
 }
-useEffect(()=>{
+  useEffect(()=>{
 let a:any
 const wrapText=(ctx:any,text:string,maxWidth:number)=>{
 const words=text.split(' '); let lines:string[]=[]; let cur='';
@@ -1287,6 +1287,8 @@ if(showText){
 ctx.save();
 const isSplit=bgMode==='split'
 const isImageMode=bgMode==='image'
+// FIX ONLY - CRASH FIX: maxW was deleted in last edit, causing client-side exception on Camera tap. Restored.
+const maxW=isSplit?360:380
 // FIX ONLY - TEXT BOX BOTTOM-ANCHOR: measure boxH FIRST, then anchor bottom to ticker top. Long text grows UP, short text landing still touches ticker. Split mode unchanged.
 ctx.font='bold '+fontSize+'px sans-serif'
 const _pad=18
