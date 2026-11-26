@@ -168,8 +168,8 @@ const getPushAudioTrack=()=>{
   return streamRef.current?.getAudioTracks()[0]||null
 }
 const getPushStream=()=>{
-  // FIX ONLY - SKIPPING: 480p = 12fps, 720p = 15fps. Less data on slow upload.
-  const canvasStream=(canvasRef.current as any).captureStream(lowData?12:15) as MediaStream
+  // FIX ONLY - ULTRA-LOW SKIPPING: 480p = 10fps, 720p = 15fps. Less data on slow upload.
+  const canvasStream=(canvasRef.current as any).captureStream(lowData?10:15) as MediaStream
   const audioTrack=getPushAudioTrack()
   if(audioTrack) canvasStream.addTrack(audioTrack)
   return canvasStream
@@ -243,8 +243,8 @@ const startPushRecorderOnReady=(ws:any, recorderRef:any, onStarted?:()=>void, is
       const canvasStream=getPushStream()
       let mime='video/webm;codecs=vp8,opus'
       if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm'
-      // FIX ONLY - SKIPPING: 480p = 500kbps, 720p = 800kbps. Chunk back to ORIGINAL 250ms.
-      const pushBits=lowData?500000:800000
+      // FIX ONLY - ULTRA-LOW SKIPPING: 480p = 350kbps, 720p = 800kbps. Chunk back to ORIGINAL 250ms.
+      const pushBits=lowData?350000:800000
       const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: pushBits })
       recorderRef.current=rec
       rec.ondataavailable=(e)=>{
