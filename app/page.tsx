@@ -168,8 +168,8 @@ const getPushAudioTrack=()=>{
   return streamRef.current?.getAudioTracks()[0]||null
 }
 const getPushStream=()=>{
-  // FIX ONLY - AUDIO CAP SKIPPING: 480p = 8fps, 720p = 15fps. Less data on slow upload.
-  const canvasStream=(canvasRef.current as any).captureStream(lowData?8:15) as MediaStream
+  // REVERTED TO ORIGINAL: 480p = 12fps, 720p = 15fps.
+  const canvasStream=(canvasRef.current as any).captureStream(lowData?12:15) as MediaStream
   const audioTrack=getPushAudioTrack()
   if(audioTrack) canvasStream.addTrack(audioTrack)
   return canvasStream
@@ -243,10 +243,9 @@ const startPushRecorderOnReady=(ws:any, recorderRef:any, onStarted?:()=>void, is
       const canvasStream=getPushStream()
       let mime='video/webm;codecs=vp8,opus'
       if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm'
-      // FIX ONLY - AUDIO CAP SKIPPING: 480p = 280kbps video + 48kbps audio = 328kbps total, 720p = 800kbps + 128kbps. Chunk 500ms on 480p, 250ms on 720p.
-      const pushBits=lowData?280000:800000
-      const pushAudioBits=lowData?48000:128000
-      const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: pushBits, audioBitsPerSecond: pushAudioBits })
+      // REVERTED TO ORIGINAL: 480p = 500kbps, 720p = 800kbps. No audio cap. Chunk ORIGINAL 250ms.
+      const pushBits=lowData?500000:800000
+      const rec=new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: pushBits })
       recorderRef.current=rec
       rec.ondataavailable=(e)=>{
         if(e.data.size>0 && ws.readyState===WebSocket.OPEN){
@@ -255,7 +254,7 @@ const startPushRecorderOnReady=(ws:any, recorderRef:any, onStarted?:()=>void, is
           if(isFbPush){ lastFbChunkAtRef.current=Date.now(); setPushStatus('Sending') }
         }
       }
-      rec.start(lowData?500:250)
+      rec.start(250)
       if(onStarted) onStarted()
     }catch{}
   }
@@ -1419,7 +1418,8 @@ monthCount!==null?
 {(isLive||pushStatus!=='Idle')&&(<div style={{marginTop:10,padding:'10px 12px',borderRadius:12,background:pushStatus==='Stalled'||pushStatus==='Bridge Failed'?'#fef2f2':pushStatus==='Sending'?'#f0fdf4':'#f5f5f7',border:pushStatus==='Stalled'||pushStatus==='Bridge Failed'?'2px solid #ff0000':'1px solid #ddd',display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><span style={{fontWeight:900,fontSize:12,color:pushStatus==='Stalled'||pushStatus==='Bridge Failed'?'#b91c1c':'#111'}}>{pushStatus==='Sending'?'🟢 PUSH: Sending — Facebook is receiving video':pushStatus==='Stalled'?'🔴 PUSH: Stalled — Keep going, do NOT tap Stop yet':pushStatus==='Waiting'?'🟡 PUSH: Waiting — Bridge has not confirmed, Facebook NOT receiving yet':pushStatus==='Bridge Failed'?'🔴 PUSH: Bridge Failed — Facebook NOT receiving, stop and retry':`⚪ PUSH: ${pushStatus}`}</span></div>)}
 <div style={{display:'flex',gap:8,marginTop:12}}>{!isCam?<button onClick={()=>startCamera()} style={{flex:1,background:'#111',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Start Camera {lowData?'(480p)':''}</button>:<><button onClick={toggleCamera} style={{flex:1,background:'#7c3aed',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Switch Camera</button><button onClick={stopCamera} style={{flex:1,background:'#444',color:'#fff',padding:14,borderRadius:12,fontWeight:800,border:'none'}}>Stop</button></>}</div>
 <div style={{display:'flex',gap:6,marginTop:10}}>
-{!isRecording?<button onClick={startRecording} disabled={!isCam} style={{flex:1,background:isCam?'#a21caf':'#ccc',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>{(isLive||ytLive)?'● LIVE + Recording':'Record'}</button>
+{/* FIX ONLY - BUTTON LABEL: Was '● LIVE + Recording' when live even if NOT recording. Now '● LIVE' when live, 'Record' only when NOT live. Disabled while live. */}
+{!isRecording?<button onClick={startRecording} disabled={!isCam||isLive||ytLive} style={{flex:1,background:isCam&&!isLive&&!ytLive?'#a21caf':'#ccc',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>{(isLive||ytLive)?'● LIVE':'Record'}</button>
 :<><button onClick={stopRecording} style={{flex:1,background:'#111',color:'#fff',padding:12,borderRadius:10,fontWeight:800,border:'none',fontSize:12}}>Stop + Outro ({formatTime(liveSeconds)})</button>{broadcastPlaying&&<button onClick={stopIntroOnly} style={{background:'#ff0000',color:'#fff',padding:12,borderRadius:10,fontWeight:900,border:'none',fontSize:11}}>STOP INTRO</button>}</>}
 {recordedUrl&&<a href={recordedUrl} download={'TagLive-'+Date.now()+'.mp4'} style={{flex:1,background:'#16a34a',color:'#fff',padding:12,borderRadius:10,fontWeight:800,textAlign:'center',textDecoration:'none',fontSize:12}}>Download</a>}
 </div>
