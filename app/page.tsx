@@ -986,6 +986,39 @@ useEffect(()=>{
     .catch(()=>{ if(!cancelled){ setChapterVerseCount(null); setChapterVerseLoading(false) } })
   return()=>{ cancelled=true }
 },[detectedBook?.name, parsed.ch, parsed.vs, bibleVer])
+// === FIX ONLY: EasyWorship flow - ONE slot: scripture OR media. Media pick auto-replaces scripture, scripture pick auto-clears media. ===
+const [verseMedia,setVerseMedia]=useState<any>(null)
+const verseMediaImgRef=useRef<HTMLImageElement|null>(null)
+const verseMediaVideoRef=useRef<HTMLVideoElement>(null)
+const verseMediaFileRef=useRef<HTMLInputElement>(null)
+const clearVerseMedia=()=>{
+  try{ if(verseMediaVideoRef.current){ verseMediaVideoRef.current.pause(); verseMediaVideoRef.current.removeAttribute('src'); verseMediaVideoRef.current.load() } }catch{}
+  if(verseMedia?.url){ try{ URL.revokeObjectURL(verseMedia.url) }catch{} }
+  verseMediaImgRef.current=null
+  setVerseMedia(null)
+  if(verseMediaFileRef.current) verseMediaFileRef.current.value=''
+}
+const handleVerseMediaPick=(e:any)=>{
+  const f=e.target.files?.[0]; if(!f) return
+  const url=URL.createObjectURL(f)
+  if(verseMedia?.url){ try{ URL.revokeObjectURL(verseMedia.url) }catch{} }
+  verseMediaImgRef.current=null
+  try{ if(verseMediaVideoRef.current){ verseMediaVideoRef.current.pause(); verseMediaVideoRef.current.removeAttribute('src'); verseMediaVideoRef.current.load() } }catch{}
+  if(f.type.startsWith('video')){
+    setVerseMedia({ type:'video', url, name:f.name })
+    setTimeout(()=>{
+      const v=verseMediaVideoRef.current as any
+      if(v){ try{ v.removeAttribute('crossOrigin') }catch{}; try{ v.crossOrigin=null }catch{}; v.playsInline=true; v.src=url; v.currentTime=0; v.muted=false; v.volume=1; v.play().catch(()=>{ try{ v.muted=true; v.play().catch(()=>{}) }catch{} }) }
+    },50)
+  } else {
+    const img=new Image(); img.src=url; img.onload=()=>{ verseMediaImgRef.current=img; setVerseMedia({ type:'image', url, name:f.name, w:img.width, h:img.height }) }
+    setVerseMedia({ type:'image', url, name:f.name, w:0, h:0 })
+  }
+  e.target.value=''
+  // FIX ONLY - EasyWorship: media pick shows instantly - close Bible box + scroll back to preview, same as Use This Verse.
+  setShowBible(false)
+  setTimeout(()=>{ try{ canvasRef.current?.scrollIntoView({behavior:'smooth',block:'center'}) }catch{} },100)
+}
 const stopRecording=async()=>{
   // FIX: Guard - 2nd tap on Stop + Outro was creating 2 timeouts and killing live early
   if(outroPlayingRef.current) return
@@ -1263,12 +1296,30 @@ let _allLines:{text:string,isLastInPara:boolean,paraIdx:number}[]=[]
 _paragraphs.forEach((para,pIdx)=>{ if(!para.trim()){ _allLines.push({text:'',isLastInPara:true,paraIdx:pIdx}); return } const _wrapped=wrapText(ctx,para.trim(),maxW); _wrapped.forEach((l,i)=>_allLines.push({text:l,isLastInPara:i===_wrapped.length-1,paraIdx:pIdx})) })
 const _realCount=_allLines.filter(l=>l.text!=='').length
 const _lineH=fontSize*1.32
-const _boxH=_realCount*_lineH+(_paragraphs.length-1)*8+_pad*2
+// FIX ONLY - EasyWorship: if media is on, box is MEDIA ONLY. No text height. Media height from aspect, clamped.
+const _mediaOnlyH=verseMedia?Math.min(380,Math.max(120, verseMedia.type==='image'&&verseMedia.w>0&&verseMedia.h>0?maxW*verseMedia.h/verseMedia.w : verseMedia.type==='video'&&verseMediaVideoRef.current&&verseMediaVideoRef.current.videoWidth>0?maxW*verseMediaVideoRef.current.videoHeight/verseMediaVideoRef.current.videoWidth : 213)):0
+const _boxH=verseMedia?(_mediaOnlyH+_pad*2):(_realCount*_lineH+(_paragraphs.length-1)*8+_pad*2)
 const _tickerH=(tickerOn&&tickerText)?(tickerSize+24):0
 const _anchorBottom=isSplit?0:(c.height-_tickerH)
 const drawX=isSplit?c.width*0.5:pos.x
 const drawY=isSplit?c.height*0.24:(_anchorBottom-_boxH/2)
-ctx.translate(drawX,drawY); ctx.scale(pos.scale,pos.scale); ctx.font='bold '+fontSize+'px sans-serif'; const pad=18; const boxW=maxW+pad*2; const paragraphs=verse.split('\n'); let allLines:{text:string,isLastInPara:boolean,paraIdx:number}[]=[]; paragraphs.forEach((para,pIdx)=>{ if(!para.trim()){ allLines.push({text:'',isLastInPara:true,paraIdx:pIdx}); return } const wrapped=wrapText(ctx,para.trim(),maxW); wrapped.forEach((l,i)=>allLines.push({text:l,isLastInPara:i===wrapped.length-1,paraIdx:pIdx})) }); const realCount=allLines.filter(l=>l.text!=='').length; const lineH=fontSize*1.32; const boxH=realCount*lineH+(paragraphs.length-1)*8+pad*2; ctx.fillStyle=hexToRgba(boxColor,boxOpacity); ctx.fillRect(-boxW/2,-boxH/2,boxW,boxH); ctx.fillStyle=textColor; let y=-boxH/2+pad+lineH/2; 
+ctx.translate(drawX,drawY); ctx.scale(pos.scale,pos.scale); ctx.font='bold '+fontSize+'px sans-serif'; const pad=18; const boxW=maxW+pad*2; const paragraphs=verse.split('\n'); let allLines:{text:string,isLastInPara:boolean,paraIdx:number}[]=[]; paragraphs.forEach((para,pIdx)=>{ if(!para.trim()){ allLines.push({text:'',isLastInPara:true,paraIdx:pIdx}); return } const wrapped=wrapText(ctx,para.trim(),maxW); wrapped.forEach((l,i)=>allLines.push({text:l,isLastInPara:i===wrapped.length-1,paraIdx:pIdx})) }); const realCount=allLines.filter(l=>l.text!=='').length; const lineH=fontSize*1.32; const mediaOnlyH=verseMedia?Math.min(380,Math.max(120, verseMedia.type==='image'&&verseMedia.w>0&&verseMedia.h>0?maxW*verseMedia.h/verseMedia.w : verseMedia.type==='video'&&verseMediaVideoRef.current&&verseMediaVideoRef.current.videoWidth>0?maxW*verseMediaVideoRef.current.videoHeight/verseMediaVideoRef.current.videoWidth : 213)):0; const boxH=verseMedia?(mediaOnlyH+pad*2):(realCount*lineH+(paragraphs.length-1)*8+pad*2); ctx.fillStyle=hexToRgba(boxColor,boxOpacity); ctx.fillRect(-boxW/2,-boxH/2,boxW,boxH); ctx.fillStyle=textColor;
+// FIX ONLY - EasyWorship: MEDIA REPLACES SCRIPTURE. If media on, draw media filling whole box, skip all verse text.
+if(verseMedia){
+  const mX=-maxW/2; const mY=-boxH/2+pad; const mW=maxW; const mH=mediaOnlyH
+  try{
+    if(verseMedia.type==='image' && verseMediaImgRef.current){
+      const im=verseMediaImgRef.current; const iw=im.width||mW; const ih=im.height||mH; const r=Math.max(mW/iw, mH/ih); const dw=iw*r; const dh=ih*r; const sx=(dw-mW)/2; const sy=(dh-mH)/2
+      ctx.save(); ctx.beginPath(); ctx.rect(mX,mY,mW,mH); ctx.clip(); ctx.drawImage(im,mX-sx,mY-sy,dw,dh); ctx.restore()
+    } else if(verseMedia.type==='video' && verseMediaVideoRef.current && verseMediaVideoRef.current.readyState>=2){
+      const vv=verseMediaVideoRef.current; const vw2=vv.videoWidth||mW; const vh2=vv.videoHeight||mH; const r2=Math.max(mW/vw2, mH/vh2); const dw2=vw2*r2; const dh2=vh2*r2; const sx2=(dw2-mW)/2; const sy2=(dh2-mH)/2
+      ctx.save(); ctx.beginPath(); ctx.rect(mX,mY,mW,mH); ctx.clip(); ctx.drawImage(vv,mX-sx2,mY-sy2,dw2,dh2); ctx.restore()
+    } else {
+      ctx.fillStyle='rgba(255,255,255,0.15)'; ctx.fillRect(mX,mY,mW,mH); ctx.fillStyle=textColor; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('Loading media...',0,mY+mH/2); ctx.fillStyle=textColor
+    }
+  }catch{}
+} else {
+let y=-boxH/2+pad+lineH/2;
 allLines.forEach((ln)=>{
   if(!ln.text){ y+=8; return }
   if(align==='justify' && !ln.isLastInPara && ln.text.split(' ').length>1){
@@ -1292,6 +1343,7 @@ ctx.fillStyle='#FFD700'; ctx.font='900 '+Math.max(14,Math.floor(fontSize*0.52))+
 const churchY=y+22; const tW=ctx.measureText(churchName.toUpperCase()).width+28
 ctx.fillStyle='rgba(124,58,237,0.95)'; const pillH=28; ctx.fillRect(-tW/2,churchY-pillH/2,tW,pillH)
 ctx.fillStyle='#FFD700'; ctx.fillText(churchName.toUpperCase(),0,churchY)
+}
 }
 if(editStateRef.current.locked && editStateRef.current.target==='text' && !isSplit){ ctx.strokeStyle='#7c3aed'; ctx.lineWidth=2; ctx.setLineDash([10,6]); ctx.strokeRect(-boxW/2-4,-boxH/2-4,boxW+8,boxH+8); ctx.setLineDash([]) } ctx.restore() }
 if(isLive||ytLive||isRecording){
@@ -1319,7 +1371,7 @@ a=requestAnimationFrame(draw)
 }
 draw()
 return()=>cancelAnimationFrame(a)
-},[isCam,verse,isLive,pos,bgMode,fontSize,align,bgImage,ytLive,textColor,boxColor,boxOpacity,logoImage,logoPos,isRecording,selected,showText,showLogo,tickerOn,tickerText,tickerSize,tickerSpeed,churchName,showChurchName,liveSeconds,lowData,broadcastPlaying]);
+},[isCam,verse,isLive,pos,bgMode,fontSize,align,bgImage,ytLive,textColor,boxColor,boxOpacity,logoImage,logoPos,isRecording,selected,showText,showLogo,tickerOn,tickerText,tickerSize,tickerSpeed,churchName,showChurchName,liveSeconds,lowData,broadcastPlaying,verseMedia]);
 return (
 <div style={{minHeight:'100vh',background:'#f5f5f7'}}>
 {showBible&&(
@@ -1328,14 +1380,20 @@ return (
 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><b style={{fontSize:13}}>📖 Bible {isCam&&<span style={{color:'#FF0000'}}>● LIVE {formatTime(liveSeconds)}</span>}</b><button onClick={()=>setShowBible(false)} style={{background:'#111',color:'#fff',border:'none',borderRadius:20,padding:'8px 12px',fontWeight:800}}>✕ Close</button></div>
 <div style={{display:'flex',gap:6,marginTop:10,flexWrap:'wrap'}}>{BIBLE_VERSIONS.map(v=>(<button key={v.id} onClick={()=>setBibleVer(v.id)} style={{padding:'6px 10px',borderRadius:20,border:'none',background:bibleVer===v.id?'#111':'#eee',color:bibleVer===v.id?'#fff':'#000',fontWeight:800,fontSize:10}}>{v.label}</button>))}</div>
 <div style={{display:'flex',gap:6,marginTop:10}}><input value={bibleQuery} onChange={e=>setBibleQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')fetchBible()}} placeholder="Type 1 Thes, John, Romans..." style={{flex:1,padding:12,borderRadius:10,border:'2px solid #7c3aed',fontSize:13,fontWeight:700}}/><button onClick={()=>fetchBible()} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:10,padding:'0 16px',fontWeight:800}}>{bibleLoading?'...':'Search'}</button></div>
+{/* FIX ONLY - MEDIA PICKER INSIDE BIBLE BOX: pick image/video here, it REPLACES scripture in same box (EasyWorship). */}
+<div style={{marginTop:10,border:'2px dashed #2563eb',borderRadius:12,padding:10,background:'#eff6ff'}}>
+<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:6}}><b style={{fontSize:12}}>📷 Media — Replaces Scripture</b>{verseMedia&&<button onClick={clearVerseMedia} style={{padding:'6px 10px',borderRadius:8,border:'none',background:'#ff0000',color:'#fff',fontWeight:800,fontSize:11}}>✕ Remove Media</button>}</div>
+{verseMedia?<div style={{marginTop:6,fontSize:11,fontWeight:700,wordBreak:'break-all'}}>✓ {verseMedia.type==='video'?'🎬 Video':'🖼️ Image'}: {verseMedia.name} — now showing INSTEAD of scripture</div>:<div style={{marginTop:4,fontSize:11,opacity:.7}}>Pick an image or video — it will automatically replace the scripture in the same box.</div>}
+<label style={{display:'block',marginTop:8,background:'#2563eb',color:'#fff',padding:12,borderRadius:10,fontWeight:800,fontSize:12,textAlign:'center',cursor:'pointer'}}>📷 Pick Image / Video — Replace Scripture<input ref={verseMediaFileRef} type="file" accept="image/*,video/*" onChange={handleVerseMediaPick} style={{display:'none'}}/></label>
+</div>
 <div style={{maxHeight:200,overflowY:'auto',marginTop:8,display:'flex',flexDirection:'column',gap:6}}>
 {!detectedBook&&filteredBooks.length>0&&(<div style={{background:'#f9f5ff',borderRadius:10,padding:8,border:'1px solid #ddd'}}><div style={{fontSize:11,fontWeight:900}}>Books matching "{bibleQuery}":</div>{filteredBooks.map(b=>(<div key={b.name} onClick={()=>setBibleQuery(b.name+' ')} style={{padding:'8px 10px',borderRadius:8,background:'#fff',border:'1px solid #eee',marginTop:4,fontSize:13,fontWeight:700,cursor:'pointer'}}>{b.name} ({b.chapters} ch)</div>))}</div>)}
 {detectedBook&&!parsed.ch&&(<div style={{background:'#f9f5ff',borderRadius:10,padding:8,border:'1px solid #ddd'}}><div style={{fontSize:11,fontWeight:900}}>{detectedBook.name} — Select Chapter:</div><div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:6}}>{Array.from({length:detectedBook.chapters},(_,i)=>i+1).map(ch=>(<button key={ch} onClick={()=>setBibleQuery(detectedBook.name+' '+ch)} style={{padding:'8px 12px',borderRadius:8,border:'1px solid #ddd',background:'#fff',fontWeight:800,fontSize:12}}>{ch}</button>))}</div></div>)}
 {detectedBook&&parsed.ch&&!parsed.vs&&(<div style={{background:'#f0fdf4',borderRadius:10,padding:8,border:'1px solid #bbf7d0'}}><div style={{fontSize:11,fontWeight:900}}>{detectedBook.name} {parsed.ch} — Select Verse:{chapterVerseCount?` (${chapterVerseCount} verses)`:''}</div><div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:6}}><button onClick={()=>fetchBible(detectedBook.name+' '+parsed.ch)} style={{padding:'8px 12px',borderRadius:8,border:'none',background:'#16a34a',color:'#fff',fontWeight:800,fontSize:12}}>All Chapter</button>{chapterVerseLoading?<div style={{fontSize:12,opacity:.6,padding:8}}>Loading verses...</div>:chapterVerseCount?Array.from({length:chapterVerseCount},(_,i)=>i+1).map(v=>(<button key={v} onClick={()=>{const q=detectedBook.name+' '+parsed.ch+':'+v;setBibleQuery(q);fetchBible(q)}} style={{padding:'8px 12px',borderRadius:8,border:'1px solid #ddd',background:'#fff',fontWeight:800,fontSize:12}}>{v}</button>)):<div style={{fontSize:12,opacity:.7,padding:8}}>Could not load verse list — type verse e.g. {detectedBook.name} {parsed.ch}:172 and tap Search</div>}</div></div>)}
 </div>
 <div style={{marginTop:8,background:'#f9f5ff',borderRadius:12,padding:12,flex:1,overflowY:'auto',border:'1px solid #ddd'}}>{bibleLoading?<div style={{opacity:.6,fontSize:12}}>Searching...</div>:bibleResult?<div style={{fontSize:14,lineHeight:1.5,fontWeight:600,whiteSpace:'pre-wrap'}}>{bibleResult}</div>:<div style={{opacity:.6,fontSize:12}}>Type 1 Thes → pick book → chapter → verse.</div>}</div>
-{/* FIX ONLY - BIBLE BUTTON: After Use This Verse, auto-scroll back up to preview. No scroll up by hand. */}
-<button onClick={()=>{ useBibleVerse(); setTimeout(()=>{ try{ canvasRef.current?.scrollIntoView({behavior:'smooth',block:'center'}) }catch{} },100) }} disabled={!bibleResult} style={{marginTop:10,background:bibleResult?'#16a34a':'#ccc',color:'#fff',padding:14,borderRadius:12,fontWeight:900,border:'none'}}>Use This Verse On Screen</button>
+{/* FIX ONLY - EasyWorship: Use This Verse clears media, so scripture comes back. */}
+<button onClick={()=>{ clearVerseMedia(); useBibleVerse(); setTimeout(()=>{ try{ canvasRef.current?.scrollIntoView({behavior:'smooth',block:'center'}) }catch{} },100) }} disabled={!bibleResult} style={{marginTop:10,background:bibleResult?'#16a34a':'#ccc',color:'#fff',padding:14,borderRadius:12,fontWeight:900,border:'none'}}>Use This Verse On Screen</button>
 </div>
 </div>
 )}
@@ -1441,6 +1499,8 @@ monthCount!==null?
 <div>
 <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{background:'#000',borderRadius:18,overflow:'hidden',position:'relative',aspectRatio:'9/16',touchAction: editStateRef.current.locked ? 'none' : 'pan-y'}}><video ref={videoRef} muted playsInline autoPlay style={{width:'100%',height:'100%',objectFit:'cover',display:isCam&&bgMode==='face'?'block':'none'}}/>{!isCam&&<div style={{color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',height:420}}>Camera off - {lowData?'480p ON':'720p'}</div>}<canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%'}}/>
 <video ref={broadcastVideoRef} playsInline crossOrigin="anonymous" style={{position:'absolute',left:0,top:0,width:'480px',height:'854px',opacity:0,pointerEvents:'none'}}/>
+{/* FIX ONLY - MEDIA INSIDE VERSE BOX: hidden video element that feeds frames into scripture box. */}
+<video ref={verseMediaVideoRef} playsInline loop style={{position:'absolute',left:0,top:0,width:'480px',height:'854px',opacity:0,pointerEvents:'none'}}/>
 {broadcastPlaying&&(
   <div style={{position:'absolute',top:12,left:12,right:12,display:'flex',justifyContent:'flex-end',zIndex:100}}>
     <button onClick={stopIntroOnly} style={{background:'#ff0000',color:'#fff',border:'2px solid #fff',padding:'10px 16px',borderRadius:20,fontWeight:900,fontSize:12}}>✕</button>
