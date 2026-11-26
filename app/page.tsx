@@ -202,7 +202,7 @@ const playIntroAudioForLive=(active:any)=>{
     try{ if(liveAudioCtxRef.current && liveAudioCtxRef.current.state==='suspended') liveAudioCtxRef.current.resume() }catch{}
     connectBroadcastVideoToMixer()
     if(liveMicGainRef.current) liveMicGainRef.current.gain.value=0
-    setTimeout(()=>{ try{ if(liveMicGainRef.current) liveMicGainRef.current.gain.value=1 }catch{} }, (active.duration||5)*1000)
+    // FIX ONLY - Intro cut at 2s: do NOT unmute mic on saved duration. Mic is restored in stopBroadcastVideoNow() when the REAL video ends, so intro plays its full duration.
   }catch{}
 }
 const playBroadcastVideoMutedFirst=async(v:any)=>{
@@ -562,6 +562,12 @@ const introTimeoutRef=useRef<any>(null)
 const fbPendingRef=useRef<any>(null)
 const creatingFbRef=useRef(false)
 const heartbeatRef=useRef<any>(null)
+// === FIX ONLY - Intro plays FULL duration: real video duration at play time, not saved duration. onended is the boss, timer is only safety. ===
+const getRealBroadcastMs=(active:any, v:any)=>{
+  if(active?.type==='video' && v && v.duration && isFinite(v.duration) && v.duration>0) return Math.ceil(v.duration*1000)
+  return Math.ceil((active?.duration||5)*1000)
+}
+const clearIntroTimeout=()=>{ try{ if(introTimeoutRef.current) clearTimeout(introTimeoutRef.current) }catch{}; introTimeoutRef.current=null }
 // === FIX ONLY: Intro background audio - stop video element itself, not just canvas. Old code cleared broadcastPlaying after 5s but video kept playing audio into mixer. ===
 const stopBroadcastVideoNow=()=>{
   try{ if(introTimeoutRef.current) clearTimeout(introTimeoutRef.current) }catch{}
@@ -571,6 +577,8 @@ const stopBroadcastVideoNow=()=>{
     const v=broadcastVideoRef.current as any
     if(v){ try{ v.onended=null }catch{}; try{ v.pause() }catch{}; try{ v.removeAttribute('src') }catch{}; try{ v.load() }catch{} }
   }catch{}
+  // FIX ONLY - Intro cut: allow next intro to reconnect its audio. Old code never reset this, so 2nd intro had no sound / early stop.
+  try{ broadcastConnectedRef.current=false }catch{}
   try{ if(liveMicGainRef.current) liveMicGainRef.current.gain.value=1 }catch{}
   try{ const mg=(audioCtxRef.current as any)?._micGain; if(mg) mg.gain.value=1 }catch{}
 }
@@ -587,11 +595,21 @@ const endFbLiveWithOutro=async()=>{
     try{ if(liveAudioCtxRef.current && liveAudioCtxRef.current.state==='suspended') await liveAudioCtxRef.current.resume() }catch{}
     playIntroAudioForLive(active)
     setBroadcastPlaying(active)
-    if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
+    if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img; await new Promise(r=>setTimeout(r,(active.duration||5)*1000)) }
     else if(active.type==='video' && broadcastVideoRef.current){
-      try{ const v=broadcastVideoRef.current as any; setBroadcastVideoSrc(v, active.data); connectBroadcastVideoToMixer(); v.onended=()=>{ stopBroadcastVideoNow() }; await playBroadcastVideoMutedFirst(v) }catch{}
-    }
-    await new Promise(r=>setTimeout(r,(active.duration||5)*1000))
+      try{
+        const v=broadcastVideoRef.current as any
+        setBroadcastVideoSrc(v, active.data)
+        connectBroadcastVideoToMixer()
+        // FIX ONLY - Outro full duration: wait for real onended, not saved duration. Safety timer = real duration + 1.5s.
+        await new Promise<void>((resolve)=>{
+          let done=false
+          const finish=()=>{ if(!done){ done=true; resolve() } }
+          v.onended=()=>{ try{ if(v.currentTime>=(v.duration||0)-0.3) finish() }catch{ finish() } }
+          playBroadcastVideoMutedFirst(v).then(()=>{ const ms=getRealBroadcastMs(active,v); setTimeout(finish, ms+1500) }).catch(()=>finish())
+        })
+      }catch{}
+    } else { await new Promise(r=>setTimeout(r,(active.duration||5)*1000)) }
     stopBroadcastVideoNow()
   }catch{}
   outroEndingRef.current=false
@@ -727,7 +745,27 @@ setTimeout(()=>{ if(canvasRef.current){ canvasRef.current.width=480; canvasRef.c
 const saveIntros=async(arr:any[])=>{ setIntros(arr); await idbSave('intros', arr); try{ localStorage.removeItem('taglive_intros') }catch{} }
 const saveOutros=async(arr:any[])=>{ setOutros(arr); await idbSave('outros', arr); try{ localStorage.removeItem('taglive_outros') }catch{} }
 const fileToBase64=(file:File)=>new Promise<string>((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result as string); r.onerror=rej; r.readAsDataURL(file) })
-const getVideoDuration=(base64:string)=>new Promise<number>((res)=>{ const v=document.createElement('video'); v.src=base64; v.onloadedmetadata=()=>res(v.duration); setTimeout(()=>res(5),2000) })
+// FIX ONLY - Intro cut at 2s: old getVideoDuration resolved to 5 after only 2000ms, before metadata loaded on big files, so saved duration was wrong. Now waits up to 10s and handles Infinity duration by seeking.
+const getVideoDuration=(base64:string)=>new Promise<number>((res)=>{
+  let done=false
+  const finish=(d:number)=>{ if(!done){ done=true; try{ v.src='' }catch{}; res(d) } }
+  const v=document.createElement('video')
+  v.preload='metadata'
+  v.muted=true
+  v.playsInline=true
+  const to=setTimeout(()=>finish(5),10000)
+  v.onloadedmetadata=()=>{
+    try{
+      if(v.duration===Infinity){
+        v.currentTime=1e7
+        v.ontimeupdate=()=>{ try{ v.currentTime=0; v.ontimeupdate=null; if(v.duration && isFinite(v.duration)) finish(v.duration); else finish(5) }catch{ finish(5) } }
+      } else if(v.duration && isFinite(v.duration) && v.duration>0){ clearTimeout(to); finish(v.duration) }
+      else finish(5)
+    }catch{ finish(5) }
+  }
+  v.onerror=()=>{ clearTimeout(to); finish(5) }
+  v.src=base64
+})
 const handleIntroFile=async(e:any)=>{ const file=e.target.files?.[0]; if(!file) return; const base64=await fileToBase64(file); let dur=5; if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }; const item={ id:'id_' + Date.now(), type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }; const n=[...intros,item]; await saveIntros(n); setActiveIntroId(item.id); localStorage.setItem('taglive_active_intro', item.id); e.target.value='' }
 const handleOutroFile=async(e:any)=>{ const file=e.target.files?.[0]; if(!file) return; const base64=await fileToBase64(file); let dur=5; if(file.type.startsWith('video')){ dur=await getVideoDuration(base64) }; const item={ id:'id_' + Date.now(), type:file.type.startsWith('video')?'video':'image', data:base64, duration:dur, title:file.name }; const n=[...outros,item]; await saveOutros(n); setActiveOutroId(item.id); localStorage.setItem('taglive_active_outro', item.id); e.target.value='' }
 const startCamera=async(newFacing=facing)=>{
@@ -835,18 +873,21 @@ const createFbLiveAuto=async(page:any)=>{
     try{ if(liveAudioCtxRef.current && liveAudioCtxRef.current.state==='suspended') await liveAudioCtxRef.current.resume() }catch{}
     playIntroAudioForLive(active)
     setBroadcastPlaying(active)
-    if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
+    if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img; clearIntroTimeout(); introTimeoutRef.current=setTimeout(()=>{ stopBroadcastVideoNow() }, (active.duration||5)*1000 + 500) }
     else if(active.type==='video' && broadcastVideoRef.current){
       try{
         const v=broadcastVideoRef.current as any
         setBroadcastVideoSrc(v, active.data)
         connectBroadcastVideoToMixer()
-        v.onended=()=>{ stopBroadcastVideoNow() }
+        // FIX ONLY - Intro FULL duration: onended is boss, timer is safety = real duration + 1s. Old code used saved duration and cut at ~2s.
+        clearIntroTimeout()
+        v.onended=()=>{ try{ if(v.currentTime>=(v.duration||0)-0.3) stopBroadcastVideoNow() }catch{ stopBroadcastVideoNow() } }
         await playBroadcastVideoMutedFirst(v)
+        const realMs=getRealBroadcastMs(active, v)
+        introTimeoutRef.current=setTimeout(()=>{ stopBroadcastVideoNow() }, realMs + 1000)
       }catch{}
     }
     fbPendingRef.current=null
-    introTimeoutRef.current=setTimeout(()=>{ stopBroadcastVideoNow() }, (active.duration||5)*1000 + 500)
   } finally { creatingFbRef.current=false }
 }
 const openBibleApp=()=>{ setShowBible(true) }
@@ -914,7 +955,7 @@ const startRecording=async()=>{
     try{ micGain.gain.value=0 }catch{}
     if(active.type==='image'){ const img=new Image(); img.src=active.data; img.onload=()=>{ broadcastImageRef.current=img }; broadcastImageRef.current=img }
     else if(active.type==='video'){
-      if(broadcastVideoRef.current){ const v=broadcastVideoRef.current as any; setBroadcastVideoSrc(v, active.data); v.onended=()=>{ stopBroadcastVideoNow() }; try{ await playBroadcastVideoMutedFirst(v) }catch{} }
+      if(broadcastVideoRef.current){ const v=broadcastVideoRef.current as any; setBroadcastVideoSrc(v, active.data); v.onended=()=>{ try{ if(v.currentTime>=(v.duration||0)-0.3) stopBroadcastVideoNow() }catch{ stopBroadcastVideoNow() } }; try{ await playBroadcastVideoMutedFirst(v) }catch{} }
       try{
         if(!broadcastConnectedRef.current && broadcastVideoRef.current){
           const v2=broadcastVideoRef.current as any
@@ -935,7 +976,11 @@ const startRecording=async()=>{
   rec.ondataavailable=(e)=>{ if(e.data.size>0) chunksRef.current.push(e.data) }
   rec.onstop=()=>{ const blob=new Blob(chunksRef.current, { type: 'video/webm' }); if(recordedUrl) try{ URL.revokeObjectURL(recordedUrl) }catch{}; setRecordedUrl(URL.createObjectURL(blob)) }
   rec.start(100); recorderRef.current=rec; setIsRecording(true); if(!timerRef.current) startTimer()
-  if(active){ introTimeoutRef.current=setTimeout(()=>{ stopBroadcastVideoNow(); try{ const el=(audioCtxRef.current as any)?.introAudioEl; if(el && el._tagliveCleanup) el._tagliveCleanup() }catch{}; try{ micGain.gain.value=1 }catch{} }, (active.duration||5)*1000) }
+  if(active){
+    // FIX ONLY - Recording intro FULL duration: video uses real duration + onended, image uses saved duration. Old code used saved duration only.
+    if(active.type==='video' && broadcastVideoRef.current){ const v=broadcastVideoRef.current as any; clearIntroTimeout(); introTimeoutRef.current=setTimeout(()=>{ stopBroadcastVideoNow(); try{ const el=(audioCtxRef.current as any)?.introAudioEl; if(el && el._tagliveCleanup) el._tagliveCleanup() }catch{}; try{ micGain.gain.value=1 }catch{} }, getRealBroadcastMs(active, v) + 1000) }
+    else { introTimeoutRef.current=setTimeout(()=>{ stopBroadcastVideoNow(); try{ const el=(audioCtxRef.current as any)?.introAudioEl; if(el && el._tagliveCleanup) el._tagliveCleanup() }catch{}; try{ micGain.gain.value=1 }catch{} }, (active.duration||5)*1000) }
+  }
 }
   const stopRecordingFinal=()=>{
   try{ if(introTimeoutRef.current) clearTimeout(introTimeoutRef.current) }catch{}
