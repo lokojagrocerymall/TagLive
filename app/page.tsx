@@ -1334,7 +1334,8 @@ return (
 {detectedBook&&parsed.ch&&!parsed.vs&&(<div style={{background:'#f0fdf4',borderRadius:10,padding:8,border:'1px solid #bbf7d0'}}><div style={{fontSize:11,fontWeight:900}}>{detectedBook.name} {parsed.ch} — Select Verse:{chapterVerseCount?` (${chapterVerseCount} verses)`:''}</div><div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:6}}><button onClick={()=>fetchBible(detectedBook.name+' '+parsed.ch)} style={{padding:'8px 12px',borderRadius:8,border:'none',background:'#16a34a',color:'#fff',fontWeight:800,fontSize:12}}>All Chapter</button>{chapterVerseLoading?<div style={{fontSize:12,opacity:.6,padding:8}}>Loading verses...</div>:chapterVerseCount?Array.from({length:chapterVerseCount},(_,i)=>i+1).map(v=>(<button key={v} onClick={()=>{const q=detectedBook.name+' '+parsed.ch+':'+v;setBibleQuery(q);fetchBible(q)}} style={{padding:'8px 12px',borderRadius:8,border:'1px solid #ddd',background:'#fff',fontWeight:800,fontSize:12}}>{v}</button>)):<div style={{fontSize:12,opacity:.7,padding:8}}>Could not load verse list — type verse e.g. {detectedBook.name} {parsed.ch}:172 and tap Search</div>}</div></div>)}
 </div>
 <div style={{marginTop:8,background:'#f9f5ff',borderRadius:12,padding:12,flex:1,overflowY:'auto',border:'1px solid #ddd'}}>{bibleLoading?<div style={{opacity:.6,fontSize:12}}>Searching...</div>:bibleResult?<div style={{fontSize:14,lineHeight:1.5,fontWeight:600,whiteSpace:'pre-wrap'}}>{bibleResult}</div>:<div style={{opacity:.6,fontSize:12}}>Type 1 Thes → pick book → chapter → verse.</div>}</div>
-<button onClick={useBibleVerse} disabled={!bibleResult} style={{marginTop:10,background:bibleResult?'#16a34a':'#ccc',color:'#fff',padding:14,borderRadius:12,fontWeight:900,border:'none'}}>Use This Verse On Screen</button>
+{/* FIX ONLY - BIBLE BUTTON: After Use This Verse, auto-scroll back up to preview. No scroll up by hand. */}
+<button onClick={()=>{ useBibleVerse(); setTimeout(()=>{ try{ canvasRef.current?.scrollIntoView({behavior:'smooth',block:'center'}) }catch{} },100) }} disabled={!bibleResult} style={{marginTop:10,background:bibleResult?'#16a34a':'#ccc',color:'#fff',padding:14,borderRadius:12,fontWeight:900,border:'none'}}>Use This Verse On Screen</button>
 </div>
 </div>
 )}
@@ -1446,6 +1447,8 @@ monthCount!==null?
   </div>
 )}
 {isCam&&!broadcastPlaying&&(<div style={{position:'absolute',top: bgMode==='split'?'auto':'12px',bottom: bgMode==='split'?'50px':'auto',right:12,display:'flex',gap:8,zIndex:50}}><button onClick={toggleCamera} style={{background:'rgba(0,0,0,0.85)',color:'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>Flip</button><button onClick={toggleTorch} style={{background:torch?'#fbbf24':'rgba(0,0,0,0.85)',color:torch?'#000':'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12}}>{torch?'Flash On':'Flash'}</button></div>)}
+{/* FIX ONLY - BIBLE BUTTON: Floating Bible button ON preview. No scroll down to find Bible. */}
+{!broadcastPlaying&&(<button onClick={openBibleApp} style={{position:'absolute',left:12,bottom:12,zIndex:50,background:'#2563eb',color:'#fff',border:'2px solid #fff',borderRadius:20,padding:'10px 14px',fontWeight:900,fontSize:12,boxShadow:'0 4px 12px rgba(0,0,0,0.5)'}}>📖 Bible</button>)}
 </div>
 {/* === SINGLE-CONNECTION FIX: No Resume button. Restarting to same URL finalizes FB VOD. Stalled = keep going, do NOT tap Stop. === */}
 {/* === FIX ONLY: Show real delivery status - Waiting / Bridge Failed, not fake Sending. === */}
