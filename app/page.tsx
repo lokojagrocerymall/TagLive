@@ -1253,9 +1253,21 @@ if(logoImageRef.current && showLogo){ ctx.save(); ctx.translate(logoPos.x,logoPo
 if(showText){
 ctx.save();
 const isSplit=bgMode==='split'
-const drawX=isSplit?c.width*0.5:pos.x
-const drawY=isSplit?c.height*0.24:pos.y
 const maxW=isSplit?360:380
+// FIX ONLY - TEXT BOX BOTTOM-ANCHOR: measure boxH FIRST, then anchor bottom to ticker top. Long text grows UP, short text landing still touches ticker. Split mode unchanged.
+ctx.font='bold '+fontSize+'px sans-serif'
+const _pad=18
+const _boxW=maxW+_pad*2
+const _paragraphs=verse.split('\n')
+let _allLines:{text:string,isLastInPara:boolean,paraIdx:number}[]=[]
+_paragraphs.forEach((para,pIdx)=>{ if(!para.trim()){ _allLines.push({text:'',isLastInPara:true,paraIdx:pIdx}); return } const _wrapped=wrapText(ctx,para.trim(),maxW); _wrapped.forEach((l,i)=>_allLines.push({text:l,isLastInPara:i===_wrapped.length-1,paraIdx:pIdx})) })
+const _realCount=_allLines.filter(l=>l.text!=='').length
+const _lineH=fontSize*1.32
+const _boxH=_realCount*_lineH+(_paragraphs.length-1)*8+_pad*2
+const _tickerH=(tickerOn&&tickerText)?(tickerSize+24):0
+const _anchorBottom=isSplit?0:(c.height-_tickerH)
+const drawX=isSplit?c.width*0.5:pos.x
+const drawY=isSplit?c.height*0.24:(_anchorBottom-_boxH/2)
 ctx.translate(drawX,drawY); ctx.scale(pos.scale,pos.scale); ctx.font='bold '+fontSize+'px sans-serif'; const pad=18; const boxW=maxW+pad*2; const paragraphs=verse.split('\n'); let allLines:{text:string,isLastInPara:boolean,paraIdx:number}[]=[]; paragraphs.forEach((para,pIdx)=>{ if(!para.trim()){ allLines.push({text:'',isLastInPara:true,paraIdx:pIdx}); return } const wrapped=wrapText(ctx,para.trim(),maxW); wrapped.forEach((l,i)=>allLines.push({text:l,isLastInPara:i===wrapped.length-1,paraIdx:pIdx})) }); const realCount=allLines.filter(l=>l.text!=='').length; const lineH=fontSize*1.32; const boxH=realCount*lineH+(paragraphs.length-1)*8+pad*2; ctx.fillStyle=hexToRgba(boxColor,boxOpacity); ctx.fillRect(-boxW/2,-boxH/2,boxW,boxH); ctx.fillStyle=textColor; let y=-boxH/2+pad+lineH/2; 
 allLines.forEach((ln)=>{
   if(!ln.text){ y+=8; return }
