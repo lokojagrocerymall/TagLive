@@ -887,6 +887,8 @@ const onLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; con
 const handleChurchLogoPick=async(e:any)=>{ const f=e.target.files?.[0]; if(!f) return; const base64=await fileToBase64(f); setLogoImage(base64); localStorage.setItem('taglive_church_logo', base64); const img=new Image(); img.src=base64; img.onload=()=>{ logoImageRef.current=img }; setShowLogo(true); localStorage.setItem('taglive_show_logo','true'); }
 const removeChurchLogo=()=>{ localStorage.removeItem('taglive_church_logo'); setLogoImage(null); logoImageRef.current=null; if(churchLogoInputRef.current) churchLogoInputRef.current.value=''; if(logoInputRef.current) logoInputRef.current.value=''; }
 const startRecording=async()=>{
+  // FIX ONLY - FB SKIPPING: Block 2nd encoder during live push. Recording + Live = 1.5Mbps recorder + 350kbps push on 59-113 K/s upload = serious skipping + Intro in background from 2nd audio context.
+  if((fbPushingRef as any)?.current || (ytPushingRef as any)?.current || (tiktokPushRecorderRef as any)?.current || isLive || ytLive){ alert('Recording is OFF during Live - Facebook VOD will save your replay. Stop Live first to record offline.'); return }
   const canvas=canvasRef.current; if(!canvas) return
   canvas.width=480; canvas.height=854
   const canvasStream=(canvas as any).captureStream(24) as MediaStream
